@@ -209,7 +209,7 @@ const defaultData = () => ({
 });
 
 // ============ 主元件 ============
-export default function App() {
+function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('dashboard'); // dashboard | admin
@@ -1971,7 +1971,7 @@ function CFField({ label, children }) {
 
 // 渲染
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(BNISpeakerTracker));
+root.render(React.createElement(App));
 </script>
 </body>
 </html>
