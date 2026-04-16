@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNI 主題演講進度追蹤</title>
+
+<!-- Railway Proxy URL（請改成您的 Railway domain） -->
+<script>
+  window.BNI_PROXY_URL = 'https://bni-speaker-tracker-proxy-production.up.railway.app';
+</script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #F5F0E8;
+    margin: 0;
+  }
+  .loading-screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #F5F0E8; color: #8B6F47; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="loading-screen">載入中⋯（首次載入需 5-10 秒編譯）</div>
+</div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ===== Icon Components (取代 lucide-react) =====
+function IconWrap({ className, style, children }) {
+  return React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    width: 24, height: 24, viewBox: "0 0 24 24",
+    fill: "none", stroke: "currentColor",
+    strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round",
+    className: className, style: style,
+    dangerouslySetInnerHTML: { __html: children }
+  });
+}
+const Users = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' });
+const Calendar = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' });
+const ListChecks = (props) => React.createElement(IconWrap, { ...props, children: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>' });
+const Settings = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>' });
+const Upload = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>' });
+const Download = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' });
+const Lock = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' });
+const Eye = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' });
+const ChevronRight = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="9 18 15 12 9 6"/>' });
+const ChevronDown = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="6 9 12 15 18 9"/>' });
+const Check = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="20 6 9 17 4 12"/>' });
+const X = (props) => React.createElement(IconWrap, { ...props, children: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' });
+const Plus = (props) => React.createElement(IconWrap, { ...props, children: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' });
+const Trash2 = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>' });
+const Edit3 = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>' });
+const Coffee = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' });
+const Mic = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>' });
+const FileText = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' });
+const Image = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>' });
+const Target = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' });
+const Lightbulb = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>' });
+const CheckCircle2 = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>' });
+const Circle = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/>' });
+const LogOut = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>' });
+const KeyRound = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5"/>' });
+const AlertCircle = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' });
+const Presentation = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/>' });
+const Megaphone = (props) => React.createElement(IconWrap, { ...props, children: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>' });
+const MessageSquare = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' });
+const UserCheck = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' });
+const Filter = (props) => React.createElement(IconWrap, { ...props, children: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' });
+// ===== Storage (Railway Proxy 雲端同步) =====
+// 部署後在 index.html 裡設定 window.BNI_PROXY_URL
+const PROXY_URL = window.BNI_PROXY_URL || '';
+
+const apiClient = {
+  async get(key, shared = true) {
+    try {
+      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(key));
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('讀取失敗: ' + res.status);
+      const json = await res.json();
+      return json && json.value !== undefined ? { value: json.value } : null;
+    } catch (e) {
+      console.error('[apiClient.get]', e);
+      alert('讀取雲端資料失敗，請檢查網路或 Proxy 設定：\n' + e.message);
+      return null;
+    }
+  },
+
+  async set(key, value, shared = true) {
+    const tryWrite = async (pin) => {
+      return fetch(PROXY_URL + '/api/data', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Write-PIN': pin || ''
+        },
+        body: JSON.stringify({ key, value })
+      });
+    };
+
+    let pin = localStorage.getItem('bni_write_pin') || '';
+    let res = await tryWrite(pin);
+
+    if (res.status === 401) {
+      const newPin = prompt('第一次寫入需要輸入「寫入 PIN」（分會共用，請向幹部索取）：');
+      if (!newPin) throw new Error('已取消');
+      res = await tryWrite(newPin);
+      if (res.ok) {
+        localStorage.setItem('bni_write_pin', newPin);
+      } else {
+        localStorage.removeItem('bni_write_pin');
+        alert('PIN 錯誤，請重新整理再試');
+        throw new Error('PIN 錯誤');
+      }
+    }
+
+    if (!res.ok) throw new Error('寫入失敗: ' + res.status);
+    return { value };
+  }
+};
+
+
+
+const STORAGE_KEY = 'bni_speaker_tracker_v5';
+const PIN_KEY = 'bni_speaker_tracker_pin_v1';
+
+// 預設任務模板（BNI 主題演講提前 6 週準備流程，每週一次咖啡會議）
+// 預設任務模板：只管演講內容準備（content 軌）
+// 咖啡會議軌由 coffeeMeetings 資料動態計算，不走任務勾選
+const DEFAULT_TASKS = [
+  { id: 't_topic', name: '確認演講主題', weekBefore: 6, icon: 'Lightbulb', track: 'content' },
+  { id: 't_outline', name: '完成講稿大綱', weekBefore: 5, icon: 'FileText', track: 'content' },
+  { id: 't_slides_draft', name: '投影片架構初稿', weekBefore: 4, icon: 'Presentation', track: 'content' },
+  { id: 't_edm', name: 'EDM 宣傳圖發布', weekBefore: 3, icon: 'Megaphone', track: 'content' },
+  { id: 't_slides_final', name: '投影片定稿', weekBefore: 2, icon: 'Image', track: 'content' },
+  { id: 't_rehearsal', name: '彩排 / 試講', weekBefore: 1, icon: 'Mic', track: 'content' },
+  { id: 't_equipment', name: '演講器材 / 流程確認', weekBefore: 1, icon: 'CheckCircle2', track: 'content' },
+  { id: 't_speech', name: '正式演講', weekBefore: 0, icon: 'Target', track: 'content' },
+];
+
+const ICON_MAP = { Lightbulb, Coffee, FileText, Image, Mic, CheckCircle2, Target, Presentation, Megaphone };
+
+// 取得 ISO 週一的日期
+const getMonday = (d) => {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(date.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+const formatDate = (d) => {
+  const date = new Date(d);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+const formatFullDate = (d) => {
+  const date = new Date(d);
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const weekdayZh = (d) => ['日', '一', '二', '三', '四', '五', '六'][new Date(d).getDay()];
+
+const daysBetween = (d1, d2) => {
+  const a = new Date(d1); a.setHours(0, 0, 0, 0);
+  const b = new Date(d2); b.setHours(0, 0, 0, 0);
+  return Math.round((b - a) / (1000 * 60 * 60 * 24));
+};
+
+// 預設 6 週的會議日（週四）
+const generateDefaultMeetings = (count = 12) => {
+  const today = new Date();
+  const monday = getMonday(today);
+  const meetings = [];
+  for (let i = 0; i < count; i++) {
+    const meetingDate = new Date(monday);
+    meetingDate.setDate(monday.getDate() + 3 + i * 7); // 週四
+    meetings.push({
+      id: `m_${meetingDate.getTime()}`,
+      date: meetingDate.toISOString(),
+      slotA: { speakerId: null, helperId: null, topic: '', tasks: {} },
+      slotB: { speakerId: null, helperId: null, topic: '', tasks: {} },
+    });
+  }
+  return meetings;
+};
+
+const defaultData = () => ({
+  members: [],
+  meetings: generateDefaultMeetings(12),
+  taskTemplate: DEFAULT_TASKS,
+  coffeeMeetings: [],
+  coffeeTargetPerSpeech: 5,
+  chapterName: '富鼎分會',
+  updatedAt: new Date().toISOString(),
+});
+
+// ============ 主元件 ============
+export default function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('dashboard'); // dashboard | admin
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminTab, setAdminTab] = useState('schedule');
+  const [pinSet, setPinSet] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // 載入資料
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get(STORAGE_KEY, true);
+        if (res && res.value) {
+          setData(JSON.parse(res.value));
+        } else {
+          const init = defaultData();
+          setData(init);
+          await apiClient.set(STORAGE_KEY, JSON.stringify(init), true);
+        }
+      } catch (e) {
+        setData(defaultData());
+      }
+      try {
+        const pinRes = await apiClient.get(PIN_KEY, true);
+        setPinSet(!!(pinRes && pinRes.value));
+      } catch (e) {
+        setPinSet(false);
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  // 儲存資料
+  const saveData = async (next) => {
+    const withTime = { ...next, updatedAt: new Date().toISOString() };
+    setData(withTime);
+    try {
+      await apiClient.set(STORAGE_KEY, JSON.stringify(withTime), true);
+    } catch (e) {
+      showToast('儲存失敗，請重試', 'error');
+    }
+  };
+
+  if (loading || !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#FAF7F2' }}>
+        <div className="text-stone-500">載入中⋯</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: '#FAF7F2', fontFamily: "'Noto Serif TC', 'Playfair Display', serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Playfair+Display:wght@600;700;900&display=swap" rel="stylesheet" />
+
+      <Header
+        view={view}
+        setView={setView}
+        adminAuth={adminAuth}
+        setAdminAuth={setAdminAuth}
+        chapterName={data.chapterName}
+      />
+
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+        {view === 'dashboard' && (
+          <Dashboard data={data} />
+        )}
+        {view === 'coffee' && (
+          <CoffeeMeetingPage data={data} saveData={saveData} showToast={showToast} />
+        )}
+        {view === 'admin' && !adminAuth && (
+          <AdminGate pinSet={pinSet} setPinSet={setPinSet} onPass={() => setAdminAuth(true)} showToast={showToast} />
+        )}
+        {view === 'admin' && adminAuth && (
+          <AdminPanel
+            data={data}
+            saveData={saveData}
+            adminTab={adminTab}
+            setAdminTab={setAdminTab}
+            showToast={showToast}
+          />
+        )}
+      </main>
+
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-xl z-50 text-sm font-medium ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-stone-800 text-white'}`}
+          style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <footer className="text-center py-8 text-xs text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        最後更新：{new Date(data.updatedAt).toLocaleString('zh-TW')}
+      </footer>
+    </div>
+  );
+}
+
+// ============ Header ============
+function Header({ view, setView, adminAuth, setAdminAuth, chapterName }) {
+  return (
+    <header className="border-b-2" style={{ borderColor: '#A01E2E', background: 'white' }}>
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] text-stone-500 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            BNI · SPEAKER TRACKER
+          </div>
+          <h1 className="text-xl md:text-2xl font-bold" style={{ color: '#1A1414' }}>
+            {chapterName} <span className="text-stone-400 mx-1">·</span> <span style={{ color: '#A01E2E' }}>主題演講進度</span>
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setView('dashboard'); }}
+            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'dashboard' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+          >
+            <Eye className="w-4 h-4" />
+            <span className="hidden md:inline">主題演講</span>
+          </button>
+          <button
+            onClick={() => { setView('coffee'); }}
+            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'coffee' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'coffee' ? '#8B6F47' : undefined }}
+          >
+            <Coffee className="w-4 h-4" />
+            <span className="hidden md:inline">咖啡會議</span>
+          </button>
+          <button
+            onClick={() => { setView('admin'); }}
+            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'admin' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'admin' ? '#A01E2E' : undefined }}
+          >
+            <Settings className="w-4 h-4" />
+            <span className="hidden md:inline">後台管理</span>
+          </button>
+          {adminAuth && (
+            <button
+              onClick={() => setAdminAuth(false)}
+              className="px-3 py-2 text-sm text-stone-500 hover:text-stone-800"
+              title="登出後台"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// ============ 前台 Dashboard ============
+function Dashboard({ data }) {
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'personal'
+  const [personalMemberId, setPersonalMemberId] = useState('');
+
+  const today = new Date();
+  // 顯示所有「尚未過期 或 本週」的會議，最多 8 筆
+  const upcoming = useMemo(() => {
+    return data.meetings
+      .filter(m => daysBetween(today, new Date(m.date)) >= -1)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 8);
+  }, [data.meetings]);
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  // 篩選個人視角
+  const filteredMeetings = useMemo(() => {
+    if (viewMode !== 'personal' || !personalMemberId) return upcoming;
+    return upcoming.filter(m =>
+      m.slotA.speakerId === personalMemberId ||
+      m.slotA.helperId === personalMemberId ||
+      m.slotB.speakerId === personalMemberId ||
+      m.slotB.helperId === personalMemberId
+    );
+  }, [upcoming, viewMode, personalMemberId]);
+
+  const selectedMember = personalMemberId ? memberById[personalMemberId] : null;
+
+  // 統計個人視角下的待辦數
+  const personalPending = useMemo(() => {
+    if (viewMode !== 'personal' || !personalMemberId) return 0;
+    let count = 0;
+    filteredMeetings.forEach(m => {
+      ['slotA', 'slotB'].forEach(key => {
+        const slot = m[key];
+        if (slot.speakerId === personalMemberId || slot.helperId === personalMemberId) {
+          data.taskTemplate.forEach(t => {
+            if (!slot.tasks?.[t.id]?.done) count++;
+          });
+        }
+      });
+    });
+    return count;
+  }, [filteredMeetings, viewMode, personalMemberId, data.taskTemplate]);
+
+  if (upcoming.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-stone-100 mb-4">
+          <Calendar className="w-8 h-8 text-stone-400" />
+        </div>
+        <div className="text-stone-500 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>尚未安排任何演講週次</div>
+        <div className="text-sm text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>請管理員到後台安排演講人</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          UPCOMING 6 WEEKS
+        </div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          未來六週 <span style={{ color: '#A01E2E' }}>主題演講</span>
+        </h2>
+        <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          每位演講人由小幫手陪伴，提前 6 週啟動準備流程
+        </div>
+      </div>
+
+      {/* 視角切換 */}
+      <div className="mb-6 bg-white rounded-lg border border-stone-200 p-3 flex flex-wrap items-center gap-3" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        <div className="flex items-center gap-1.5 text-xs text-stone-500">
+          <Filter className="w-3.5 h-3.5" />檢視模式
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setViewMode('all')}
+            className={`px-3 py-1.5 text-xs rounded transition-colors ${viewMode === 'all' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+          >
+            全分會
+          </button>
+          <button
+            onClick={() => setViewMode('personal')}
+            className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'personal' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={viewMode === 'personal' ? { background: '#A01E2E' } : {}}
+          >
+            <UserCheck className="w-3 h-3" />個人視角
+          </button>
+        </div>
+        {viewMode === 'personal' && (
+          <>
+            <select
+              value={personalMemberId}
+              onChange={e => setPersonalMemberId(e.target.value)}
+              className="px-3 py-1.5 text-xs border border-stone-300 rounded bg-white"
+            >
+              <option value="">— 選擇你是誰 —</option>
+              {data.members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            {selectedMember && (
+              <div className="text-xs text-stone-600">
+                你有 <span className="font-bold" style={{ color: '#A01E2E' }}>{filteredMeetings.length}</span> 場需關注 ·
+                未完成任務 <span className="font-bold" style={{ color: '#A01E2E' }}>{personalPending}</span> 項
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {viewMode === 'personal' && !personalMemberId && (
+        <div className="text-center py-12 bg-white rounded-lg border border-stone-200">
+          <UserCheck className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+          <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>請從上方下拉選單選擇你的姓名</div>
+        </div>
+      )}
+
+      {viewMode === 'personal' && personalMemberId && filteredMeetings.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-lg border border-stone-200">
+          <CheckCircle2 className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+          <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            未來 6 週沒有您的演講或小幫手安排
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {filteredMeetings.map((meeting) => (
+          <MeetingCard
+            key={meeting.id}
+            meeting={meeting}
+            memberById={memberById}
+            taskTemplate={data.taskTemplate}
+            index={upcoming.indexOf(meeting)}
+            personalMemberId={viewMode === 'personal' ? personalMemberId : null}
+            coffeeMeetings={data.coffeeMeetings || []}
+            coffeeTarget={data.coffeeTargetPerSpeech || 5}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MeetingCard({ meeting, memberById, taskTemplate, index, personalMemberId, coffeeMeetings, coffeeTarget }) {
+  const [expanded, setExpanded] = useState(index < 2 || !!personalMemberId);
+  const date = new Date(meeting.date);
+  const daysDiff = daysBetween(new Date(), date);
+  const isThisWeek = daysDiff >= -1 && daysDiff <= 6;
+  const weeksUntil = Math.ceil(daysDiff / 7);
+
+  return (
+    <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-stone-200">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-5 md:px-7 py-5 flex items-center justify-between text-left hover:bg-stone-50 transition-colors"
+      >
+        <div className="flex items-center gap-5 md:gap-8">
+          <div className="text-center">
+            <div className="text-[10px] tracking-[0.2em] text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>WEEK</div>
+            <div className="text-3xl md:text-4xl font-bold leading-none" style={{ color: isThisWeek ? '#A01E2E' : '#1A1414' }}>
+              {index + 1}
+            </div>
+          </div>
+          <div className="h-12 w-px bg-stone-200" />
+          <div>
+            <div className="text-sm md:text-base font-semibold" style={{ color: '#1A1414' }}>
+              {formatFullDate(date)} <span className="text-stone-400">週{weekdayZh(date)}</span>
+            </div>
+            <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+              {isThisWeek ? (
+                <span style={{ color: '#A01E2E' }} className="font-semibold">本週演講</span>
+              ) : (
+                <span>{weeksUntil > 0 ? `${weeksUntil} 週後` : '即將到來'}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="text-stone-400">
+          {expanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-stone-100 grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-stone-100">
+          <SlotDisplay
+            label="主題演講 A"
+            slot={meeting.slotA}
+            memberById={memberById}
+            taskTemplate={taskTemplate}
+            meetingDate={date}
+            personalMemberId={personalMemberId}
+            coffeeMeetings={coffeeMeetings}
+            coffeeTarget={coffeeTarget}
+          />
+          <SlotDisplay
+            label="主題演講 B"
+            slot={meeting.slotB}
+            memberById={memberById}
+            taskTemplate={taskTemplate}
+            meetingDate={date}
+            personalMemberId={personalMemberId}
+            coffeeMeetings={coffeeMeetings}
+            coffeeTarget={coffeeTarget}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SlotDisplay({ label, slot, memberById, taskTemplate, meetingDate, personalMemberId, coffeeMeetings, coffeeTarget }) {
+  const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
+  const helper = slot.helperId ? memberById[slot.helperId] : null;
+
+  const today = new Date();
+  const daysDiff = daysBetween(today, meetingDate);
+  const weeksUntilSpeech = Math.max(0, Math.ceil(daysDiff / 7));
+
+  // 當前應該要完成的任務（weekBefore 大於等於 weeksUntilSpeech 的都應完成）
+  const tasksWithStatus = taskTemplate.map(t => {
+    const taskData = slot.tasks?.[t.id] || {};
+    const done = taskData.done || false;
+    const note = taskData.note || '';
+    const shouldBeDone = t.weekBefore >= weeksUntilSpeech;
+    const overdue = shouldBeDone && !done;
+    return { ...t, done, note, shouldBeDone, overdue };
+  });
+
+  const completedCount = tasksWithStatus.filter(t => t.done).length;
+  const totalCount = tasksWithStatus.length;
+  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const overdueCount = tasksWithStatus.filter(t => t.overdue).length;
+
+  // 個人角色判斷
+  const myRole = personalMemberId
+    ? (slot.speakerId === personalMemberId ? 'speaker' : slot.helperId === personalMemberId ? 'helper' : null)
+    : null;
+
+  // 個人視角：這個 slot 跟我無關就淡化
+  const isPersonalButNotMine = personalMemberId && !myRole;
+
+  if (!speaker) {
+    return (
+      <div className={`p-5 md:p-7 ${isPersonalButNotMine ? 'opacity-40' : ''}`}>
+        <div className="text-[10px] tracking-[0.2em] text-stone-400 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {label.toUpperCase()}
+        </div>
+        <div className="text-stone-400 text-sm py-8 text-center" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          尚未安排演講人
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`p-5 md:p-7 ${isPersonalButNotMine ? 'opacity-40' : ''}`}
+      style={myRole ? { background: 'linear-gradient(180deg, #FFF8F0 0%, white 40%)' } : {}}
+    >
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] tracking-[0.2em] text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {label.toUpperCase()}
+          </div>
+          {myRole && (
+            <div className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white" style={{ background: '#A01E2E', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              <UserCheck className="w-2.5 h-2.5" />
+              你是{myRole === 'speaker' ? '演講人' : '小幫手'}
+            </div>
+          )}
+        </div>
+        {overdueCount > 0 && (
+          <div className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            <AlertCircle className="w-3 h-3" />
+            {overdueCount} 項落後
+          </div>
+        )}
+      </div>
+
+      {/* 演講人 & 小幫手 */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div
+          className={myRole === 'speaker' ? 'p-2 rounded-md -m-2' : ''}
+          style={myRole === 'speaker' ? { border: '2px solid #A01E2E' } : {}}
+        >
+          <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>演講人</div>
+          <div className="font-bold text-lg leading-tight" style={{ color: '#1A1414' }}>{speaker.name}</div>
+          <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {speaker.industry || '—'}
+          </div>
+        </div>
+        <div
+          className={myRole === 'helper' ? 'p-2 rounded-md -m-2' : ''}
+          style={myRole === 'helper' ? { border: '2px solid #A01E2E' } : {}}
+        >
+          <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>小幫手</div>
+          <div className="font-semibold text-base leading-tight" style={{ color: '#1A1414' }}>
+            {helper ? helper.name : <span className="text-stone-400">未指派</span>}
+          </div>
+          <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {helper?.industry || '—'}
+          </div>
+        </div>
+      </div>
+
+      {/* 主題 */}
+      <div className="mb-4 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
+        <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>演講主題</div>
+        <div className="text-sm font-medium" style={{ color: '#1A1414' }}>
+          {slot.topic || <span className="text-stone-400 italic" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>尚未確認主題</span>}
+        </div>
+      </div>
+
+      {/* 雙軌分組顯示 */}
+      {['content', 'coffee'].map(trackKey => {
+        // 咖啡會議軌：從 coffeeMeetings 動態計算（不走 taskTemplate）
+        if (trackKey === 'coffee') {
+          const mySelfCoffees = (coffeeMeetings || []).filter(cm => cm.inviterId === slot.speakerId);
+          const doneCount = mySelfCoffees.filter(cm => cm.meetingStatus === 'done').length;
+          const targetCount = coffeeTarget || 5;
+          const trackProgress = targetCount > 0 ? Math.min(100, Math.round((doneCount / targetCount) * 100)) : 0;
+          const confirmedCount = mySelfCoffees.filter(cm => cm.attendanceWillingness === 'confirmed').length;
+
+          return (
+            <div key={trackKey} className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Coffee className="w-3.5 h-3.5" style={{ color: '#8B6F47' }} />
+                  <div className="text-xs font-semibold" style={{ fontFamily: "'Noto Sans TC', sans-serif", color: '#1A1414' }}>
+                    咖啡會議邀約
+                  </div>
+                </div>
+                <div className="text-xs text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+                  完成 {doneCount} / 目標 {targetCount}
+                  {confirmedCount > 0 && <span className="ml-1" style={{ color: '#4A6741' }}>· 確認出席 {confirmedCount}</span>}
+                </div>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: '#F0EBE3' }}>
+                <div className="h-full transition-all" style={{ width: `${trackProgress}%`, background: '#8B6F47' }} />
+              </div>
+              {mySelfCoffees.length > 0 ? (
+                <div className="space-y-1">
+                  {mySelfCoffees.slice(0, 6).map(cm => (
+                    <div key={cm.id} className="flex items-center gap-2 text-sm py-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+                      {cm.meetingStatus === 'done' ? (
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#8B6F47' }} />
+                      ) : cm.meetingStatus === 'cancelled' ? (
+                        <X className="w-4 h-4 flex-shrink-0 text-stone-400" />
+                      ) : (
+                        <Coffee className="w-4 h-4 flex-shrink-0 text-stone-400" />
+                      )}
+                      <span className="flex-1 min-w-0 truncate">
+                        <span className={cm.meetingStatus === 'cancelled' ? 'line-through text-stone-400' : ''}>{cm.guestName}</span>
+                        {cm.guestIndustry && <span className="text-stone-500 ml-1 text-xs">· {cm.guestIndustry}</span>}
+                      </span>
+                      {cm.attendanceWillingness === 'confirmed' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: '#4A6741', background: '#EDF3E8' }}>願出席</span>
+                      )}
+                    </div>
+                  ))}
+                  {mySelfCoffees.length > 6 && (
+                    <div className="text-xs text-stone-400 italic pl-6">還有 {mySelfCoffees.length - 6} 筆⋯</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-stone-400 italic py-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+                  尚未記錄咖啡會議，請至「咖啡會議」頁新增
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // 演講內容軌：從 taskTemplate 勾選
+        const trackTasks = tasksWithStatus.filter(t => (t.track || 'content') === trackKey);
+        if (trackTasks.length === 0) return null;
+        const trackDone = trackTasks.filter(t => t.done).length;
+        const trackTotal = trackTasks.length;
+        const trackProgress = Math.round((trackDone / trackTotal) * 100);
+        const trackLabel = '演講準備';
+        const trackColor = '#A01E2E';
+        const TrackIcon = Presentation;
+
+        return (
+          <div key={trackKey} className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <TrackIcon className="w-3.5 h-3.5" style={{ color: trackColor }} />
+                <div className="text-xs font-semibold" style={{ fontFamily: "'Noto Sans TC', sans-serif", color: '#1A1414' }}>
+                  {trackLabel}
+                </div>
+              </div>
+              <div className="text-xs text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+                {trackDone} / {trackTotal} · {trackProgress}%
+              </div>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: '#F0EBE3' }}>
+              <div
+                className="h-full transition-all"
+                style={{ width: `${trackProgress}%`, background: trackColor }}
+              />
+            </div>
+            <div className="space-y-1">
+              {trackTasks.map(task => {
+                const Icon = ICON_MAP[task.icon] || Circle;
+                return (
+                  <div
+                    key={task.id}
+                    className={`text-sm py-0.5 ${task.done ? 'text-stone-400' : task.overdue ? 'text-amber-700' : 'text-stone-700'}`}
+                    style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {task.done ? (
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: trackColor }} />
+                      ) : (
+                        <Icon className={`w-4 h-4 flex-shrink-0 ${task.overdue ? 'text-amber-600' : 'text-stone-400'}`} />
+                      )}
+                      <span className={`flex-1 ${task.done ? 'line-through' : ''}`}>{task.name}</span>
+                      {task.note && <MessageSquare className="w-3 h-3 text-amber-600 flex-shrink-0" />}
+                      <span className="text-[10px] text-stone-400">第-{task.weekBefore}週</span>
+                    </div>
+                    {task.note && (
+                      <div className="ml-6 mt-1 text-xs text-stone-600 px-2 py-1 rounded bg-amber-50 border-l-2 border-amber-300">
+                        💬 {task.note}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============ 後台登入 ============
+function AdminGate({ pinSet, setPinSet, onPass, showToast }) {
+  const [pin, setPin] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [mode, setMode] = useState(pinSet ? 'login' : 'setup');
+
+  const handleSetup = async () => {
+    if (pin.length < 4) {
+      showToast('PIN 至少 4 碼', 'error');
+      return;
+    }
+    if (pin !== pin2) {
+      showToast('兩次輸入的 PIN 不一致', 'error');
+      return;
+    }
+    await apiClient.set(PIN_KEY, pin, true);
+    setPinSet(true);
+    onPass();
+    showToast('PIN 設定完成');
+  };
+
+  const handleLogin = async () => {
+    const res = await apiClient.get(PIN_KEY, true);
+    if (res && res.value === pin) {
+      onPass();
+    } else {
+      showToast('PIN 錯誤', 'error');
+      setPin('');
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-12 md:mt-20">
+      <div className="bg-white p-8 rounded-lg border border-stone-200 shadow-sm">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-3" style={{ background: '#A01E2E' }}>
+            {mode === 'setup' ? <KeyRound className="w-7 h-7 text-white" /> : <Lock className="w-7 h-7 text-white" />}
+          </div>
+          <h2 className="text-2xl font-bold" style={{ color: '#1A1414' }}>
+            {mode === 'setup' ? '設定管理密碼' : '後台管理'}
+          </h2>
+          <div className="text-sm text-stone-500 mt-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {mode === 'setup' ? '首次使用，請設定管理員 PIN（至少 4 碼）' : '請輸入管理員 PIN'}
+          </div>
+        </div>
+
+        <div className="space-y-3" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          <input
+            type="password"
+            value={pin}
+            onChange={e => setPin(e.target.value)}
+            placeholder="PIN"
+            className="w-full px-4 py-3 rounded-md border border-stone-300 focus:border-stone-800 focus:outline-none"
+          />
+          {mode === 'setup' && (
+            <input
+              type="password"
+              value={pin2}
+              onChange={e => setPin2(e.target.value)}
+              placeholder="再次輸入 PIN"
+              className="w-full px-4 py-3 rounded-md border border-stone-300 focus:border-stone-800 focus:outline-none"
+            />
+          )}
+          <button
+            onClick={mode === 'setup' ? handleSetup : handleLogin}
+            className="w-full py-3 rounded-md text-white font-semibold"
+            style={{ background: '#A01E2E' }}
+          >
+            {mode === 'setup' ? '設定並進入' : '登入'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ 後台主面板 ============
+function AdminPanel({ data, saveData, adminTab, setAdminTab, showToast }) {
+  const tabs = [
+    { id: 'schedule', label: '週次安排', icon: Calendar },
+    { id: 'progress', label: '進度更新', icon: ListChecks },
+    { id: 'members', label: '會員管理', icon: Users },
+    { id: 'settings', label: '任務模板', icon: Settings },
+  ];
+
+  return (
+    <div>
+      {/* Tab 列 */}
+      <div className="flex gap-1 border-b border-stone-200 mb-6 overflow-x-auto" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        {tabs.map(t => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setAdminTab(t.id)}
+              className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 flex items-center gap-1.5 transition-colors ${adminTab === t.id ? 'font-semibold' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+              style={adminTab === t.id ? { borderColor: '#A01E2E', color: '#A01E2E' } : {}}
+            >
+              <Icon className="w-4 h-4" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {adminTab === 'schedule' && <ScheduleManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'progress' && <ProgressManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'members' && <MemberManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'settings' && <TaskTemplateManager data={data} saveData={saveData} showToast={showToast} />}
+    </div>
+  );
+}
+
+// ============ 週次排程管理 ============
+function ScheduleManager({ data, saveData, showToast }) {
+  const updateSlot = (meetingId, slotKey, field, value) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        return {
+          ...m,
+          [slotKey]: { ...m[slotKey], [field]: value }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const updateDate = (meetingId, newDate) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => m.id === meetingId ? { ...m, date: new Date(newDate).toISOString() } : m)
+    };
+    saveData(next);
+  };
+
+  const addMeeting = () => {
+    const lastDate = data.meetings.length > 0
+      ? new Date(data.meetings[data.meetings.length - 1].date)
+      : new Date();
+    const next = new Date(lastDate);
+    next.setDate(next.getDate() + 7);
+    const newMeeting = {
+      id: `m_${next.getTime()}`,
+      date: next.toISOString(),
+      slotA: { speakerId: null, helperId: null, topic: '', tasks: {} },
+      slotB: { speakerId: null, helperId: null, topic: '', tasks: {} },
+    };
+    saveData({ ...data, meetings: [...data.meetings, newMeeting] });
+  };
+
+  const deleteMeeting = (meetingId) => {
+    if (!confirm('確定刪除這一週的排程？')) return;
+    saveData({ ...data, meetings: data.meetings.filter(m => m.id !== meetingId) });
+  };
+
+  const sorted = [...data.meetings].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="flex justify-between items-center mb-5">
+        <h3 className="text-xl font-bold" style={{ color: '#1A1414' }}>週次排程</h3>
+        <button
+          onClick={addMeeting}
+          className="px-4 py-2 rounded-md text-white text-sm flex items-center gap-1.5"
+          style={{ background: '#A01E2E' }}
+        >
+          <Plus className="w-4 h-4" />新增週次
+        </button>
+      </div>
+
+      {data.members.length === 0 && (
+        <div className="mb-4 p-4 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          尚未匯入會員名單，請先到「會員管理」匯入會員
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sorted.map(meeting => (
+          <div key={meeting.id} className="bg-white rounded-lg border border-stone-200 p-4">
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={new Date(meeting.date).toISOString().slice(0, 10)}
+                  onChange={e => updateDate(meeting.id, e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-stone-300 rounded-md"
+                />
+                <span className="text-xs text-stone-500">
+                  週{weekdayZh(meeting.date)}
+                </span>
+              </div>
+              <button
+                onClick={() => deleteMeeting(meeting.id)}
+                className="text-stone-400 hover:text-red-600"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {['slotA', 'slotB'].map(slotKey => (
+                <div key={slotKey} className="space-y-2">
+                  <div className="text-xs font-semibold text-stone-600">
+                    {slotKey === 'slotA' ? '主題演講 A' : '主題演講 B'}
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">演講人</label>
+                    <select
+                      value={meeting[slotKey].speakerId || ''}
+                      onChange={e => updateSlot(meeting.id, slotKey, 'speakerId', e.target.value || null)}
+                      className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+                    >
+                      <option value="">— 選擇演講人 —</option>
+                      {data.members.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}（{m.industry || '未填'}）</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">小幫手</label>
+                    <select
+                      value={meeting[slotKey].helperId || ''}
+                      onChange={e => updateSlot(meeting.id, slotKey, 'helperId', e.target.value || null)}
+                      className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+                    >
+                      <option value="">— 選擇小幫手 —</option>
+                      {data.members.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}（{m.industry || '未填'}）</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">演講主題</label>
+                    <input
+                      type="text"
+                      value={meeting[slotKey].topic || ''}
+                      onChange={e => updateSlot(meeting.id, slotKey, 'topic', e.target.value)}
+                      placeholder="主題未定"
+                      className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============ 進度更新 ============
+function ProgressManager({ data, saveData }) {
+  const [selectedMeetingId, setSelectedMeetingId] = useState(null);
+  const [expandedNotes, setExpandedNotes] = useState(new Set());
+
+  const sorted = [...data.meetings].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const meetingsWithSpeakers = sorted.filter(m => m.slotA.speakerId || m.slotB.speakerId);
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  const toggleTask = (meetingId, slotKey, taskId) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        const slot = m[slotKey];
+        const currentTask = slot.tasks?.[taskId] || {};
+        return {
+          ...m,
+          [slotKey]: {
+            ...slot,
+            tasks: {
+              ...slot.tasks,
+              [taskId]: {
+                ...currentTask,
+                done: !currentTask.done,
+                doneAt: !currentTask.done ? new Date().toISOString() : null
+              }
+            }
+          }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const updateNote = (meetingId, slotKey, taskId, note) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        const slot = m[slotKey];
+        const currentTask = slot.tasks?.[taskId] || {};
+        return {
+          ...m,
+          [slotKey]: {
+            ...slot,
+            tasks: {
+              ...slot.tasks,
+              [taskId]: { ...currentTask, note }
+            }
+          }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const toggleNoteExpand = (key) => {
+    setExpandedNotes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  if (meetingsWithSpeakers.length === 0) {
+    return (
+      <div className="text-center py-12 text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        尚未安排任何演講人，請先到「週次安排」指派
+      </div>
+    );
+  }
+
+  const selected = meetingsWithSpeakers.find(m => m.id === selectedMeetingId) || meetingsWithSpeakers[0];
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <h3 className="text-xl font-bold mb-5" style={{ color: '#1A1414' }}>進度更新</h3>
+
+      <div className="flex flex-wrap gap-2 mb-5">
+        {meetingsWithSpeakers.map(m => (
+          <button
+            key={m.id}
+            onClick={() => setSelectedMeetingId(m.id)}
+            className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${selected.id === m.id ? 'text-white' : 'bg-white text-stone-600 border-stone-300 hover:border-stone-500'}`}
+            style={selected.id === m.id ? { background: '#A01E2E', borderColor: '#A01E2E' } : {}}
+          >
+            {formatDate(m.date)} 週{weekdayZh(m.date)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {['slotA', 'slotB'].map(slotKey => {
+          const slot = selected[slotKey];
+          const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
+          const helper = slot.helperId ? memberById[slot.helperId] : null;
+          return (
+            <div key={slotKey} className="bg-white rounded-lg border border-stone-200 p-4">
+              <div className="text-xs font-semibold text-stone-600 mb-2">
+                {slotKey === 'slotA' ? '主題演講 A' : '主題演講 B'}
+              </div>
+              {speaker ? (
+                <>
+                  <div className="mb-4 flex flex-wrap gap-3">
+                    <div>
+                      <div className="text-[10px] text-stone-400">演講人</div>
+                      <div className="font-bold text-base" style={{ color: '#1A1414' }}>{speaker.name}</div>
+                    </div>
+                    {helper && (
+                      <div>
+                        <div className="text-[10px] text-stone-400">小幫手</div>
+                        <div className="font-semibold text-sm" style={{ color: '#1A1414' }}>{helper.name}</div>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] text-stone-400">主題</div>
+                      <div className="text-sm truncate">{slot.topic || <span className="text-stone-400">未定</span>}</div>
+                    </div>
+                  </div>
+                  {['content', 'coffee'].map(trackKey => {
+                    const trackTasks = data.taskTemplate.filter(t => (t.track || 'content') === trackKey);
+                    if (trackTasks.length === 0) return null;
+                    const trackDone = trackTasks.filter(t => slot.tasks?.[t.id]?.done).length;
+                    const trackTotal = trackTasks.length;
+                    const trackLabel = trackKey === 'content' ? '演講準備' : '咖啡會議邀約';
+                    const trackColor = trackKey === 'content' ? '#A01E2E' : '#8B6F47';
+                    const TrackIcon = trackKey === 'content' ? Presentation : Coffee;
+                    return (
+                      <div key={trackKey} className="mb-4">
+                        <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-stone-100">
+                          <div className="flex items-center gap-1.5">
+                            <TrackIcon className="w-4 h-4" style={{ color: trackColor }} />
+                            <div className="text-sm font-semibold" style={{ color: '#1A1414' }}>
+                              {trackLabel}
+                            </div>
+                          </div>
+                          <div className="text-xs text-stone-500">
+                            {trackDone} / {trackTotal}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          {trackTasks.map(task => {
+                            const taskData = slot.tasks?.[task.id] || {};
+                            const done = taskData.done || false;
+                            const note = taskData.note || '';
+                            const doneAt = taskData.doneAt;
+                            const noteKey = `${selected.id}_${slotKey}_${task.id}`;
+                            const noteExpanded = expandedNotes.has(noteKey);
+                            return (
+                              <div
+                                key={task.id}
+                                className={`p-2.5 rounded-md transition-colors ${done ? 'bg-stone-50' : 'hover:bg-stone-50'}`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={done}
+                                    onChange={() => toggleTask(selected.id, slotKey, task.id)}
+                                    className="w-4 h-4 rounded cursor-pointer"
+                                    style={{ accentColor: trackColor }}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className={`text-sm ${done ? 'text-stone-400 line-through' : 'text-stone-800'}`}>
+                                      {task.name}
+                                    </div>
+                                    {done && doneAt && (
+                                      <div className="text-[10px] text-stone-400">
+                                        完成於 {new Date(doneAt).toLocaleDateString('zh-TW')}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => toggleNoteExpand(noteKey)}
+                                    className={`p-1 rounded hover:bg-stone-200 transition-colors ${note ? 'text-amber-600' : 'text-stone-400'}`}
+                                    title={note ? '編輯備註' : (trackKey === 'coffee' ? '記錄邀約對象' : '加入備註')}
+                                  >
+                                    <MessageSquare className="w-4 h-4" />
+                                  </button>
+                                  <div className="text-[10px] text-stone-400 whitespace-nowrap">第-{task.weekBefore}週</div>
+                                </div>
+                                {(noteExpanded || note) && (
+                                  <textarea
+                                    value={note}
+                                    onChange={e => updateNote(selected.id, slotKey, task.id, e.target.value)}
+                                    placeholder={trackKey === 'coffee' ? '邀約對象：(例：陳會計師 / 李建築師)' : '加入備註（自動儲存，前台會顯示）'}
+                                    rows={2}
+                                    className="mt-2 w-full px-3 py-1.5 text-xs border border-stone-200 rounded bg-white resize-none focus:border-stone-500 focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <div className="text-sm text-stone-400 py-8 text-center">尚未安排演講人</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============ 會員管理 ============
+function MemberManager({ data, saveData, showToast }) {
+  const fileRef = useRef(null);
+  const [form, setForm] = useState({ name: '', industry: '', company: '', email: '', phone: '' });
+
+  const handleExcelImport = async (file) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (rows.length === 0) {
+        showToast('Excel 沒有資料', 'error');
+        return;
+      }
+
+      // 自動辨識欄位（兼容中英文欄名）
+      const newMembers = rows.map((r, idx) => {
+        const get = (keys) => {
+          for (const k of keys) {
+            if (r[k] !== undefined && r[k] !== '') return String(r[k]).trim();
+          }
+          return '';
+        };
+        return {
+          id: `u_${Date.now()}_${idx}`,
+          name: get(['姓名', '名字', 'Name', 'name', '會員姓名']),
+          industry: get(['行業別', '行業', '產業', 'Industry', 'industry', '分類']),
+          company: get(['公司', '公司名稱', 'Company', 'company']),
+          email: get(['Email', 'email', '電子郵件', 'E-mail']),
+          phone: get(['電話', '手機', 'Phone', 'phone', '聯絡電話']),
+        };
+      }).filter(m => m.name);
+
+      if (newMembers.length === 0) {
+        showToast('找不到「姓名」欄位，請檢查 Excel 格式', 'error');
+        return;
+      }
+
+      const confirmed = confirm(`匯入 ${newMembers.length} 位會員？\n（將覆蓋現有會員名單）`);
+      if (!confirmed) return;
+
+      saveData({ ...data, members: newMembers });
+      showToast(`成功匯入 ${newMembers.length} 位會員`);
+    } catch (e) {
+      showToast('匯入失敗：' + e.message, 'error');
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      { 姓名: '郭泓志', 行業別: '律師', 公司: '泓品法律事務所', 電話: '07-xxx-xxxx', Email: 'test@example.com' },
+      { 姓名: '陳婉瑜', 行業別: '律師', 公司: '泓品法律事務所', 電話: '07-xxx-xxxx', Email: 'test2@example.com' },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '會員名單');
+    XLSX.writeFile(wb, 'BNI_會員名單_範本.xlsx');
+  };
+
+  const addMember = () => {
+    if (!form.name.trim()) {
+      showToast('請填姓名', 'error');
+      return;
+    }
+    const newM = { id: `u_${Date.now()}`, ...form };
+    saveData({ ...data, members: [...data.members, newM] });
+    setForm({ name: '', industry: '', company: '', email: '', phone: '' });
+    showToast('新增成功');
+  };
+
+  const deleteMember = (id) => {
+    if (!confirm('確定刪除？該會員已排入的演講將被清空')) return;
+    const meetings = data.meetings.map(m => ({
+      ...m,
+      slotA: m.slotA.speakerId === id || m.slotA.helperId === id
+        ? { ...m.slotA, speakerId: m.slotA.speakerId === id ? null : m.slotA.speakerId, helperId: m.slotA.helperId === id ? null : m.slotA.helperId }
+        : m.slotA,
+      slotB: m.slotB.speakerId === id || m.slotB.helperId === id
+        ? { ...m.slotB, speakerId: m.slotB.speakerId === id ? null : m.slotB.speakerId, helperId: m.slotB.helperId === id ? null : m.slotB.helperId }
+        : m.slotB,
+    }));
+    saveData({ ...data, members: data.members.filter(m => m.id !== id), meetings });
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <h3 className="text-xl font-bold mb-5" style={{ color: '#1A1414' }}>會員管理</h3>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">Excel 匯入</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={e => e.target.files?.[0] && handleExcelImport(e.target.files[0])}
+            className="text-sm"
+          />
+          <button
+            onClick={downloadTemplate}
+            className="px-3 py-1.5 text-sm border border-stone-300 rounded-md hover:bg-stone-50 flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4" />下載範本
+          </button>
+        </div>
+        <div className="text-xs text-stone-500 mt-2">
+          支援欄位：姓名（必填）、行業別、公司、電話、Email。匯入會覆蓋現有名單。
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">手動新增</div>
+        <div className="grid md:grid-cols-5 gap-2">
+          <input type="text" placeholder="姓名*" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="行業別" value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="公司" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="電話" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <button onClick={addMember} className="px-3 py-2 text-sm text-white rounded-md" style={{ background: '#A01E2E' }}>新增</button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-200 flex justify-between items-center">
+          <div className="text-sm font-semibold">會員清單（{data.members.length}）</div>
+        </div>
+        {data.members.length === 0 ? (
+          <div className="text-center py-12 text-stone-400 text-sm">尚未建立會員</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 text-xs text-stone-500">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">姓名</th>
+                  <th className="px-4 py-2 text-left font-medium">行業別</th>
+                  <th className="px-4 py-2 text-left font-medium">公司</th>
+                  <th className="px-4 py-2 text-left font-medium">電話</th>
+                  <th className="px-4 py-2 text-left font-medium">Email</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {data.members.map(m => (
+                  <tr key={m.id}>
+                    <td className="px-4 py-2 font-semibold">{m.name}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.industry}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.company}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.phone}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.email}</td>
+                    <td className="px-4 py-2 text-right">
+                      <button onClick={() => deleteMember(m.id)} className="text-stone-400 hover:text-red-600">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ 任務模板管理 ============
+function TaskTemplateManager({ data, saveData, showToast }) {
+  const [chapter, setChapter] = useState(data.chapterName);
+  const [tasks, setTasks] = useState(data.taskTemplate);
+
+  const updateTask = (idx, field, value) => {
+    const next = [...tasks];
+    next[idx] = { ...next[idx], [field]: value };
+    setTasks(next);
+  };
+
+  const addTask = () => {
+    setTasks([...tasks, { id: `t_${Date.now()}`, name: '新任務', weekBefore: 0, icon: 'Circle', track: 'content' }]);
+  };
+
+  const deleteTask = (idx) => {
+    if (!confirm('確定刪除這個任務項目？')) return;
+    setTasks(tasks.filter((_, i) => i !== idx));
+  };
+
+  const save = () => {
+    saveData({ ...data, chapterName: chapter, taskTemplate: tasks });
+    showToast('儲存完成');
+  };
+
+  const resetDefault = () => {
+    if (!confirm('確定重置為預設任務模板？')) return;
+    setTasks(DEFAULT_TASKS);
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <h3 className="text-xl font-bold mb-5" style={{ color: '#1A1414' }}>分會與任務設定</h3>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">分會名稱</div>
+        <input
+          type="text"
+          value={chapter}
+          onChange={e => setChapter(e.target.value)}
+          className="px-3 py-2 text-sm border border-stone-300 rounded-md w-full md:w-1/2"
+        />
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-sm font-semibold">任務模板</div>
+          <div className="flex gap-2">
+            <button onClick={resetDefault} className="px-3 py-1.5 text-xs border border-stone-300 rounded-md hover:bg-stone-50">重置預設</button>
+            <button onClick={addTask} className="px-3 py-1.5 text-xs text-white rounded-md flex items-center gap-1" style={{ background: '#A01E2E' }}>
+              <Plus className="w-3 h-3" />新增任務
+            </button>
+          </div>
+        </div>
+        <div className="text-xs text-stone-500 mb-3">
+          「第 -N 週」代表演講前 N 週。軌道分為「演講準備」（content）與「咖啡會議邀約」（coffee），兩條平行進行。
+        </div>
+        {['content', 'coffee'].map(trackKey => {
+          const trackTasks = tasks.filter(t => (t.track || 'content') === trackKey).sort((a, b) => b.weekBefore - a.weekBefore);
+          const trackLabel = trackKey === 'content' ? '演講準備' : '咖啡會議邀約';
+          const trackColor = trackKey === 'content' ? '#A01E2E' : '#8B6F47';
+          const TrackIcon = trackKey === 'content' ? Presentation : Coffee;
+          return (
+            <div key={trackKey} className="mb-4">
+              <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-stone-200">
+                <TrackIcon className="w-4 h-4" style={{ color: trackColor }} />
+                <div className="text-sm font-semibold" style={{ color: trackColor }}>{trackLabel}</div>
+                <div className="text-xs text-stone-400">({trackTasks.length})</div>
+              </div>
+              <div className="space-y-2">
+                {trackTasks.map((task) => (
+                  <div key={task.id} className="flex flex-wrap gap-2 items-center p-2 rounded-md bg-stone-50">
+                    <input
+                      type="text"
+                      value={task.name}
+                      onChange={e => updateTask(tasks.indexOf(task), 'name', e.target.value)}
+                      className="flex-1 min-w-[180px] px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+                    />
+                    <div className="flex items-center gap-1 text-xs text-stone-500">
+                      第-
+                      <input
+                        type="number"
+                        value={task.weekBefore}
+                        onChange={e => updateTask(tasks.indexOf(task), 'weekBefore', parseInt(e.target.value) || 0)}
+                        className="w-14 px-2 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+                      />
+                      週
+                    </div>
+                    <select
+                      value={task.track || 'content'}
+                      onChange={e => updateTask(tasks.indexOf(task), 'track', e.target.value)}
+                      className="px-2 py-1.5 text-xs border border-stone-300 rounded-md bg-white"
+                    >
+                      <option value="content">演講準備</option>
+                      <option value="coffee">咖啡會議</option>
+                    </select>
+                    <select
+                      value={task.icon}
+                      onChange={e => updateTask(tasks.indexOf(task), 'icon', e.target.value)}
+                      className="px-2 py-1.5 text-xs border border-stone-300 rounded-md bg-white"
+                    >
+                      {Object.keys(ICON_MAP).map(ic => <option key={ic} value={ic}>{ic}</option>)}
+                    </select>
+                    <button onClick={() => deleteTask(tasks.indexOf(task))} className="text-stone-400 hover:text-red-600">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button onClick={save} className="px-5 py-2.5 text-white rounded-md font-semibold" style={{ background: '#A01E2E' }}>
+        儲存設定
+      </button>
+    </div>
+  );
+}
+
+// ============ 咖啡會議頁 ============
+const COFFEE_STATUS = {
+  pending: { text: '邀約中', color: '#A01E2E', bg: '#FCEFE3' },
+  done: { text: '已完成', color: '#4A6741', bg: '#EDF3E8' },
+  cancelled: { text: '已取消', color: '#888', bg: '#F0F0F0' },
+};
+const COFFEE_WILLINGNESS = {
+  unknown: { text: '未確認', color: '#888', bg: '#F5F5F5' },
+  pending: { text: '邀約中', color: '#A01E2E', bg: '#FCEFE3' },
+  confirmed: { text: '確認出席', color: '#4A6741', bg: '#EDF3E8' },
+  declined: { text: '無法出席', color: '#6C6C6C', bg: '#F0F0F0' },
+};
+
+function CoffeeMeetingPage({ data, saveData, showToast }) {
+  const [filter, setFilter] = useState({ inviterId: '', status: '', search: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({});
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  const allMeetings = data.coffeeMeetings || [];
+
+  const filtered = useMemo(() => {
+    let result = [...allMeetings];
+    if (filter.inviterId) result = result.filter(cm => cm.inviterId === filter.inviterId);
+    if (filter.status) result = result.filter(cm => cm.meetingStatus === filter.status);
+    if (filter.search) {
+      const q = filter.search.toLowerCase();
+      result = result.filter(cm =>
+        (cm.guestName || '').toLowerCase().includes(q) ||
+        (cm.guestIndustry || '').toLowerCase().includes(q)
+      );
+    }
+    return result.sort((a, b) => new Date(b.meetingTime || b.createdAt || 0) - new Date(a.meetingTime || a.createdAt || 0));
+  }, [allMeetings, filter]);
+
+  // 統計
+  const stats = useMemo(() => ({
+    total: allMeetings.length,
+    done: allMeetings.filter(cm => cm.meetingStatus === 'done').length,
+    pending: allMeetings.filter(cm => cm.meetingStatus === 'pending').length,
+    confirmed: allMeetings.filter(cm => cm.attendanceWillingness === 'confirmed').length,
+  }), [allMeetings]);
+
+  // 近期 6 週演講人名單（方便快速建立咖啡會議）
+  const upcomingSpeakers = useMemo(() => {
+    const today = new Date();
+    const ids = new Set();
+    data.meetings
+      .filter(m => daysBetween(today, new Date(m.date)) >= -1)
+      .forEach(m => {
+        if (m.slotA.speakerId) ids.add(m.slotA.speakerId);
+        if (m.slotB.speakerId) ids.add(m.slotB.speakerId);
+      });
+    return [...ids].map(id => memberById[id]).filter(Boolean);
+  }, [data.meetings, memberById]);
+
+  const openNew = (presetInviterId) => {
+    setFormData({
+      guestName: '',
+      guestIndustry: '',
+      inviterId: presetInviterId || '',
+      meetingTime: '',
+      meetingStatus: 'pending',
+      attendanceWillingness: 'unknown',
+      attendanceTime: '',
+      notes: ''
+    });
+    setEditingId('new');
+  };
+
+  const openEdit = (cm) => {
+    setFormData({ ...cm });
+    setEditingId(cm.id);
+  };
+
+  const saveMeeting = () => {
+    if (!formData.guestName?.trim()) {
+      showToast('請填寫來賓姓名', 'error');
+      return;
+    }
+    let next;
+    if (editingId === 'new') {
+      const newCm = { ...formData, id: `cm_${Date.now()}`, createdAt: new Date().toISOString() };
+      next = { ...data, coffeeMeetings: [...allMeetings, newCm] };
+    } else {
+      next = {
+        ...data,
+        coffeeMeetings: allMeetings.map(cm => cm.id === editingId ? { ...cm, ...formData } : cm)
+      };
+    }
+    saveData(next);
+    setEditingId(null);
+    showToast('儲存完成');
+  };
+
+  const deleteMeeting = (id) => {
+    if (!confirm('確定刪除這筆咖啡會議？')) return;
+    saveData({ ...data, coffeeMeetings: allMeetings.filter(cm => cm.id !== id) });
+    showToast('已刪除');
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">COFFEE MEETING TRACKER</div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          咖啡會議 <span style={{ color: '#8B6F47' }}>追蹤</span>
+        </h2>
+        <div className="text-sm text-stone-500">記錄每場 121，邀約嘉賓來聽主題演講、開啟簽單機會</div>
+      </div>
+
+      {/* 統計 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <StatCard label="總場次" value={stats.total} color="#1A1414" />
+        <StatCard label="已完成" value={stats.done} color="#8B6F47" />
+        <StatCard label="邀約中" value={stats.pending} color="#A01E2E" />
+        <StatCard label="確認出席例會" value={stats.confirmed} color="#4A6741" />
+      </div>
+
+      {/* 近期演講人快速建立 */}
+      {upcomingSpeakers.length > 0 && (
+        <div className="mb-4 p-3 bg-white rounded-lg border border-stone-200">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="text-xs font-semibold text-stone-700">近期演講人快速建立：</div>
+            {upcomingSpeakers.map(m => (
+              <button
+                key={m.id}
+                onClick={() => openNew(m.id)}
+                className="px-2 py-1 text-xs bg-stone-100 hover:bg-amber-100 rounded transition-colors"
+              >
+                + {m.name} 的咖啡會議
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 篩選 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-3 mb-4 flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          placeholder="搜尋來賓 / 行業別..."
+          value={filter.search}
+          onChange={e => setFilter({ ...filter, search: e.target.value })}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md flex-1 min-w-[150px]"
+        />
+        <select
+          value={filter.inviterId}
+          onChange={e => setFilter({ ...filter, inviterId: e.target.value })}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+        >
+          <option value="">所有邀約人</option>
+          {data.members.map(m => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+        <select
+          value={filter.status}
+          onChange={e => setFilter({ ...filter, status: e.target.value })}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+        >
+          <option value="">所有狀態</option>
+          <option value="pending">邀約中</option>
+          <option value="done">已完成</option>
+          <option value="cancelled">已取消</option>
+        </select>
+        <button
+          onClick={() => openNew()}
+          className="px-4 py-1.5 text-sm text-white rounded-md flex items-center gap-1"
+          style={{ background: '#8B6F47' }}
+        >
+          <Plus className="w-4 h-4" />新增咖啡會議
+        </button>
+      </div>
+
+      {/* 列表 */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-lg border border-stone-200">
+            <Coffee className="w-12 h-12 text-stone-300 mx-auto mb-2" />
+            <div className="text-sm text-stone-500">沒有咖啡會議記錄</div>
+            <div className="text-xs text-stone-400 mt-1">點「新增咖啡會議」開始記錄</div>
+          </div>
+        ) : (
+          filtered.map(cm => (
+            <CoffeeCard
+              key={cm.id}
+              cm={cm}
+              inviter={memberById[cm.inviterId]}
+              onEdit={() => openEdit(cm)}
+              onDelete={() => deleteMeeting(cm.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* 編輯表單 Modal */}
+      {editingId && (
+        <CoffeeMeetingModal
+          isNew={editingId === 'new'}
+          formData={formData}
+          setFormData={setFormData}
+          members={data.members}
+          onSave={saveMeeting}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }) {
+  return (
+    <div className="bg-white rounded-lg border border-stone-200 p-3">
+      <div className="text-xs text-stone-500">{label}</div>
+      <div className="text-2xl md:text-3xl font-bold" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function CoffeeCard({ cm, inviter, onEdit, onDelete }) {
+  const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
+  const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.unknown;
+  const fmtTime = (t) => t ? new Date(t).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  return (
+    <div className="bg-white rounded-lg border border-stone-200 p-4 hover:border-stone-400 transition-colors">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+            <div className="font-bold text-base" style={{ color: '#1A1414' }}>{cm.guestName || '(未填)'}</div>
+            {cm.guestIndustry && <div className="text-xs text-stone-500">· {cm.guestIndustry}</div>}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-stone-500">
+            <span>邀約人：</span>
+            <span className="font-medium px-1.5 py-0.5 rounded" style={{ background: '#F5EFE6', color: '#8B6F47' }}>{inviter?.name || '—'}</span>
+          </div>
+        </div>
+        <div className="flex gap-1 flex-shrink-0">
+          <button onClick={onEdit} className="p-1.5 text-stone-400 hover:text-stone-800 rounded hover:bg-stone-100">
+            <Edit3 className="w-4 h-4" />
+          </button>
+          <button onClick={onDelete} className="p-1.5 text-stone-400 hover:text-red-600 rounded hover:bg-red-50">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        <div>
+          <div className="text-stone-400 mb-1">咖啡會議</div>
+          <div className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ color: statusInfo.color, background: statusInfo.bg }}>
+            {statusInfo.text}
+          </div>
+          <div className="text-stone-500 mt-1">{fmtTime(cm.meetingTime)}</div>
+        </div>
+        <div>
+          <div className="text-stone-400 mb-1">出席例會意願</div>
+          <div className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ color: willingnessInfo.color, background: willingnessInfo.bg }}>
+            {willingnessInfo.text}
+          </div>
+          {cm.attendanceTime && <div className="text-stone-500 mt-1">{fmtTime(cm.attendanceTime)}</div>}
+        </div>
+      </div>
+      {cm.notes && (
+        <div className="mt-3 text-xs text-stone-600 px-3 py-2 rounded bg-amber-50 border-l-2 border-amber-300">
+          💬 {cm.notes}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CoffeeMeetingModal({ isNew, formData, setFormData, members, onSave, onClose }) {
+  const toDatetimeLocal = (iso) => {
+    if (!iso) return '';
+    // 支援 "2025-10-17T20:00" 或完整 ISO
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+    >
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-4 flex justify-between items-center z-10">
+          <div className="text-lg font-bold" style={{ color: '#1A1414' }}>
+            {isNew ? '新增咖啡會議' : '編輯咖啡會議'}
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-800">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <CFField label="來賓姓名 *">
+            <input
+              type="text"
+              value={formData.guestName || ''}
+              onChange={e => setFormData({ ...formData, guestName: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              placeholder="例：王祖德"
+            />
+          </CFField>
+          <CFField label="行業別">
+            <input
+              type="text"
+              value={formData.guestIndustry || ''}
+              onChange={e => setFormData({ ...formData, guestIndustry: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              placeholder="例：木地板、鋁門窗業"
+            />
+          </CFField>
+          <CFField label="邀約人">
+            <select
+              value={formData.inviterId || ''}
+              onChange={e => setFormData({ ...formData, inviterId: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+            >
+              <option value="">— 選擇 —</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.name}（{m.industry || '未填'}）</option>)}
+            </select>
+          </CFField>
+          <div className="grid grid-cols-2 gap-3">
+            <CFField label="咖啡會議時間">
+              <input
+                type="datetime-local"
+                value={toDatetimeLocal(formData.meetingTime)}
+                onChange={e => setFormData({ ...formData, meetingTime: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              />
+            </CFField>
+            <CFField label="狀態">
+              <select
+                value={formData.meetingStatus || 'pending'}
+                onChange={e => setFormData({ ...formData, meetingStatus: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+              >
+                <option value="pending">邀約中</option>
+                <option value="done">已完成</option>
+                <option value="cancelled">已取消</option>
+              </select>
+            </CFField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <CFField label="出席例會意願">
+              <select
+                value={formData.attendanceWillingness || 'unknown'}
+                onChange={e => setFormData({ ...formData, attendanceWillingness: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+              >
+                <option value="unknown">未確認</option>
+                <option value="pending">邀約中</option>
+                <option value="confirmed">確認出席</option>
+                <option value="declined">無法出席</option>
+              </select>
+            </CFField>
+            <CFField label="出席例會時間">
+              <input
+                type="datetime-local"
+                value={toDatetimeLocal(formData.attendanceTime)}
+                onChange={e => setFormData({ ...formData, attendanceTime: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              />
+            </CFField>
+          </div>
+          <CFField label="備註">
+            <textarea
+              value={formData.notes || ''}
+              onChange={e => setFormData({ ...formData, notes: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-none"
+              placeholder="關係描述、跟進狀況、簽單可能性⋯"
+            />
+          </CFField>
+        </div>
+        <div className="sticky bottom-0 bg-white border-t border-stone-200 px-5 py-3 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-stone-50">取消</button>
+          <button onClick={onSave} className="px-5 py-2 text-sm text-white rounded-md font-semibold" style={{ background: '#8B6F47' }}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CFField({ label, children }) {
+  return (
+    <div>
+      <div className="text-xs text-stone-500 mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+
+// 渲染
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(BNISpeakerTracker));
+</script>
+</body>
+</html>
