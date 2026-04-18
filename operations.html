@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNI 富鼎分會 · 運營台</title>
+
+<!-- Railway Proxy URL（與 Speaker Tracker 共用）-->
+<script>
+  window.BNI_PROXY_URL = 'https://bni-kpi-production.up.railway.app';
+</script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #F5F0E8;
+    margin: 0;
+  }
+  .loading-screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #F5F0E8; color: #8B6F47; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="loading-screen">運營台載入中⋯（首次載入需 5-10 秒編譯）</div>
+</div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ===== Icon Components =====
+function IconWrap({ className, style, children }) {
+  return React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    width: 24, height: 24, viewBox: "0 0 24 24",
+    fill: "none", stroke: "currentColor",
+    strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round",
+    className: className, style: style,
+    dangerouslySetInnerHTML: { __html: children }
+  });
+}
+const Users = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' });
+const User = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' });
+const UserCheck = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' });
+const UserX = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/>' });
+const Calendar = (p) => React.createElement(IconWrap, { ...p, children: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' });
+const Clock = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' });
+const MapPin = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>' });
+const Plus = (p) => React.createElement(IconWrap, { ...p, children: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' });
+const X = (p) => React.createElement(IconWrap, { ...p, children: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' });
+const Trash2 = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>' });
+const Edit2 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>' });
+const Save = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' });
+const Search = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' });
+const Filter = (p) => React.createElement(IconWrap, { ...p, children: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' });
+const Settings = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' });
+const Sparkles = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M12 3l1.9 5.7L20 10l-5 3.6 1.4 6.4L12 17l-4.4 3 1.4-6.4L4 10l6.1-1.3L12 3z"/>' });
+const FileText = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' });
+const BookOpen = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' });
+const GraduationCap = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>' });
+const Award = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>' });
+const Target = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' });
+const Coffee = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' });
+const Camera = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' });
+const CheckSquare = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' });
+const Square = (p) => React.createElement(IconWrap, { ...p, children: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>' });
+const CheckCircle2 = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>' });
+const Circle = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/>' });
+const AlertCircle = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' });
+const ChevronDown = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="6 9 12 15 18 9"/>' });
+const ChevronRight = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="9 18 15 12 9 6"/>' });
+const ArrowLeft = (p) => React.createElement(IconWrap, { ...p, children: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>' });
+const TrendingUp = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>' });
+const BarChart3 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/>' });
+
+// ===== Storage (Railway Proxy + JSONBin，與 Speaker Tracker 共用同一個 bin) =====
+const PROXY_URL = window.BNI_PROXY_URL || '';
+
+const apiClient = {
+  async get(key) {
+    try {
+      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(key));
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('讀取失敗: ' + res.status);
+      const json = await res.json();
+      return json && json.value !== undefined ? { value: json.value } : null;
+    } catch (e) {
+      console.error('[apiClient.get]', key, e);
+      return null;
+    }
+  },
+  async set(key, value) {
+    const tryWrite = async (pin) => fetch(PROXY_URL + '/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Write-PIN': pin || '' },
+      body: JSON.stringify({ key, value: typeof value === 'string' ? value : JSON.stringify(value) })
+    });
+    let pin = localStorage.getItem('bni_write_pin') || '';
+    let res = await tryWrite(pin);
+    if (res.status === 401) {
+      const newPin = prompt('第一次寫入需要輸入「寫入 PIN」（與 Speaker Tracker 共用）：');
+      if (!newPin) throw new Error('已取消');
+      res = await tryWrite(newPin);
+      if (res.ok) { localStorage.setItem('bni_write_pin', newPin); }
+      else { localStorage.removeItem('bni_write_pin'); alert('PIN 錯誤'); throw new Error('PIN 錯誤'); }
+    }
+    if (!res.ok) throw new Error('寫入失敗: ' + res.status);
+    return { value };
+  }
+};
+
+// ===== 運營台主體 =====
+// ============ 儲存層（artifact 用 window.storage；整合 Speaker Tracker 時替換為 proxy fetch） ============
+const STORAGE_KEYS = {
+  GROUPS: "bni_meeting_groups_v1",
+  MEETINGS: "bni_group_meetings_v1",
+  MEMBERS: "bni_speaker_tracker_v5",   // 讀主檔的 members 欄位，不單獨寫
+  MENTEES: "bni_mentees_v1",
+  CURRENT_USER: null,                   // 身份用 localStorage 本地保存
+};
+
+async function loadState(key, fallback) {
+  if (!key) return fallback;
+  try {
+    const r = await apiClient.get(key);
+    return r && r.value ? JSON.parse(r.value) : fallback;
+  } catch (e) { console.error("[loadState]", key, e); return fallback; }
+}
+async function saveState(key, value) {
+  if (!key) return;
+  try { await apiClient.set(key, JSON.stringify(value)); }
+  catch (e) { console.error("[saveState]", key, e); }
+}
+
+// ============ 範例初始資料（第一次開啟） ============
+const SEED_MEMBERS = [
+  { id: "m01", name: "郭泓志", industry: "法律 - 律師" },
+  { id: "m02", name: "陳婉瑜", industry: "法律 - 家事律師" },
+  { id: "m03", name: "王大明", industry: "會計" },
+  { id: "m04", name: "林小美", industry: "保險" },
+  { id: "m05", name: "張志豪", industry: "房仲" },
+  { id: "m06", name: "李雅婷", industry: "室內設計" },
+  { id: "m07", name: "陳宗翰", industry: "銀行" },
+  { id: "m08", name: "黃秀惠", industry: "美業" },
+  // 核心團隊（導生範例用）
+  { id: "m09", name: "蔡宜倩", industry: "行銷顧問" },
+  { id: "m10", name: "鍾易峻", industry: "科技製造" },
+  { id: "m11", name: "景國強", industry: "金融" },
+  { id: "m12", name: "高懿靜", industry: "教育培訓" },
+  { id: "m13", name: "黃筑憶", industry: "醫美" },
+  { id: "m14", name: "陳鳳伶", industry: "活動策劃" },
+  { id: "m15", name: "黃秀如", industry: "餐飲" },
+  { id: "m16", name: "蘇柏宇", industry: "資訊" },
+  { id: "m17", name: "鄭勤", industry: "製造業" },
+  // 導師群
+  { id: "m18", name: "林佳慧", industry: "人資顧問" },
+  { id: "m19", name: "劉士豪", industry: "建築" },
+  { id: "m20", name: "羅裕傑", industry: "汽車" },
+  { id: "m21", name: "賴玉軒", industry: "媒體" },
+  { id: "m22", name: "郭峻瑋", industry: "設計" },
+  { id: "m23", name: "謝獻璋", industry: "物流" },
+  { id: "m24", name: "梁喬閔", industry: "貿易" },
+  // 新生
+  { id: "m25", name: "黃婉怡", industry: "短影音行銷" },
+  { id: "m26", name: "馬博泰", industry: "精緻食品電商業" },
+];
+const SEED_GROUPS = [
+  { id: "g01", name: "KPI 第一組", color: "#B8860B", leaderId: "m01", memberIds: ["m01", "m02", "m03", "m04"] },
+  { id: "g02", name: "KPI 第二組", color: "#8B1A1A", leaderId: "m05", memberIds: ["m05", "m06", "m07", "m08"] },
+];
+const SEED_MEETINGS = [
+  {
+    id: "mt01", groupId: "g01", date: "2026-04-15", time: "19:00",
+    location: "事務所會議室", scribe: "m01",
+    attendees: ["m01", "m02", "m04"], absentees: ["m03"],
+    discussion: "討論本週會員互推，郭律師分享遺囑案件新進展，陳律師說明家事法修法影響。",
+    actionItems: [
+      { id: "a01", title: "準備下週主題演講草稿", assignee: "m01", dueDate: "2026-04-22", status: "pending", notes: "" },
+      { id: "a02", title: "整理會員名單給保險組", assignee: "m04", dueDate: "2026-04-20", status: "done", completedAt: "2026-04-17T08:00:00Z", notes: "已寄出" },
+    ],
+    createdAt: "2026-04-15T12:00:00Z", updatedAt: "2026-04-17T08:00:00Z",
+  },
+  {
+    id: "mt02", groupId: "g02", date: "2026-04-16", time: "12:30",
+    location: "85度C 博愛店", scribe: "m05",
+    attendees: ["m05", "m06", "m07"], absentees: ["m08"],
+    discussion: "分享上週 BNI 全國大會心得，討論下季邀請訪客策略。",
+    actionItems: [
+      { id: "a03", title: "邀請 3 位訪客出席下週例會", assignee: "m05", dueDate: "2026-04-23", status: "pending", notes: "" },
+      { id: "a04", title: "做一份組聚照片 EDM", assignee: "m07", dueDate: "2026-04-21", status: "pending", notes: "" },
+    ],
+    createdAt: "2026-04-16T05:30:00Z", updatedAt: "2026-04-16T05:30:00Z",
+  },
+];
+
+// ============ 導生計畫常數 ============
+const W_MILESTONES = [
+  { key: "W0", title: "黃金72小時" },
+  { key: "W1", title: "新會員迎新單元" },
+  { key: "W2", title: "目標設定" },
+  { key: "W3", title: "政策與會議議程" },
+  { key: "W4", title: "落實五大基本功" },
+  { key: "W5", title: "學會簡報" },
+  { key: "W6", title: "Connect 運用" },
+  { key: "W7", title: "形成產業鏈、找到業務人脈圈" },
+  { key: "W8", title: "組成 Power Team" },
+];
+const TRAININGS = [
+  { id: "t1", title: "新會員交流座談", label: "必上1" },
+  { id: "t2", title: "MSP (上)", label: "必上2" },
+  { id: "t3", title: "MSP (下)", label: "必上3" },
+  { id: "t4", title: "MYS 成功藍圖", label: "必上4" },
+  { id: "t5", title: "一對一表格攻略", label: "必上5" },
+];
+const ONE_ON_ONE_TYPES = [
+  { key: "memberDataSheet", label: "會員資料表", short: "資料表" },
+  { key: "gains", label: "GAINS 表", short: "GAINS" },
+  { key: "topTen", label: "十大客戶", short: "十大" },
+  { key: "networkCircle", label: "業務人脈圈", short: "人脈圈" },
+  { key: "deepOneOnOne", label: "深度一對一", short: "深度" },
+];
+const CORE_ROLES = ["主席", "副主席", "秘財", "教培", "導協", "成長", "活動", "接待"];
+const GRAD_REQS = { passport: 9, trainings: 5, earlyAttend: 8 };
+
+// ============ 導生範例資料 ============
+const mkOneOnOne = (done, doneBy) => done ? { done: true, doneBy, doneAt: "2026-02-15T10:00:00Z" } : { done: false };
+const allDone = (doneBy) => ONE_ON_ONE_TYPES.reduce((o, t) => ({ ...o, [t.key]: mkOneOnOne(true, doneBy) }), {});
+const emptyOnes = () => ONE_ON_ONE_TYPES.reduce((o, t) => ({ ...o, [t.key]: { done: false } }), {});
+
+const SEED_MENTEES = [
+  {
+    id: "mte01",
+    memberId: "m25", // 黃婉怡
+    representativeIndustry: "短影音行銷",
+    oathDate: "2026-04-10",
+    graduationDate: null,
+    graduatedTeam: "",
+    mentorPrimaryId: "m18", // 林佳慧
+    mentorSecondaryId: "m21", // 賴玉軒
+    coreTeam: [
+      { role: "主席", memberId: "m09" },
+      { role: "副主席", memberId: "m10" },
+      { role: "秘財", memberId: "m11" },
+      { role: "教培", memberId: "m12" },
+      { role: "導協", memberId: "m13" },
+      { role: "成長", memberId: "m01" },
+      { role: "活動", memberId: "m14" },
+      { role: "接待", memberId: "m15" },
+    ],
+    mentorTeam: [
+      { memberId: "m18", role: "導師" },
+      { memberId: "m19", role: "導師" },
+      { memberId: "m20", role: "導師" },
+      { memberId: "m21", role: "導師" },
+      { memberId: "m22", role: "導師" },
+      { memberId: "m23", role: "導師" },
+      { memberId: "m24", role: "導師" },
+      { memberId: "m17", role: "副導師" },
+    ],
+    oneOnOnes: {}, // 全空，剛開始
+    passport: [
+      { key: "W0", completedDate: "2026-04-07" },
+      { key: "W1", completedDate: "2026-04-10" },
+      { key: "W2", completedDate: null },
+      { key: "W3", completedDate: null },
+      { key: "W4", completedDate: null },
+      { key: "W5", completedDate: null },
+      { key: "W6", completedDate: null },
+      { key: "W7", completedDate: null },
+      { key: "W8", completedDate: null },
+    ],
+    trainings: [
+      { id: "t1", scheduledDate: "2026-04-14", completedDate: "2026-04-14" },
+      { id: "t2", scheduledDate: "2026-04-13", completedDate: "2026-04-13" },
+      { id: "t3", scheduledDate: "2026-04-23", completedDate: null },
+      { id: "t4", scheduledDate: "2026-08-27", completedDate: null },
+      { id: "t5", scheduledDate: "2026-05-12", completedDate: null },
+    ],
+    guests: [],
+    coffeeMeetings: [],
+    earlyAttendances: ["2026-04-10"],
+    supplementReports: [],
+    createdAt: "2026-04-10T00:00:00Z",
+    updatedAt: "2026-04-17T00:00:00Z",
+  },
+  {
+    id: "mte02",
+    memberId: "m26", // 馬博泰
+    representativeIndustry: "精緻食品電商業",
+    oathDate: "2025-12-26",
+    graduationDate: "2026-03-27",
+    graduatedTeam: "導師團隊",
+    mentorPrimaryId: "m20", // 羅裕傑
+    mentorSecondaryId: "m22", // 郭峻瑋
+    coreTeam: [
+      { role: "主席", memberId: "m09" },
+      { role: "副主席", memberId: "m10" },
+      { role: "秘財", memberId: "m16" }, // 蘇柏宇（當時）
+      { role: "教培", memberId: "m17" }, // 鄭勤（當時）
+      { role: "導協", memberId: "m13" },
+      { role: "成長", memberId: "m01" },
+      { role: "活動", memberId: "m11" }, // 景國強（當時）
+      { role: "接待", memberId: "m15" },
+    ],
+    mentorTeam: [
+      { memberId: "m18", role: "導師" },
+      { memberId: "m19", role: "導師" },
+      { memberId: "m20", role: "導師" },
+      { memberId: "m21", role: "導師" },
+      { memberId: "m22", role: "副導師" },
+      { memberId: "m23", role: "副導師" },
+      { memberId: "m24", role: "副導師" },
+    ],
+    oneOnOnes: {
+      m09: allDone("m20"), m10: allDone("m20"), m16: allDone("m20"),
+      m17: allDone("m22"), m13: allDone("m22"), m01: allDone("m22"),
+      m11: allDone("m20"), m15: allDone("m20"),
+      m20: allDone("m26"), m22: allDone("m26"),
+    },
+    passport: [
+      { key: "W0", completedDate: "2025-12-22" },
+      { key: "W1", completedDate: "2025-12-26" },
+      { key: "W2", completedDate: "2025-12-31" },
+      { key: "W3", completedDate: "2026-01-05" },
+      { key: "W4", completedDate: "2026-01-09" },
+      { key: "W5", completedDate: "2026-01-16" },
+      { key: "W6", completedDate: "2026-03-17" },
+      { key: "W7", completedDate: "2026-01-16" },
+      { key: "W8", completedDate: "2026-03-17" },
+    ],
+    trainings: [
+      { id: "t1", scheduledDate: "2026-02-26", completedDate: "2026-02-26" },
+      { id: "t2", scheduledDate: "2026-01-05", completedDate: "2026-01-05" },
+      { id: "t3", scheduledDate: "2026-01-08", completedDate: "2026-01-08" },
+      { id: "t4", scheduledDate: "2026-01-26", completedDate: "2026-01-29" },
+      { id: "t5", scheduledDate: "2026-03-10", completedDate: "2026-03-10" },
+    ],
+    guests: [
+      { id: "g1", date: "2026-02-06", guestName: "蔣碧柏", industry: "香料鹽" },
+      { id: "g2", date: "2026-02-06", guestName: "張京榮", industry: "行銷業" },
+      { id: "g3", date: "2026-03-20", guestName: "劉人豪", industry: "醫療保險" },
+      { id: "g4", date: "2026-03-13", guestName: "陳孟宜", industry: "益生菌" },
+    ],
+    coffeeMeetings: [
+      { id: "c1", date: "2026-01-18", guestName: "侯秀穎", industry: "電商服飾" },
+      { id: "c2", date: "2026-02-02", guestName: "蔣先生", industry: "調味品製作" },
+    ],
+    earlyAttendances: [
+      "2025-12-26", "2026-01-02", "2026-01-09", "2026-01-16",
+      "2026-01-23", "2026-01-30", "2026-02-06", "2026-02-13",
+    ],
+    supplementReports: [],
+    createdAt: "2025-12-26T00:00:00Z",
+    updatedAt: "2026-03-27T00:00:00Z",
+  },
+];
+
+// ============ 導生計畫工具函式 ============
+function canEditMentee(mentee, currentUserId) {
+  if (!currentUserId || !mentee) return false;
+  return mentee.memberId === currentUserId
+    || mentee.mentorPrimaryId === currentUserId
+    || mentee.mentorSecondaryId === currentUserId;
+}
+function canCheckOneOnOne(mentee, currentUserId, targetMemberId) {
+  if (!currentUserId) return false;
+  if (canEditMentee(mentee, currentUserId)) return true;
+  return currentUserId === targetMemberId; // 對象本人也能勾自己這格
+}
+function getMenteeAllTargets(mentee) {
+  // 返回一對一矩陣的所有對象（核心 8 + 導師 N），依原始順序
+  const core = mentee.coreTeam.map(c => ({ ...c, group: "core" }));
+  const mentors = mentee.mentorTeam.map(m => ({ ...m, group: "mentor" }));
+  return [...core, ...mentors];
+}
+function getMenteeStats(mentee) {
+  const passportDone = mentee.passport.filter(p => p.completedDate).length;
+  const trainingDone = mentee.trainings.filter(t => t.completedDate).length;
+  const earlyAttend = mentee.earlyAttendances.length;
+  const targets = getMenteeAllTargets(mentee);
+  const totalCells = targets.length * ONE_ON_ONE_TYPES.length;
+  let doneCells = 0;
+  targets.forEach(t => {
+    const rec = mentee.oneOnOnes[t.memberId] || {};
+    ONE_ON_ONE_TYPES.forEach(tp => { if (rec[tp.key]?.done) doneCells++; });
+  });
+  const overallPct = Math.round(
+    ((passportDone / GRAD_REQS.passport) * 0.25 +
+      (trainingDone / GRAD_REQS.trainings) * 0.2 +
+      (Math.min(earlyAttend, GRAD_REQS.earlyAttend) / GRAD_REQS.earlyAttend) * 0.15 +
+      (totalCells ? doneCells / totalCells : 0) * 0.3 +
+      (mentee.guests.length >= 2 ? 1 : mentee.guests.length / 2) * 0.05 +
+      (mentee.coffeeMeetings.length >= 2 ? 1 : mentee.coffeeMeetings.length / 2) * 0.05
+    ) * 100
+  );
+  return {
+    passportDone, passportTotal: GRAD_REQS.passport,
+    trainingDone, trainingTotal: GRAD_REQS.trainings,
+    earlyAttend, earlyAttendTotal: GRAD_REQS.earlyAttend,
+    oneOnOneDone: doneCells, oneOnOneTotal: totalCells,
+    guestCount: mentee.guests.length, coffeeCount: mentee.coffeeMeetings.length,
+    overallPct, isGraduated: !!mentee.graduationDate,
+  };
+}
+
+
+const uid = (p = "id") => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+const fmtDate = (d) => new Date(d).toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
+const fmtDateTime = (d) => new Date(d).toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+const isOverdue = (a) => a.status === "pending" && a.dueDate && new Date(a.dueDate) < new Date(new Date().toDateString());
+const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
+
+// ============ 共用 UI ============
+function Modal({ open, onClose, title, children, maxWidth = "max-w-2xl" }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4 bg-black/50 overflow-y-auto" onClick={onClose}>
+      <div className={`bg-white w-full ${maxWidth} rounded-none sm:rounded-2xl shadow-2xl my-0 sm:my-8 animate-in fade-in`} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white rounded-t-2xl z-10">
+          <h3 className="text-lg font-semibold text-stone-800">{title}</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg"><X className="w-5 h-5 text-stone-500" /></button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, required, hint }) {
+  return (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-stone-700 mb-1.5">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-xs text-stone-500 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function Btn({ children, variant = "primary", size = "md", className = "", ...props }) {
+  const base = "inline-flex items-center justify-center gap-1.5 font-medium transition rounded-lg";
+  const sizes = { sm: "px-2.5 py-1 text-xs", md: "px-3.5 py-2 text-sm", lg: "px-4 py-2.5 text-base" };
+  const variants = {
+    primary: "bg-[#8B1A1A] hover:bg-[#6d1414] text-white",
+    gold: "bg-[#B8860B] hover:bg-[#9a7009] text-white",
+    ghost: "hover:bg-stone-100 text-stone-700",
+    outline: "border border-stone-300 hover:bg-stone-50 text-stone-700",
+    danger: "bg-red-600 hover:bg-red-700 text-white",
+    success: "bg-emerald-600 hover:bg-emerald-700 text-white",
+  };
+  return <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...props}>{children}</button>;
+}
+
+function Tag({ children, color }) {
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium" style={{ backgroundColor: `${color}20`, color }}>{children}</span>;
+}
+
+// ============ 成員多選器 ============
+function MemberMultiSelect({ members, selectedIds, onChange, placeholder = "選擇成員..." }) {
+  const [q, setQ] = useState("");
+  const filtered = members.filter(m =>
+    !q || m.name.includes(q) || (m.industry || "").includes(q)
+  );
+  const toggle = (id) => onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
+  return (
+    <div className="border border-stone-300 rounded-lg">
+      <div className="p-2 border-b border-stone-200 flex items-center gap-2">
+        <Search className="w-4 h-4 text-stone-400" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder}
+          className="flex-1 text-sm outline-none bg-transparent" />
+        <span className="text-xs text-stone-500">{selectedIds.length} 人</span>
+      </div>
+      <div className="max-h-52 overflow-y-auto p-1">
+        {filtered.length === 0 && <div className="text-sm text-stone-400 px-3 py-2">無符合成員</div>}
+        {filtered.map(m => (
+          <button key={m.id} type="button" onClick={() => toggle(m.id)}
+            className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm text-left transition ${selectedIds.includes(m.id) ? "bg-amber-50 text-stone-800" : "hover:bg-stone-50 text-stone-700"}`}>
+            {selectedIds.includes(m.id) ? <CheckSquare className="w-4 h-4 text-[#B8860B]" /> : <Square className="w-4 h-4 text-stone-300" />}
+            <span className="font-medium">{m.name}</span>
+            {m.industry && <span className="text-xs text-stone-400">· {m.industry}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 單選（用於記錄人、負責人）
+function MemberSelect({ members, value, onChange, placeholder = "選擇..." }) {
+  return (
+    <select value={value || ""} onChange={e => onChange(e.target.value || null)}
+      className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+      <option value="">{placeholder}</option>
+      {members.map(m => <option key={m.id} value={m.id}>{m.name}{m.industry ? ` · ${m.industry}` : ""}</option>)}
+    </select>
+  );
+}
+
+// ============ 會議表單 ============
+function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
+  const [form, setForm] = useState(() => meeting || {
+    id: uid("mt"), groupId: groups[0]?.id || "",
+    date: new Date().toISOString().slice(0, 10), time: "19:00",
+    location: "", scribe: "",
+    attendees: [], absentees: [],
+    discussion: "", actionItems: [],
+    createdAt: new Date().toISOString(),
+  });
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const group = groups.find(g => g.id === form.groupId);
+  const groupMembers = useMemo(() =>
+    members.filter(m => group?.memberIds?.includes(m.id)),
+    [members, group]
+  );
+
+  // 選了某組，沒出席的自動算缺席；若記錄人空白，自動預填小組長
+  useEffect(() => {
+    if (!group) return;
+    const absent = group.memberIds.filter(id => !form.attendees.includes(id));
+    setForm(p => ({
+      ...p,
+      absentees: absent,
+      scribe: p.scribe || group.leaderId || "",
+    }));
+  }, [form.attendees, form.groupId]);
+
+  const addAction = () => set("actionItems", [...form.actionItems, {
+    id: uid("a"), title: "", assignee: "", dueDate: "",
+    status: "pending", notes: "", completedAt: null,
+  }]);
+  const updAction = (id, k, v) => set("actionItems", form.actionItems.map(a => a.id === id ? { ...a, [k]: v } : a));
+  const rmAction = (id) => set("actionItems", form.actionItems.filter(a => a.id !== id));
+
+  const submit = () => {
+    if (!form.groupId) return alert("請選擇小組");
+    if (!form.date) return alert("請輸入日期");
+    onSave({ ...form, updatedAt: new Date().toISOString() });
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="小組" required>
+          <select value={form.groupId} onChange={e => set("groupId", e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">請選擇</option>
+            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </Field>
+        <Field label="記錄人">
+          <MemberSelect members={groupMembers} value={form.scribe} onChange={v => set("scribe", v)} placeholder="（選填）" />
+        </Field>
+        <Field label="日期" required>
+          <input type="date" value={form.date} onChange={e => set("date", e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </Field>
+        <Field label="時間">
+          <input type="time" value={form.time || ""} onChange={e => set("time", e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </Field>
+      </div>
+
+      <Field label="地點">
+        <input value={form.location || ""} onChange={e => set("location", e.target.value)}
+          placeholder="例：事務所會議室、85度C..."
+          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+      </Field>
+
+      <Field label={`出席成員（${form.attendees.length} / ${group?.memberIds.length || 0} 人）`} required
+        hint={group ? `未勾選者將自動列入缺席（${form.absentees.length} 人）` : "請先選擇小組"}>
+        {group ? <MemberMultiSelect members={groupMembers} selectedIds={form.attendees} onChange={v => set("attendees", v)} /> : <div className="text-sm text-stone-400 italic">請先選擇小組</div>}
+      </Field>
+
+      <Field label="討論內容">
+        <textarea value={form.discussion || ""} onChange={e => set("discussion", e.target.value)}
+          rows={4} placeholder="本次聚會討論要點..."
+          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+      </Field>
+
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-stone-700">行動項目（{form.actionItems.length}）</label>
+          <Btn variant="outline" size="sm" onClick={addAction}><Plus className="w-3.5 h-3.5" />新增</Btn>
+        </div>
+        <div className="space-y-2">
+          {form.actionItems.length === 0 && <div className="text-sm text-stone-400 italic text-center py-3 border border-dashed border-stone-200 rounded-lg">尚無行動項目</div>}
+          {form.actionItems.map((a, i) => (
+            <div key={a.id} className="border border-stone-200 rounded-lg p-3 bg-stone-50">
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-xs font-semibold text-stone-400 mt-1.5">#{i + 1}</span>
+                <input value={a.title} onChange={e => updAction(a.id, "title", e.target.value)}
+                  placeholder="待辦事項..."
+                  className="flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
+                <button onClick={() => rmAction(a.id)} className="p-1.5 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-xs text-stone-500">負責人</label>
+                  <MemberSelect members={groupMembers} value={a.assignee} onChange={v => updAction(a.id, "assignee", v)} placeholder="（未指派）" />
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500">到期日</label>
+                  <input type="date" value={a.dueDate || ""} onChange={e => updAction(a.id, "dueDate", e.target.value)}
+                    className="w-full border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => updAction(a.id, "status", a.status === "done" ? "pending" : "done")
+                  || updAction(a.id, "completedAt", a.status === "done" ? null : new Date().toISOString())}
+                  className={`text-xs px-2 py-1 rounded-md ${a.status === "done" ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-600"}`}>
+                  {a.status === "done" ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />已完成</> : "待完成"}
+                </button>
+                <input value={a.notes || ""} onChange={e => updAction(a.id, "notes", e.target.value)}
+                  placeholder="備註..." className="flex-1 border border-stone-200 rounded-md px-2 py-1 text-xs bg-white" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-3 border-t border-stone-200">
+        <div>
+          {meeting && onDelete && (
+            <Btn variant="danger" size="sm" onClick={() => { if (confirm("確定刪除此會議記錄？")) onDelete(meeting.id); }}>
+              <Trash2 className="w-3.5 h-3.5" />刪除
+            </Btn>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="outline" onClick={onCancel}>取消</Btn>
+          <Btn variant="primary" onClick={submit}><Save className="w-4 h-4" />儲存</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ 會議卡片 ============
+function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
+  const [expanded, setExpanded] = useState(false);
+  const getMember = (id) => members.find(m => m.id === id);
+  const totalInGroup = group?.memberIds.length || 0;
+  const attendRate = totalInGroup ? (meeting.attendees.length / totalInGroup * 100).toFixed(0) : 0;
+  const pending = meeting.actionItems.filter(a => a.status === "pending");
+  const done = meeting.actionItems.filter(a => a.status === "done");
+  const overdue = pending.filter(isOverdue);
+
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden hover:shadow-md transition">
+      <div className="h-1" style={{ backgroundColor: group?.color || "#999" }} />
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <Tag color={group?.color || "#999"}>{group?.name || "未知小組"}</Tag>
+              <span className="text-sm font-semibold text-stone-800">{fmtDate(meeting.date)}</span>
+              {meeting.time && <span className="text-xs text-stone-500">{meeting.time}</span>}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-stone-500 flex-wrap">
+              {meeting.location && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{meeting.location}</span>}
+              {meeting.scribe && <span className="flex items-center gap-0.5"><Edit2 className="w-3 h-3" />{getMember(meeting.scribe)?.name || "—"}</span>}
+            </div>
+          </div>
+          <button onClick={() => onEdit(meeting)} className="p-1.5 text-stone-400 hover:text-[#8B1A1A] hover:bg-stone-50 rounded-lg">
+            <Edit2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 my-3 text-center">
+          <div className="bg-emerald-50 rounded-lg py-1.5">
+            <div className="text-lg font-bold text-emerald-700">{meeting.attendees.length}<span className="text-xs font-normal text-emerald-600">/{totalInGroup}</span></div>
+            <div className="text-[10px] text-emerald-600">出席（{attendRate}%）</div>
+          </div>
+          <div className="bg-amber-50 rounded-lg py-1.5">
+            <div className="text-lg font-bold text-amber-700">{pending.length}</div>
+            <div className="text-[10px] text-amber-600">待辦</div>
+          </div>
+          <div className={`${overdue.length ? "bg-red-50" : "bg-stone-50"} rounded-lg py-1.5`}>
+            <div className={`text-lg font-bold ${overdue.length ? "text-red-700" : "text-stone-500"}`}>{overdue.length}</div>
+            <div className={`text-[10px] ${overdue.length ? "text-red-600" : "text-stone-500"}`}>逾期</div>
+          </div>
+        </div>
+
+        {meeting.discussion && (
+          <div className="text-sm text-stone-600 mb-2">
+            <p className={expanded ? "" : "line-clamp-2"}>{meeting.discussion}</p>
+          </div>
+        )}
+
+        <button onClick={() => setExpanded(!expanded)} className="text-xs text-[#B8860B] hover:text-[#8B1A1A] flex items-center gap-1">
+          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {expanded ? "收合" : "展開詳細"}
+        </button>
+
+        {expanded && (
+          <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+            <div>
+              <div className="text-xs font-semibold text-stone-700 mb-1.5">出席 ({meeting.attendees.length})</div>
+              <div className="flex flex-wrap gap-1">
+                {meeting.attendees.map(id => <span key={id} className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded">{getMember(id)?.name || id}</span>)}
+              </div>
+            </div>
+            {meeting.absentees.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5">缺席 ({meeting.absentees.length})</div>
+                <div className="flex flex-wrap gap-1">
+                  {meeting.absentees.map(id => <span key={id} className="text-xs px-2 py-0.5 bg-stone-100 text-stone-600 rounded">{getMember(id)?.name || id}</span>)}
+                </div>
+              </div>
+            )}
+            {meeting.actionItems.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5">行動項目</div>
+                <div className="space-y-1">
+                  {meeting.actionItems.map(a => {
+                    const over = isOverdue(a);
+                    return (
+                      <div key={a.id} className="flex items-start gap-2 text-sm">
+                        <button onClick={() => onToggleAction(meeting.id, a.id)} className="mt-0.5">
+                          {a.status === "done" ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-stone-300 hover:text-stone-500" />}
+                        </button>
+                        <div className="flex-1">
+                          <span className={a.status === "done" ? "line-through text-stone-400" : ""}>{a.title}</span>
+                          <div className="flex items-center gap-2 text-xs mt-0.5">
+                            {a.assignee && <span className="text-stone-500">👤 {getMember(a.assignee)?.name || "—"}</span>}
+                            {a.dueDate && <span className={over ? "text-red-600 font-semibold" : "text-stone-500"}>📅 {fmtDate(a.dueDate)}{over && " 逾期"}</span>}
+                            {a.notes && <span className="text-stone-400 italic">💬 {a.notes}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ 組別管理 ============
+function GroupsView({ groups, setGroups, members, meetings }) {
+  const [editing, setEditing] = useState(null);
+  const blank = () => ({ id: uid("g"), name: "", color: "#B8860B", leaderId: "", memberIds: [] });
+
+  const save = (g) => {
+    if (!g.name.trim()) return alert("請輸入小組名稱");
+    setGroups(groups.some(x => x.id === g.id) ? groups.map(x => x.id === g.id ? g : x) : [...groups, g]);
+    setEditing(null);
+  };
+  const remove = (id) => {
+    if (meetings.some(m => m.groupId === id)) return alert("此小組已有會議記錄，無法刪除");
+    if (!confirm("確定刪除此小組？")) return;
+    setGroups(groups.filter(g => g.id !== id));
+    setEditing(null);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-stone-800">KPI 小組管理</h2>
+        <Btn variant="primary" onClick={() => setEditing(blank())}><Plus className="w-4 h-4" />新增小組</Btn>
+      </div>
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-800 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <div>
+          <b>KPI 小組</b>為分會內督促 KPI 績效的聚會分組，與<b>產業服務鏈</b>是不同維度的分組，兩者不必然相同。
+          小組可隨季度重組，重組時建議先保留既有小組的歷史記錄，再新增下一季小組。
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {groups.map(g => {
+          const mCount = meetings.filter(m => m.groupId === g.id).length;
+          const leader = members.find(x => x.id === g.leaderId);
+          return (
+            <div key={g.id} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+              <div className="h-1.5" style={{ backgroundColor: g.color }} />
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-stone-800">{g.name}</h3>
+                  <button onClick={() => setEditing(g)} className="text-stone-400 hover:text-[#8B1A1A] p-1">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {leader && (
+                  <div className="flex items-center gap-1 text-xs text-[#B8860B] font-medium mb-1.5">
+                    <UserCheck className="w-3.5 h-3.5" />組長：{leader.name}
+                  </div>
+                )}
+                <div className="text-xs text-stone-500 mb-2">{g.memberIds.length} 位成員 · {mCount} 次組聚</div>
+                <div className="flex flex-wrap gap-1">
+                  {g.memberIds.slice(0, 6).map(id => {
+                    const m = members.find(x => x.id === id);
+                    return m ? <span key={id} className={`text-xs px-2 py-0.5 rounded ${id === g.leaderId ? "bg-amber-100 text-amber-800 font-medium" : "bg-stone-100 text-stone-600"}`}>{m.name}</span> : null;
+                  })}
+                  {g.memberIds.length > 6 && <span className="text-xs text-stone-400">+{g.memberIds.length - 6}</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.name ? "編輯小組" : "新增小組"} maxWidth="max-w-lg">
+        {editing && (
+          <div>
+            <Field label="小組名稱" required>
+              <input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })}
+                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" placeholder="例：KPI 第一組、2026Q2-A 組..." />
+            </Field>
+            <Field label="識別色">
+              <div className="flex gap-2 flex-wrap">
+                {["#B8860B", "#8B1A1A", "#0369a1", "#059669", "#7c3aed", "#db2777", "#c2410c", "#475569"].map(c => (
+                  <button key={c} type="button" onClick={() => setEditing({ ...editing, color: c })}
+                    className={`w-8 h-8 rounded-full border-2 ${editing.color === c ? "border-stone-800 scale-110" : "border-stone-200"} transition`}
+                    style={{ backgroundColor: c }} />
+                ))}
+              </div>
+            </Field>
+            <Field label={`成員（${editing.memberIds.length} 人）`}>
+              <MemberMultiSelect members={members} selectedIds={editing.memberIds} onChange={v => setEditing({ ...editing, memberIds: v })} />
+            </Field>
+            <Field label="小組長" hint="小組長會在新增會議時自動預填為記錄人">
+              <MemberSelect
+                members={members.filter(m => editing.memberIds.includes(m.id))}
+                value={editing.leaderId || ""}
+                onChange={v => setEditing({ ...editing, leaderId: v })}
+                placeholder="（未指定）" />
+            </Field>
+            <div className="flex items-center justify-between pt-3 border-t border-stone-200">
+              <div>
+                {groups.some(g => g.id === editing.id) && (
+                  <Btn variant="danger" size="sm" onClick={() => remove(editing.id)}><Trash2 className="w-3.5 h-3.5" />刪除</Btn>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Btn variant="outline" onClick={() => setEditing(null)}>取消</Btn>
+                <Btn variant="primary" onClick={() => save(editing)}><Save className="w-4 h-4" />儲存</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ============ 成員管理（暫用，整合 Speaker Tracker 時替換為共用清單） ============
+// MembersView removed — 會員管理由 Speaker Tracker 主檔負責
+
+// ============ 導生計畫：UI 元件 ============
+function ProgressDonut({ pct, size = 48, stroke = 5, color = "#B8860B" }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e7e5e4" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" className="transition-all" />
+    </svg>
+  );
+}
+
+function StatPill({ label, done, total, color }) {
+  const pct = total ? Math.round(done / total * 100) : 0;
+  return (
+    <div className="flex-1 min-w-0 bg-stone-50 rounded-lg px-2 py-1.5">
+      <div className="text-[10px] text-stone-500">{label}</div>
+      <div className="text-sm font-bold" style={{ color: color || "#292524" }}>
+        {done}<span className="text-xs font-normal text-stone-400">/{total}</span>
+      </div>
+      <div className="h-1 bg-stone-200 rounded overflow-hidden mt-1">
+        <div className="h-full rounded transition-all" style={{ width: `${pct}%`, backgroundColor: color || "#B8860B" }} />
+      </div>
+    </div>
+  );
+}
+
+function MenteeCard({ mentee, members, onOpen }) {
+  const getM = (id) => members.find(m => m.id === id);
+  const menteeMember = getM(mentee.memberId);
+  const primary = getM(mentee.mentorPrimaryId);
+  const secondary = getM(mentee.mentorSecondaryId);
+  const s = getMenteeStats(mentee);
+  const color = s.isGraduated ? "#059669" : "#B8860B";
+
+  return (
+    <button onClick={() => onOpen(mentee.id)}
+      className="w-full text-left bg-white border border-stone-200 rounded-xl overflow-hidden hover:shadow-md transition">
+      <div className="h-1" style={{ backgroundColor: color }} />
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="relative flex-shrink-0">
+            <ProgressDonut pct={s.overallPct} color={color} />
+            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color }}>
+              {s.overallPct}%
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+              <h3 className="font-semibold text-stone-800 text-base">{menteeMember?.name || "?"}</h3>
+              {s.isGraduated && <Tag color="#059669">🎓 已畢業</Tag>}
+            </div>
+            <div className="text-xs text-stone-500 truncate">{mentee.representativeIndustry}</div>
+            <div className="text-xs text-stone-400 mt-0.5">
+              宣誓 {fmtDate(mentee.oathDate)} · {primary?.name || "—"} / {secondary?.name || "—"}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <StatPill label="護照" done={s.passportDone} total={s.passportTotal} color="#B8860B" />
+          <StatPill label="培訓" done={s.trainingDone} total={s.trainingTotal} color="#0369a1" />
+          <StatPill label="6:15" done={Math.min(s.earlyAttend, s.earlyAttendTotal)} total={s.earlyAttendTotal} color="#7c3aed" />
+          <StatPill label="一對一" done={s.oneOnOneDone} total={s.oneOnOneTotal} color="#db2777" />
+          <StatPill label="來賓" done={s.guestCount} total={Math.max(s.guestCount, 2)} color="#059669" />
+          <StatPill label="咖啡" done={s.coffeeCount} total={Math.max(s.coffeeCount, 2)} color="#c2410c" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function OneOnOneMatrix({ mentee, members, currentUserId, onToggle, readOnly }) {
+  const targets = getMenteeAllTargets(mentee);
+  const getM = (id) => members.find(m => m.id === id);
+  const grouped = [
+    { label: "核心團隊", items: targets.filter(t => t.group === "core") },
+    { label: "導師團隊", items: targets.filter(t => t.group === "mentor") },
+  ];
+  return (
+    <div className="space-y-4">
+      {grouped.map(sec => (
+        <div key={sec.label}>
+          <div className="text-xs font-semibold text-stone-500 mb-1.5 px-1">{sec.label}（{sec.items.length} 人）</div>
+          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+            {sec.items.length === 0 && <div className="text-sm text-stone-400 italic text-center py-3">尚未設定</div>}
+            {sec.items.map((tgt, i) => {
+              const m = getM(tgt.memberId);
+              const rec = mentee.oneOnOnes[tgt.memberId] || {};
+              const canCheck = !readOnly && canCheckOneOnOne(mentee, currentUserId, tgt.memberId);
+              const isMe = currentUserId === tgt.memberId;
+              return (
+                <div key={tgt.memberId + i} className={`px-3 py-2 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
+                  <div className="flex items-center gap-1 mb-1.5">
+                    <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">{tgt.role}</span>
+                    <span className="text-sm font-medium text-stone-800">{m?.name || tgt.memberId}</span>
+                    {isMe && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">我</span>}
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {ONE_ON_ONE_TYPES.map(t => {
+                      const cell = rec[t.key] || { done: false };
+                      const byM = getM(cell.doneBy);
+                      return (
+                        <button key={t.key} type="button"
+                          disabled={!canCheck}
+                          onClick={() => onToggle(mentee.id, tgt.memberId, t.key)}
+                          title={cell.done && byM ? `${byM.name} 簽 ${cell.doneAt ? fmtDate(cell.doneAt) : ""}` : (canCheck ? "點擊打勾" : "無權限")}
+                          className={`py-1.5 rounded-md border text-[10px] font-medium transition flex flex-col items-center gap-0.5
+                            ${cell.done ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-white border-stone-200 text-stone-400"}
+                            ${canCheck ? "hover:border-emerald-400" : "opacity-70 cursor-not-allowed"}`}>
+                          {cell.done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
+                          <span className="leading-none">{t.short}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PassportSection({ mentee, onUpdate, readOnly }) {
+  const update = (idx, date) => {
+    const np = [...mentee.passport];
+    np[idx] = { ...np[idx], completedDate: date || null };
+    onUpdate({ ...mentee, passport: np });
+  };
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+      {mentee.passport.map((p, i) => {
+        const w = W_MILESTONES.find(w => w.key === p.key);
+        return (
+          <div key={p.key} className={`flex items-center gap-2 px-3 py-2 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
+            <span className={`w-9 text-xs font-bold flex items-center justify-center h-6 rounded ${p.completedDate ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-400"}`}>{p.key}</span>
+            <div className="flex-1 text-sm text-stone-800 min-w-0 truncate">{w?.title}</div>
+            <input type="date" value={p.completedDate || ""} disabled={readOnly}
+              onChange={e => update(i, e.target.value)}
+              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-white disabled:bg-stone-50 disabled:text-stone-400" />
+            {p.completedDate ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <Circle className="w-4 h-4 text-stone-200 flex-shrink-0" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrainingSection({ mentee, onUpdate, readOnly }) {
+  const update = (idx, key, val) => {
+    const nt = [...mentee.trainings];
+    nt[idx] = { ...nt[idx], [key]: val || null };
+    onUpdate({ ...mentee, trainings: nt });
+  };
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+      {mentee.trainings.map((t, i) => {
+        const tp = TRAININGS.find(x => x.id === t.id);
+        return (
+          <div key={t.id} className={`px-3 py-2 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">{tp?.label}</span>
+              <span className="text-sm font-medium text-stone-800 flex-1">{tp?.title}</span>
+              {t.completedDate && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <div className="text-stone-500 mb-0.5">預定</div>
+                <input type="date" value={t.scheduledDate || ""} disabled={readOnly}
+                  onChange={e => update(i, "scheduledDate", e.target.value)}
+                  className="w-full border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
+              </div>
+              <div>
+                <div className="text-stone-500 mb-0.5">完成</div>
+                <input type="date" value={t.completedDate || ""} disabled={readOnly}
+                  onChange={e => update(i, "completedDate", e.target.value)}
+                  className="w-full border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GuestSection({ mentee, onUpdate, readOnly, kind = "guests" }) {
+  const list = mentee[kind];
+  const setList = (nl) => onUpdate({ ...mentee, [kind]: nl });
+  const add = () => setList([...list, { id: uid("g"), date: new Date().toISOString().slice(0, 10), guestName: "", industry: "" }]);
+  const upd = (idx, k, v) => { const nl = [...list]; nl[idx] = { ...nl[idx], [k]: v }; setList(nl); };
+  const rm = (idx) => setList(list.filter((_, i) => i !== idx));
+  return (
+    <div>
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+        {list.length === 0 && <div className="text-sm text-stone-400 italic text-center py-6">尚無紀錄</div>}
+        {list.map((g, i) => (
+          <div key={g.id} className={`grid grid-cols-12 items-center px-3 py-2 gap-1 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
+            <input type="date" value={g.date} disabled={readOnly} onChange={e => upd(i, "date", e.target.value)}
+              className="col-span-4 text-xs border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
+            <input value={g.guestName} disabled={readOnly} onChange={e => upd(i, "guestName", e.target.value)}
+              placeholder="姓名" className="col-span-3 text-sm border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
+            <input value={g.industry} disabled={readOnly} onChange={e => upd(i, "industry", e.target.value)}
+              placeholder="行業" className="col-span-4 text-sm border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
+            {!readOnly && (
+              <button onClick={() => rm(i)} className="col-span-1 text-stone-400 hover:text-red-500 flex justify-center">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {!readOnly && <div className="mt-2"><Btn variant="outline" size="sm" onClick={add}><Plus className="w-3.5 h-3.5" />新增</Btn></div>}
+    </div>
+  );
+}
+
+function AttendanceSection({ mentee, onUpdate, readOnly }) {
+  const list = mentee.earlyAttendances;
+  const addToday = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (list.includes(today)) return alert("今日已記錄");
+    onUpdate({ ...mentee, earlyAttendances: [...list, today].sort() });
+  };
+  const addCustom = () => {
+    const d = prompt("輸入日期（YYYY-MM-DD）", new Date().toISOString().slice(0, 10));
+    if (!d || list.includes(d)) return;
+    onUpdate({ ...mentee, earlyAttendances: [...list, d].sort() });
+  };
+  const rm = (d) => onUpdate({ ...mentee, earlyAttendances: list.filter(x => x !== d) });
+  const done = list.length >= GRAD_REQS.earlyAttend;
+  return (
+    <div>
+      <div className="text-xs text-stone-500 mb-2 flex items-center gap-2">
+        累計 {list.length} / {GRAD_REQS.earlyAttend} 次（例會 6:15 前到場達標）
+        {done && <Tag color="#059669">✓ 已達標</Tag>}
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+        {list.map(d => (
+          <div key={d} className="inline-flex items-center bg-purple-50 text-purple-700 rounded-md px-2 py-1 text-xs">
+            {fmtDate(d)}
+            {!readOnly && <button onClick={() => rm(d)} className="ml-1 text-purple-400 hover:text-red-500">×</button>}
+          </div>
+        ))}
+        {list.length === 0 && <span className="text-sm text-stone-400 italic">尚無紀錄</span>}
+      </div>
+      {!readOnly && (
+        <div className="flex gap-2">
+          <Btn variant="outline" size="sm" onClick={addToday}><Plus className="w-3.5 h-3.5" />記錄今日</Btn>
+          <Btn variant="ghost" size="sm" onClick={addCustom}>補登其他日期</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenteeForm({ mentee, members, mentees, onSave, onCancel, onDelete }) {
+  const [form, setForm] = useState(() => {
+    if (mentee) return mentee;
+    const latest = mentees[0];
+    return {
+      id: uid("mte"),
+      memberId: "", representativeIndustry: "",
+      oathDate: new Date().toISOString().slice(0, 10),
+      graduationDate: null, graduatedTeam: "",
+      mentorPrimaryId: "", mentorSecondaryId: "",
+      coreTeam: latest ? latest.coreTeam.map(c => ({ ...c })) : CORE_ROLES.map(r => ({ role: r, memberId: "" })),
+      mentorTeam: latest ? latest.mentorTeam.map(m => ({ ...m })) : [],
+      oneOnOnes: {},
+      passport: W_MILESTONES.map(w => ({ key: w.key, completedDate: null })),
+      trainings: TRAININGS.map(t => ({ id: t.id, scheduledDate: null, completedDate: null })),
+      guests: [], coffeeMeetings: [], earlyAttendances: [], supplementReports: [],
+      createdAt: new Date().toISOString(),
+    };
+  });
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const updCore = (idx, memberId) => {
+    const nc = [...form.coreTeam]; nc[idx] = { ...nc[idx], memberId }; set("coreTeam", nc);
+  };
+  const updMentorTeam = (list) => {
+    set("mentorTeam", list.map(id => form.mentorTeam.find(x => x.memberId === id) || { memberId: id, role: "導師" }));
+  };
+  const setMentorRole = (id, role) =>
+    set("mentorTeam", form.mentorTeam.map(m => m.memberId === id ? { ...m, role } : m));
+
+  const submit = () => {
+    if (!form.memberId) return alert("請選擇新生");
+    if (!form.mentorPrimaryId || !form.mentorSecondaryId) return alert("請選擇正副導師");
+    onSave({ ...form, updatedAt: new Date().toISOString() });
+  };
+  const mentorOptions = members.filter(m => m.id !== form.memberId);
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="新生" required>
+          <MemberSelect members={members} value={form.memberId} onChange={v => set("memberId", v)} placeholder="選擇會員..." />
+        </Field>
+        <Field label="代表專業">
+          <input value={form.representativeIndustry} onChange={e => set("representativeIndustry", e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" placeholder="例：短影音行銷" />
+        </Field>
+        <Field label="宣誓日" required>
+          <input type="date" value={form.oathDate} onChange={e => set("oathDate", e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </Field>
+        <Field label="畢業日" hint="結業後填寫">
+          <input type="date" value={form.graduationDate || ""} onChange={e => set("graduationDate", e.target.value || null)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="正導師" required>
+          <MemberSelect members={mentorOptions} value={form.mentorPrimaryId} onChange={v => set("mentorPrimaryId", v)} />
+        </Field>
+        <Field label="副導師" required>
+          <MemberSelect members={mentorOptions} value={form.mentorSecondaryId} onChange={v => set("mentorSecondaryId", v)} />
+        </Field>
+      </div>
+
+      <Field label="核心團隊快照（宣誓當下）" hint="名單建立後釘死，不隨換屆變動">
+        <div className="grid grid-cols-2 gap-2">
+          {form.coreTeam.map((c, i) => (
+            <div key={c.role} className="flex items-center gap-2">
+              <span className="text-xs text-stone-500 w-10 flex-shrink-0">{c.role}</span>
+              <div className="flex-1"><MemberSelect members={members} value={c.memberId} onChange={v => updCore(i, v)} placeholder="—" /></div>
+            </div>
+          ))}
+        </div>
+      </Field>
+
+      <Field label={`導師團隊快照（${form.mentorTeam.length} 人）`} hint="預設為導師，可個別調整為副導師">
+        <MemberMultiSelect members={mentorOptions} selectedIds={form.mentorTeam.map(m => m.memberId)} onChange={updMentorTeam} />
+        {form.mentorTeam.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {form.mentorTeam.map(m => {
+              const mem = members.find(x => x.id === m.memberId);
+              return (
+                <div key={m.memberId} className="inline-flex items-center gap-1 bg-stone-100 rounded-md px-2 py-1 text-xs">
+                  <span>{mem?.name}</span>
+                  <select value={m.role} onChange={e => setMentorRole(m.memberId, e.target.value)}
+                    className="bg-transparent text-xs border-l border-stone-300 pl-1">
+                    <option value="導師">導師</option>
+                    <option value="副導師">副導師</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Field>
+
+      <div className="flex items-center justify-between pt-3 border-t border-stone-200">
+        <div>
+          {mentees.some(x => x.id === form.id) && onDelete && (
+            <Btn variant="danger" size="sm" onClick={() => { if (confirm("確定刪除此新生紀錄？所有資料將遺失")) onDelete(form.id); }}>
+              <Trash2 className="w-3.5 h-3.5" />刪除
+            </Btn>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="outline" onClick={onCancel}>取消</Btn>
+          <Btn variant="primary" onClick={submit}><Save className="w-4 h-4" />儲存</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenteeDetail({ menteeId, mentees, members, currentUserId, onUpdate, onBack, onEdit }) {
+  const mentee = mentees.find(m => m.id === menteeId);
+  const [sectionOpen, setSectionOpen] = useState({
+    oneOnOne: true, passport: true, training: true,
+    attendance: false, guests: false, coffee: false,
+  });
+  if (!mentee) return null;
+
+  const getM = (id) => members.find(m => m.id === id);
+  const canEdit = canEditMentee(mentee, currentUserId);
+  const readOnly = !canEdit;
+  const s = getMenteeStats(mentee);
+  const primary = getM(mentee.mentorPrimaryId);
+  const secondary = getM(mentee.mentorSecondaryId);
+  const menteeMember = getM(mentee.memberId);
+  const toggleSec = (k) => setSectionOpen(p => ({ ...p, [k]: !p[k] }));
+
+  const toggleOneOnOne = (mId, targetId, typeKey) => {
+    const cur = mentee.oneOnOnes[targetId]?.[typeKey];
+    const newVal = cur?.done ? { done: false }
+      : { done: true, doneBy: currentUserId, doneAt: new Date().toISOString() };
+    const newOnes = {
+      ...mentee.oneOnOnes,
+      [targetId]: { ...(mentee.oneOnOnes[targetId] || {}), [typeKey]: newVal },
+    };
+    onUpdate({ ...mentee, oneOnOnes: newOnes });
+  };
+
+  const markGraduated = () => {
+    if (mentee.graduationDate) {
+      if (!confirm("取消畢業狀態？")) return;
+      onUpdate({ ...mentee, graduationDate: null, graduatedTeam: "" });
+    } else {
+      const team = prompt("畢業後加入的領導團隊？（選填）", "導師團隊") ?? "";
+      onUpdate({ ...mentee, graduationDate: new Date().toISOString().slice(0, 10), graduatedTeam: team });
+    }
+  };
+
+  const Section = ({ k, title, icon, right, children }) => (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+      <button onClick={() => toggleSec(k)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-stone-50">
+        <div className="flex items-center gap-2">
+          {icon}<span className="font-semibold text-stone-800">{title}</span>{right}
+        </div>
+        {sectionOpen[k] ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+      </button>
+      {sectionOpen[k] && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+
+  const mainColor = mentee.graduationDate ? "#059669" : "#B8860B";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Btn variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="w-4 h-4" />返回</Btn>
+        <h2 className="text-lg font-semibold text-stone-800 flex-1 truncate">
+          {menteeMember?.name} · {mentee.representativeIndustry}
+        </h2>
+        {canEdit ? (
+          <>
+            <Btn variant="outline" size="sm" onClick={() => onEdit(mentee.id)}><Edit2 className="w-3.5 h-3.5" />編輯</Btn>
+            <Btn variant={mentee.graduationDate ? "outline" : "success"} size="sm" onClick={markGraduated}>
+              <Award className="w-3.5 h-3.5" />{mentee.graduationDate ? "取消畢業" : "標記畢業"}
+            </Btn>
+          </>
+        ) : <Tag color="#6b7280">唯讀</Tag>}
+      </div>
+
+      <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="relative flex-shrink-0">
+            <ProgressDonut pct={s.overallPct} size={64} stroke={6} color={mainColor} />
+            <div className="absolute inset-0 flex items-center justify-center text-base font-bold" style={{ color: mainColor }}>
+              {s.overallPct}%
+            </div>
+          </div>
+          <div className="flex-1 text-sm min-w-0">
+            <div className="grid grid-cols-2 gap-y-1 gap-x-2">
+              <div className="truncate"><span className="text-stone-500">宣誓：</span>{fmtDate(mentee.oathDate)}</div>
+              {mentee.graduationDate && <div className="truncate"><span className="text-stone-500">結業：</span>{fmtDate(mentee.graduationDate)}</div>}
+              <div className="truncate"><span className="text-stone-500">正導師：</span>{primary?.name || "—"}</div>
+              <div className="truncate"><span className="text-stone-500">副導師：</span>{secondary?.name || "—"}</div>
+              {mentee.graduatedTeam && <div className="col-span-2 truncate"><span className="text-stone-500">畢業加入：</span>{mentee.graduatedTeam}</div>}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <StatPill label="護照" done={s.passportDone} total={s.passportTotal} color="#B8860B" />
+          <StatPill label="培訓" done={s.trainingDone} total={s.trainingTotal} color="#0369a1" />
+          <StatPill label="6:15" done={Math.min(s.earlyAttend, s.earlyAttendTotal)} total={s.earlyAttendTotal} color="#7c3aed" />
+          <StatPill label="一對一" done={s.oneOnOneDone} total={s.oneOnOneTotal} color="#db2777" />
+          <StatPill label="來賓" done={s.guestCount} total={Math.max(s.guestCount, 2)} color="#059669" />
+          <StatPill label="咖啡" done={s.coffeeCount} total={Math.max(s.coffeeCount, 2)} color="#c2410c" />
+        </div>
+      </div>
+
+      <Section k="oneOnOne" title="核心一對一矩陣" icon={<Users className="w-4 h-4 text-[#db2777]" />}
+        right={<Tag color="#db2777">{s.oneOnOneDone}/{s.oneOnOneTotal}</Tag>}>
+        <OneOnOneMatrix mentee={mentee} members={members} currentUserId={currentUserId} onToggle={toggleOneOnOne} readOnly={readOnly} />
+      </Section>
+
+      <Section k="passport" title="會員護照 W0–W8" icon={<Target className="w-4 h-4 text-[#B8860B]" />}
+        right={<Tag color="#B8860B">{s.passportDone}/{s.passportTotal}</Tag>}>
+        <PassportSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} />
+      </Section>
+
+      <Section k="training" title="培訓 5 必上" icon={<BookOpen className="w-4 h-4 text-[#0369a1]" />}
+        right={<Tag color="#0369a1">{s.trainingDone}/{s.trainingTotal}</Tag>}>
+        <TrainingSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} />
+      </Section>
+
+      <Section k="attendance" title="例會 6:15 出席" icon={<Clock className="w-4 h-4 text-[#7c3aed]" />}
+        right={<Tag color="#7c3aed">{Math.min(s.earlyAttend, s.earlyAttendTotal)}/{s.earlyAttendTotal}</Tag>}>
+        <AttendanceSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} />
+      </Section>
+
+      <Section k="guests" title="來賓邀約" icon={<UserCheck className="w-4 h-4 text-[#059669]" />}
+        right={<Tag color="#059669">{s.guestCount}</Tag>}>
+        <GuestSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} kind="guests" />
+      </Section>
+
+      <Section k="coffee" title="主邀咖啡會議" icon={<Coffee className="w-4 h-4 text-[#c2410c]" />}
+        right={<Tag color="#c2410c">{s.coffeeCount}</Tag>}>
+        <GuestSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} kind="coffeeMeetings" />
+      </Section>
+    </div>
+  );
+}
+
+function MentorshipView({ mentees, setMentees, members, currentUserId }) {
+  const [detailId, setDetailId] = useState(null);
+  const [editingId, setEditingId] = useState(null); // "new" | mentee.id | null
+  const [filter, setFilter] = useState({ mode: "all", search: "" });
+
+  const saveMentee = (m) => {
+    const updated = { ...m, updatedAt: new Date().toISOString() };
+    setMentees(mentees.some(x => x.id === m.id) ? mentees.map(x => x.id === m.id ? updated : x) : [updated, ...mentees]);
+    setEditingId(null);
+  };
+  const deleteMentee = (id) => { setMentees(mentees.filter(m => m.id !== id)); setEditingId(null); setDetailId(null); };
+
+  const filtered = useMemo(() => {
+    let list = mentees;
+    if (filter.mode === "inProgress") list = list.filter(m => !m.graduationDate);
+    if (filter.mode === "graduated") list = list.filter(m => m.graduationDate);
+    if (filter.mode === "mine") list = list.filter(m =>
+      m.mentorPrimaryId === currentUserId || m.mentorSecondaryId === currentUserId);
+    if (filter.search) {
+      const q = filter.search;
+      list = list.filter(m => {
+        const mem = members.find(x => x.id === m.memberId);
+        return (mem?.name || "").includes(q) || (m.representativeIndustry || "").includes(q);
+      });
+    }
+    return [...list].sort((a, b) => {
+      if (!!a.graduationDate !== !!b.graduationDate) return a.graduationDate ? 1 : -1;
+      return new Date(b.oathDate) - new Date(a.oathDate);
+    });
+  }, [mentees, filter, currentUserId, members]);
+
+  const editingMentee = editingId && editingId !== "new" ? mentees.find(m => m.id === editingId) : null;
+
+  const formModal = (
+    <Modal open={!!editingId} onClose={() => setEditingId(null)}
+      title={editingMentee ? "編輯新生基本資料" : "新增新生"} maxWidth="max-w-2xl">
+      {editingId && (
+        <MenteeForm mentee={editingMentee} members={members} mentees={mentees}
+          onSave={saveMentee} onCancel={() => setEditingId(null)} onDelete={deleteMentee} />
+      )}
+    </Modal>
+  );
+
+  if (detailId) {
+    return (
+      <div>
+        <MenteeDetail menteeId={detailId} mentees={mentees} members={members} currentUserId={currentUserId}
+          onUpdate={saveMentee} onBack={() => setDetailId(null)} onEdit={(id) => setEditingId(id)} />
+        {formModal}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <h2 className="text-lg font-semibold text-stone-800">導生計畫</h2>
+        <Btn variant="primary" onClick={() => setEditingId("new")}><Plus className="w-4 h-4" />新增新生</Btn>
+      </div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <select value={filter.mode} onChange={e => setFilter({ ...filter, mode: e.target.value })}
+          className="border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+          <option value="all">全部新生</option>
+          <option value="inProgress">進行中</option>
+          <option value="graduated">已畢業</option>
+          {currentUserId && <option value="mine">我是導師的</option>}
+        </select>
+        <input type="search" value={filter.search} onChange={e => setFilter({ ...filter, search: e.target.value })}
+          placeholder="搜尋姓名 / 行業..."
+          className="flex-1 min-w-[140px] border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white" />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="bg-white border border-dashed border-stone-300 rounded-xl py-12 text-center text-stone-400">
+          <GraduationCap className="w-12 h-12 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">{mentees.length ? "無符合條件的新生" : "尚未建立任何新生紀錄"}</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {filtered.map(m => <MenteeCard key={m.id} mentee={m} members={members} onOpen={setDetailId} />)}
+        </div>
+      )}
+      {formModal}
+    </div>
+  );
+}
+
+// ============ 儀表板 ============
+function Dashboard({ meetings, groups, members, mentees = [], currentUserId }) {
+  const stats = useMemo(() => {
+    const now = new Date();
+    const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
+
+    const recentMeetings = meetings.filter(m => new Date(m.date) >= monthAgo);
+    const allActions = meetings.flatMap(m => m.actionItems.map(a => ({ ...a, meetingId: m.id, groupId: m.groupId })));
+    const pending = allActions.filter(a => a.status === "pending");
+    const done = allActions.filter(a => a.status === "done");
+    const overdue = pending.filter(isOverdue);
+    const completionRate = allActions.length ? (done.length / allActions.length * 100).toFixed(0) : 0;
+
+    const byGroup = groups.map(g => {
+      const gMeetings = meetings.filter(m => m.groupId === g.id);
+      const totalAttend = gMeetings.reduce((s, m) => s + m.attendees.length, 0);
+      const totalSlots = gMeetings.length * g.memberIds.length;
+      const attendRate = totalSlots ? (totalAttend / totalSlots * 100).toFixed(0) : 0;
+
+      const gActions = gMeetings.flatMap(m => m.actionItems);
+      const gDone = gActions.filter(a => a.status === "done").length;
+      const gCompletion = gActions.length ? (gDone / gActions.length * 100).toFixed(0) : 0;
+
+      return {
+        group: g, meetings: gMeetings.length,
+        attendRate: Number(attendRate), completionRate: Number(gCompletion),
+        pendingCount: gActions.filter(a => a.status === "pending").length,
+        overdueCount: gActions.filter(a => isOverdue(a)).length,
+      };
+    });
+
+    // 個人
+    let personal = null;
+    if (currentUserId) {
+      const my = meetings.filter(m => m.attendees.includes(currentUserId) || m.absentees.includes(currentUserId));
+      const attended = my.filter(m => m.attendees.includes(currentUserId));
+      const myActions = allActions.filter(a => a.assignee === currentUserId);
+      personal = {
+        totalMeetings: my.length,
+        attended: attended.length,
+        attendRate: my.length ? (attended.length / my.length * 100).toFixed(0) : 0,
+        myActions, myPending: myActions.filter(a => a.status === "pending"),
+        myOverdue: myActions.filter(a => isOverdue(a)),
+        myDone: myActions.filter(a => a.status === "done"),
+      };
+    }
+
+    return { recentCount: recentMeetings.length, pending, done, overdue, allActions, completionRate, byGroup, personal };
+  }, [meetings, groups, currentUserId]);
+
+  const mentorStats = useMemo(() => {
+    const inProgress = mentees.filter(m => !m.graduationDate);
+    const graduated = mentees.filter(m => m.graduationDate);
+    const avgProgress = inProgress.length
+      ? Math.round(inProgress.reduce((s, m) => s + getMenteeStats(m).overallPct, 0) / inProgress.length)
+      : 0;
+    const myMentees = currentUserId
+      ? mentees.filter(m => m.mentorPrimaryId === currentUserId || m.mentorSecondaryId === currentUserId)
+      : [];
+    const needsOneOnOne = currentUserId
+      ? mentees.filter(m => !m.graduationDate).flatMap(m => {
+          const targets = getMenteeAllTargets(m);
+          if (!targets.find(t => t.memberId === currentUserId)) return [];
+          const rec = m.oneOnOnes[currentUserId] || {};
+          const incomplete = ONE_ON_ONE_TYPES.filter(t => !rec[t.key]?.done);
+          return incomplete.length ? [{ mentee: m, types: incomplete }] : [];
+        })
+      : [];
+    return {
+      total: mentees.length,
+      inProgress: inProgress.length,
+      graduated: graduated.length,
+      avgProgress, myMentees, needsOneOnOne,
+    };
+  }, [mentees, currentUserId]);
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-stone-800">統計儀表板</h2>
+
+      {/* 全分會 KPI */}
+      <div>
+        <h3 className="text-sm font-semibold text-stone-600 mb-2">全分會概況</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="bg-white border border-stone-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-stone-400 mb-1">
+              <span className="text-xs">近 30 天會議</span><Calendar className="w-4 h-4" />
+            </div>
+            <div className="text-2xl font-bold text-stone-800">{stats.recentCount}</div>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-stone-400 mb-1">
+              <span className="text-xs">待辦總數</span><Target className="w-4 h-4" />
+            </div>
+            <div className="text-2xl font-bold text-amber-700">{stats.pending.length}</div>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-stone-400 mb-1">
+              <span className="text-xs">已逾期</span><AlertCircle className="w-4 h-4" />
+            </div>
+            <div className={`text-2xl font-bold ${stats.overdue.length ? "text-red-600" : "text-stone-800"}`}>{stats.overdue.length}</div>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-stone-400 mb-1">
+              <span className="text-xs">完成率</span><TrendingUp className="w-4 h-4" />
+            </div>
+            <div className="text-2xl font-bold text-emerald-700">{stats.completionRate}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 個人視角 */}
+      {stats.personal && (
+        <div>
+          <h3 className="text-sm font-semibold text-stone-600 mb-2 flex items-center gap-1">
+            <User className="w-4 h-4" />我的進度（{members.find(m => m.id === currentUserId)?.name}）
+          </h3>
+          <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-4">
+            <div className="grid grid-cols-4 gap-3 mb-4 text-center">
+              <div>
+                <div className="text-xs text-stone-500">出席率</div>
+                <div className="text-xl font-bold text-emerald-700">{stats.personal.attendRate}%</div>
+                <div className="text-[10px] text-stone-400">{stats.personal.attended}/{stats.personal.totalMeetings}</div>
+              </div>
+              <div>
+                <div className="text-xs text-stone-500">待辦</div>
+                <div className="text-xl font-bold text-amber-700">{stats.personal.myPending.length}</div>
+              </div>
+              <div>
+                <div className="text-xs text-stone-500">逾期</div>
+                <div className={`text-xl font-bold ${stats.personal.myOverdue.length ? "text-red-600" : "text-stone-500"}`}>{stats.personal.myOverdue.length}</div>
+              </div>
+              <div>
+                <div className="text-xs text-stone-500">已完成</div>
+                <div className="text-xl font-bold text-emerald-700">{stats.personal.myDone.length}</div>
+              </div>
+            </div>
+            {stats.personal.myPending.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-600 mb-1.5">我的待辦清單</div>
+                <div className="space-y-1">
+                  {stats.personal.myPending.slice(0, 5).map(a => (
+                    <div key={a.id} className="flex items-center justify-between text-sm bg-white rounded-md px-2.5 py-1.5">
+                      <span className="flex-1 truncate">{a.title}</span>
+                      {a.dueDate && <span className={`text-xs ml-2 ${isOverdue(a) ? "text-red-600 font-semibold" : "text-stone-500"}`}>{fmtDate(a.dueDate)}</span>}
+                    </div>
+                  ))}
+                  {stats.personal.myPending.length > 5 && <div className="text-xs text-stone-400 text-center">還有 {stats.personal.myPending.length - 5} 項...</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 各組統計 */}
+      <div>
+        <h3 className="text-sm font-semibold text-stone-600 mb-2">各小組表現</h3>
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="grid grid-cols-12 text-xs font-semibold text-stone-500 px-4 py-2 bg-stone-50 border-b border-stone-200">
+            <div className="col-span-3">小組</div>
+            <div className="col-span-2 text-center">組聚</div>
+            <div className="col-span-3">出席率</div>
+            <div className="col-span-3">完成率</div>
+            <div className="col-span-1 text-right">逾期</div>
+          </div>
+          {stats.byGroup.map(s => (
+            <div key={s.group.id} className="grid grid-cols-12 items-center px-4 py-3 border-b border-stone-100 last:border-0 text-sm">
+              <div className="col-span-3 flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.group.color }} />
+                <span className="font-medium">{s.group.name}</span>
+              </div>
+              <div className="col-span-2 text-center">{s.meetings}</div>
+              <div className="col-span-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${s.attendRate}%` }} />
+                  </div>
+                  <span className="text-xs font-semibold text-stone-600 w-8 text-right">{s.attendRate}%</span>
+                </div>
+              </div>
+              <div className="col-span-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#B8860B] rounded-full transition-all" style={{ width: `${s.completionRate}%` }} />
+                  </div>
+                  <span className="text-xs font-semibold text-stone-600 w-8 text-right">{s.completionRate}%</span>
+                </div>
+              </div>
+              <div className={`col-span-1 text-right font-semibold ${s.overdueCount ? "text-red-600" : "text-stone-400"}`}>{s.overdueCount}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 導師視角：我是導師的新生 */}
+      {mentorStats.myMentees.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
+            <GraduationCap className="w-4 h-4 text-[#B8860B]" />
+            我是導師的新生（{mentorStats.myMentees.length}）
+          </h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {mentorStats.myMentees.map(m => {
+              const s = getMenteeStats(m);
+              const member = members.find(x => x.id === m.memberId);
+              const color = s.isGraduated ? "#059669" : "#B8860B";
+              return (
+                <div key={m.id} className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
+                  <div className="relative flex-shrink-0">
+                    <ProgressDonut pct={s.overallPct} size={44} stroke={4} color={color} />
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ color }}>{s.overallPct}%</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-stone-800 truncate">
+                      {member?.name} {s.isGraduated && <span className="text-xs text-emerald-600">🎓</span>}
+                    </div>
+                    <div className="text-[11px] text-stone-500 truncate">{m.representativeIndustry}</div>
+                    <div className="text-[11px] text-stone-400 mt-0.5">
+                      護照 {s.passportDone}/{s.passportTotal} · 培訓 {s.trainingDone}/{s.trainingTotal} · 6:15 {Math.min(s.earlyAttend, s.earlyAttendTotal)}/{s.earlyAttendTotal}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 我的一對一待跑 */}
+      {mentorStats.needsOneOnOne.length > 0 && (
+        <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-pink-800 mb-2 flex items-center gap-1.5">
+            <Users className="w-4 h-4" />
+            我的一對一待跑（{mentorStats.needsOneOnOne.reduce((s, x) => s + x.types.length, 0)} 項）
+          </h3>
+          <div className="space-y-2">
+            {mentorStats.needsOneOnOne.map(({ mentee, types }) => {
+              const member = members.find(x => x.id === mentee.memberId);
+              return (
+                <div key={mentee.id} className="bg-white rounded-lg px-3 py-2 flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-stone-800">{member?.name}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {types.map(t => (
+                        <span key={t.key} className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">{t.short}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 分會導生概況 */}
+      {mentees.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
+            <Award className="w-4 h-4 text-[#B8860B]" />
+            分會導生概況
+          </h3>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
+              <div className="text-xs text-stone-500">總新生</div>
+              <div className="text-xl font-bold text-stone-800 mt-1">{mentorStats.total}</div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
+              <div className="text-xs text-stone-500">進行中</div>
+              <div className="text-xl font-bold text-[#B8860B] mt-1">{mentorStats.inProgress}</div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
+              <div className="text-xs text-stone-500">已畢業</div>
+              <div className="text-xl font-bold text-emerald-600 mt-1">{mentorStats.graduated}</div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
+              <div className="text-xs text-stone-500">平均進度</div>
+              <div className="text-xl font-bold text-[#8B1A1A] mt-1">{mentorStats.avgProgress}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 主 App ============
+function App() {
+  const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState("meetings");
+  const [groups, setGroups] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [mentees, setMentees] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  const [editingMeeting, setEditingMeeting] = useState(null);
+  const [filter, setFilter] = useState({ groupId: "", onlyMine: false });
+
+  // 初始載入
+  useEffect(() => {
+    (async () => {
+      const [g, m, mainData, mte] = await Promise.all([
+        loadState(STORAGE_KEYS.GROUPS, null),
+        loadState(STORAGE_KEYS.MEETINGS, null),
+        loadState(STORAGE_KEYS.MEMBERS, null),  // bni_speaker_tracker_v5 主檔
+        loadState(STORAGE_KEYS.MENTEES, null),
+      ]);
+      const liveMembers = (mainData && Array.isArray(mainData.members)) ? mainData.members : [];
+      setGroups(g || SEED_GROUPS);
+      setMeetings(m || SEED_MEETINGS);
+      setMembers(liveMembers.length ? liveMembers : SEED_MEMBERS);
+      setMentees(mte || SEED_MENTEES);
+      const savedUid = (typeof localStorage !== 'undefined') ? localStorage.getItem('bni_operations_user') : null;
+      setCurrentUserId(savedUid || (liveMembers[0]?.id || null));
+      setLoaded(true);
+    })();
+  }, []);
+
+  // 自動儲存
+  useEffect(() => { if (loaded) saveState(STORAGE_KEYS.GROUPS, groups); }, [groups, loaded]);
+  useEffect(() => { if (loaded) saveState(STORAGE_KEYS.MEETINGS, meetings); }, [meetings, loaded]);
+  // members 為唯讀，由 Speaker Tracker 主檔管理
+  useEffect(() => { if (loaded) saveState(STORAGE_KEYS.MENTEES, mentees); }, [mentees, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      if (currentUserId) localStorage.setItem('bni_operations_user', currentUserId);
+      else localStorage.removeItem('bni_operations_user');
+    } catch {}
+  }, [currentUserId, loaded]);
+
+  // 會議 CRUD
+  const saveMeeting = (m) => {
+    setMeetings(meetings.some(x => x.id === m.id) ? meetings.map(x => x.id === m.id ? m : x) : [m, ...meetings]);
+    setEditingMeeting(null);
+  };
+  const deleteMeeting = (id) => { setMeetings(meetings.filter(m => m.id !== id)); setEditingMeeting(null); };
+  const toggleAction = (meetingId, actionId) => {
+    setMeetings(meetings.map(m => m.id !== meetingId ? m : {
+      ...m,
+      actionItems: m.actionItems.map(a => a.id !== actionId ? a : {
+        ...a,
+        status: a.status === "done" ? "pending" : "done",
+        completedAt: a.status === "done" ? null : new Date().toISOString(),
+      }),
+    }));
+  };
+
+  // 篩選會議
+  const filteredMeetings = useMemo(() => {
+    return meetings
+      .filter(m => !filter.groupId || m.groupId === filter.groupId)
+      .filter(m => !filter.onlyMine || !currentUserId ||
+        m.attendees.includes(currentUserId) || m.absentees.includes(currentUserId) ||
+        m.actionItems.some(a => a.assignee === currentUserId))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [meetings, filter, currentUserId]);
+
+  if (!loaded) return <div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-400">載入中...</div>;
+  const noMembers = members.length === 0 || (members.length === SEED_MEMBERS.length && members[0]?.id === SEED_MEMBERS[0]?.id);
+
+  return (
+    <div className="min-h-screen bg-stone-50">
+      {/* 頂部 */}
+      <header className="bg-gradient-to-r from-[#8B1A1A] to-[#6d1414] text-white sticky top-0 z-30 shadow">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-[#B8860B]" />
+              <div>
+                <h1 className="text-lg font-bold leading-tight">BNI 富鼎分會 · 運營台</h1>
+                <p className="text-[11px] text-white/70">組聚 · 導生 · 演講追蹤</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a href="index.html" className="text-xs text-white/80 hover:text-white border border-white/20 rounded-lg px-2 py-1 hidden sm:inline">← 主站</a>
+              <select value={currentUserId || ""} onChange={e => setCurrentUserId(e.target.value || null)}
+                className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-white">
+                <option value="">（切換身份）</option>
+                {members.map(m => <option key={m.id} value={m.id} className="text-stone-800">{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-2 flex overflow-x-auto">
+          {[
+            { k: "meetings", l: "組聚", i: <FileText className="w-4 h-4" /> },
+            { k: "mentorship", l: "導生", i: <GraduationCap className="w-4 h-4" /> },
+            { k: "dashboard", l: "儀表板", i: <BarChart3 className="w-4 h-4" /> },
+            { k: "groups", l: "小組", i: <Users className="w-4 h-4" /> },
+          ].map(t => (
+            <button key={t.k} onClick={() => setTab(t.k)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition whitespace-nowrap ${tab === t.k ? "border-[#B8860B] text-white font-semibold" : "border-transparent text-white/70 hover:text-white"}`}>
+              {t.i}{t.l}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-5">
+        {tab === "meetings" && (
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <select value={filter.groupId} onChange={e => setFilter({ ...filter, groupId: e.target.value })}
+                  className="border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+                  <option value="">全部小組</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+                {currentUserId && (
+                  <label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer">
+                    <input type="checkbox" checked={filter.onlyMine} onChange={e => setFilter({ ...filter, onlyMine: e.target.checked })} />
+                    只看我參與的
+                  </label>
+                )}
+              </div>
+              <Btn variant="primary" onClick={() => setEditingMeeting({})}><Plus className="w-4 h-4" />新增組聚</Btn>
+            </div>
+
+            {filteredMeetings.length === 0 ? (
+              <div className="bg-white border border-dashed border-stone-300 rounded-xl py-12 text-center text-stone-400">
+                <Calendar className="w-12 h-12 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">{meetings.length ? "無符合條件的組聚" : "尚未建立任何組聚記錄"}</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {filteredMeetings.map(m => (
+                  <MeetingCard key={m.id} meeting={m} group={groups.find(g => g.id === m.groupId)}
+                    members={members} onEdit={setEditingMeeting} onToggleAction={toggleAction} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "mentorship" && <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} />}
+        {tab === "dashboard" && <Dashboard meetings={meetings} groups={groups} members={members} mentees={mentees} currentUserId={currentUserId} />}
+        {tab === "groups" && <GroupsView groups={groups} setGroups={setGroups} members={members} meetings={meetings} />}
+      </main>
+
+      <Modal open={!!editingMeeting} onClose={() => setEditingMeeting(null)}
+        title={editingMeeting?.id ? "編輯會議記錄" : "新增會議記錄"} maxWidth="max-w-3xl">
+        {editingMeeting && (
+          <MeetingForm meeting={editingMeeting.id ? editingMeeting : null} groups={groups} members={members}
+            onSave={saveMeeting} onCancel={() => setEditingMeeting(null)} onDelete={deleteMeeting} />
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>

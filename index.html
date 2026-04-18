@@ -79,6 +79,7 @@ const Megaphone = (props) => React.createElement(IconWrap, { ...props, children:
 const MessageSquare = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' });
 const UserCheck = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' });
 const Filter = (props) => React.createElement(IconWrap, { ...props, children: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' });
+const GraduationCap = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>' });
 // ===== Storage (Railway Proxy 雲端同步) =====
 // 部署後在 index.html 裡設定 window.BNI_PROXY_URL
 const PROXY_URL = window.BNI_PROXY_URL || '';
@@ -476,6 +477,16 @@ function Header({ view, setView, adminAuth, setAdminAuth, chapterName }) {
             <Settings className="w-4 h-4" />
             <span className="hidden md:inline">後台</span>
           </button>
+          <a
+            href="operations.html"
+            className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 text-white hover:opacity-90"
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: '#8B1A1A' }}
+            title="開啟組聚與導生運營台"
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span className="hidden md:inline">運營台</span>
+            <span className="text-[10px] opacity-70">↗</span>
+          </a>
           {adminAuth && (
             <button
               onClick={() => setAdminAuth(false)}
