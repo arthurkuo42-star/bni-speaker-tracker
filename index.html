@@ -382,6 +382,9 @@ function App() {
       />
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+        {view === 'kpi' && (
+          <KpiDashboard />
+        )}
         {view === 'dashboard' && (
           <Dashboard data={data} />
         )}
@@ -423,41 +426,49 @@ function Header({ view, setView, adminAuth, setAdminAuth, chapterName }) {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between">
         <div>
           <div className="text-[10px] tracking-[0.3em] text-stone-500 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-            BNI · SPEAKER TRACKER
+            BNI · CHAPTER ASSISTANT
           </div>
           <h1 className="text-xl md:text-2xl font-bold" style={{ color: '#1A1414' }}>
-            {chapterName} <span className="text-stone-400 mx-1">·</span> <span style={{ color: '#A01E2E' }}>主題演講進度</span>
+            {chapterName} <span className="text-stone-400 mx-1">·</span> <span style={{ color: '#A01E2E' }}>分會助理</span>
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2 flex-wrap justify-end">
+          <button
+            onClick={() => { setView('kpi'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'kpi' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'kpi' ? '#2D5A27' : undefined }}
+          >
+            <Target className="w-4 h-4" />
+            <span className="hidden md:inline">KPI</span>
+          </button>
           <button
             onClick={() => { setView('dashboard'); }}
-            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'dashboard' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'dashboard' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
             style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
           >
             <Eye className="w-4 h-4" />
-            <span className="hidden md:inline">主題演講</span>
+            <span className="hidden md:inline">演講</span>
           </button>
           <button
             onClick={() => { setView('coffee'); }}
-            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'coffee' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'coffee' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
             style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'coffee' ? '#8B6F47' : undefined }}
           >
             <Coffee className="w-4 h-4" />
-            <span className="hidden md:inline">咖啡會議</span>
+            <span className="hidden md:inline">咖啡</span>
           </button>
           <button
             onClick={() => { setView('admin'); }}
-            className={`px-3 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'admin' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'admin' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
             style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'admin' ? '#A01E2E' : undefined }}
           >
             <Settings className="w-4 h-4" />
-            <span className="hidden md:inline">後台管理</span>
+            <span className="hidden md:inline">後台</span>
           </button>
           {adminAuth && (
             <button
               onClick={() => setAdminAuth(false)}
-              className="px-3 py-2 text-sm text-stone-500 hover:text-stone-800"
+              className="px-2 py-2 text-sm text-stone-500 hover:text-stone-800"
               title="登出後台"
             >
               <LogOut className="w-4 h-4" />
@@ -2081,6 +2092,273 @@ function CFField({ label, children }) {
     <div>
       <div className="text-xs text-stone-500 mb-1">{label}</div>
       {children}
+    </div>
+  );
+}
+
+// ============ KPI 紅綠燈 Dashboard ============
+const LIGHT_COLORS = {
+  green: { bg: '#EDF3E8', color: '#2D5A27', label: '綠燈', emoji: '🟢' },
+  yellow: { bg: '#FFF8E1', color: '#8B6F00', label: '黃燈', emoji: '🟡' },
+  red: { bg: '#FCEFE3', color: '#A01E2E', label: '紅燈', emoji: '🔴' },
+  grey: { bg: '#F0F0F0', color: '#666', label: '灰燈', emoji: '⚫' },
+};
+
+function getKpiLightKey(score) {
+  if (score >= 70) return 'green';
+  if (score >= 50) return 'yellow';
+  if (score >= 30) return 'red';
+  return 'grey';
+}
+
+function KpiDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [kpiData, setKpiData] = useState(null);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [expandedMember, setExpandedMember] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [viewMode, setViewMode] = useState('groups'); // 'groups' | 'all'
+
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+
+  useEffect(() => {
+    if (!proxyUrl) { setLoading(false); setError('KPI 功能僅在部署版本可用'); return; }
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/groups-overview');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        setKpiData(await res.json());
+      } catch (e) { setError('載入 KPI 資料失敗：' + e.message); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  // 彙總所有會員
+  const allMembers = useMemo(() => {
+    if (!kpiData || !kpiData.groups) return [];
+    const members = [];
+    const seen = new Set();
+    for (const [gName, g] of Object.entries(kpiData.groups)) {
+      for (const m of g.members) {
+        if (!seen.has(m.name)) {
+          seen.add(m.name);
+          members.push({ ...m, groupName: gName });
+        }
+      }
+    }
+    return members.sort((a, b) => b.totalScore - a.totalScore);
+  }, [kpiData]);
+
+  // 統計
+  const stats = useMemo(() => {
+    const s = { green: 0, yellow: 0, red: 0, grey: 0, total: 0 };
+    allMembers.forEach(m => {
+      s[getKpiLightKey(m.totalScore)]++;
+      s.total++;
+    });
+    return s;
+  }, [allMembers]);
+
+  // 搜尋過濾
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allMembers;
+    const q = search.toLowerCase();
+    return allMembers.filter(m => m.name.toLowerCase().includes(q));
+  }, [allMembers, search]);
+
+  if (loading) return (
+    <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>載入 KPI 資料中⋯</div>
+  );
+  if (error) return (
+    <div className="text-center py-20" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <AlertCircle className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+      <div className="text-stone-500">{error}</div>
+      {error.includes('HTTP') && <div className="text-xs text-stone-400 mt-2">請確認 KPI 系統是否有上傳月報資料</div>}
+    </div>
+  );
+
+  const toggleGroup = (name) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">KPI TRAFFIC LIGHT</div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          KPI <span style={{ color: '#2D5A27' }}>紅綠燈</span>
+        </h2>
+        {kpiData && kpiData.config && (
+          <div className="text-sm text-stone-500">
+            計算基準：{kpiData.totalWeeks - (kpiData.config.remainWeeks || 0)} 週已過 + {kpiData.config.remainWeeks || 0} 週剩餘
+          </div>
+        )}
+      </div>
+
+      {/* 統計卡 */}
+      <div className="grid grid-cols-4 gap-2 md:gap-3 mb-5">
+        {['green', 'yellow', 'red', 'grey'].map(key => (
+          <div key={key} className="rounded-lg p-3 text-center" style={{ background: LIGHT_COLORS[key].bg }}>
+            <div className="text-2xl md:text-3xl font-bold" style={{ color: LIGHT_COLORS[key].color }}>{stats[key]}</div>
+            <div className="text-xs text-stone-500">{LIGHT_COLORS[key].emoji} {LIGHT_COLORS[key].label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 搜尋 + 切換 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-3 mb-5 flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          placeholder="搜尋會員姓名⋯"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md flex-1 min-w-[150px]"
+        />
+        <div className="flex gap-1">
+          <button
+            onClick={() => setViewMode('groups')}
+            className={`px-3 py-1.5 text-xs rounded ${viewMode === 'groups' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'}`}
+          >按組別</button>
+          <button
+            onClick={() => setViewMode('all')}
+            className={`px-3 py-1.5 text-xs rounded ${viewMode === 'all' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'}`}
+          >全員排名</button>
+        </div>
+      </div>
+
+      {/* 搜尋結果 / 全員排名 */}
+      {(search.trim() || viewMode === 'all') && (
+        <div className="bg-white rounded-lg border border-stone-200 mb-5 overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100 text-sm font-semibold text-stone-700">
+            {search.trim() ? `搜尋結果（${filtered.length}）` : `全員排名（${allMembers.length}人）`}
+          </div>
+          <div className="divide-y divide-stone-100">
+            {(search.trim() ? filtered : allMembers).map(m => (
+              <KpiMemberRow key={m.name} member={m} expanded={expandedMember === m.name}
+                onToggle={() => setExpandedMember(expandedMember === m.name ? null : m.name)} />
+            ))}
+            {search.trim() && filtered.length === 0 && (
+              <div className="py-8 text-center text-stone-400 text-sm">找不到「{search}」</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 組別檢視 */}
+      {viewMode === 'groups' && !search.trim() && kpiData && kpiData.groups && (
+        <div className="space-y-3">
+          {Object.entries(kpiData.groups)
+            .sort((a, b) => b[1].avg - a[1].avg)
+            .map(([gName, group]) => {
+              const expanded = expandedGroups.has(gName);
+              const s = group.summary;
+              return (
+                <div key={gName} className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleGroup(gName)}
+                    className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-stone-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm font-bold" style={{ color: '#1A1414' }}>{gName}</div>
+                      <div className="text-xs text-stone-500">（{group.count}人）平均 {group.avg} 分</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 text-xs">
+                        {s.green > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>🟢{s.green}</span>}
+                        {s.yellow > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#FFF8E1', color: '#8B6F00' }}>🟡{s.yellow}</span>}
+                        {s.red > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#FCEFE3', color: '#A01E2E' }}>🔴{s.red}</span>}
+                        {s.grey > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#F0F0F0', color: '#666' }}>⚫{s.grey}</span>}
+                      </div>
+                      {expanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+                    </div>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-stone-100 divide-y divide-stone-50">
+                      {group.members.map(m => (
+                        <KpiMemberRow key={m.name} member={m} expanded={expandedMember === m.name}
+                          onToggle={() => setExpandedMember(expandedMember === m.name ? null : m.name)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiMemberRow({ member, expanded, onToggle }) {
+  const m = member;
+  const lk = getKpiLightKey(m.totalScore);
+  const lc = LIGHT_COLORS[lk];
+
+  const ScoreBar = ({ label, score, max }) => {
+    const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+    const barColor = score === max ? '#2D5A27' : score > 0 ? '#C9A55C' : '#E5E0D5';
+    return (
+      <div className="flex items-center gap-2 text-xs py-0.5">
+        <div className="w-12 text-stone-500 text-right">{label}</div>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+        </div>
+        <div className="w-12 text-stone-600 font-medium">{score}/{max}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <button onClick={onToggle} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-stone-50 transition-colors">
+        <div className="flex items-center gap-2.5">
+          <span className="text-lg">{lc.emoji}</span>
+          <span className="text-sm font-semibold" style={{ color: '#1A1414' }}>{m.name}</span>
+          {m.groupName && <span className="text-[10px] text-stone-400">{m.groupName}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold" style={{ color: lc.color }}>{m.totalScore}</span>
+          <span className="text-[10px] text-stone-400">/100</span>
+          {expanded ? <ChevronDown className="w-3.5 h-3.5 text-stone-400" /> : <ChevronRight className="w-3.5 h-3.5 text-stone-400" />}
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 pt-1">
+          <div className="bg-stone-50 rounded-lg p-3 mb-2">
+            <ScoreBar label="缺席" score={m.absenceScore} max={20} />
+            <ScoreBar label="引薦" score={m.referralScore} max={20} />
+            <ScoreBar label="來賓" score={m.visitorScore} max={15} />
+            <ScoreBar label="1-2-1" score={m.meetingScore} max={15} />
+            <ScoreBar label="教育" score={m.trainingScore} max={15} />
+            <ScoreBar label="交易" score={m.transactionScore} max={15} />
+          </div>
+          {m.raw && (
+            <div className="text-[10px] text-stone-400 grid grid-cols-3 gap-x-3 gap-y-0.5 mb-2">
+              <span>缺席 {m.raw.absences} 次</span>
+              <span>引薦 {(m.raw.internalRef||0)+(m.raw.externalRef||0)} 次</span>
+              <span>來賓 {m.raw.visitors} 位</span>
+              <span>1-2-1 {m.raw.oneToOne} 次</span>
+              <span>教育 {m.raw.training} 積分</span>
+              <span>交易 ${(m.raw.transactionValue||0).toLocaleString()}</span>
+            </div>
+          )}
+          {m.recommendations && m.recommendations.summary && (
+            <div className="text-xs p-2 rounded" style={{ background: lk === 'yellow' ? '#FFF8E1' : '#FCEFE3', color: lk === 'yellow' ? '#8B6F00' : '#A01E2E' }}>
+              {m.recommendations.summary}
+            </div>
+          )}
+          {!m.recommendations && m.totalScore >= 70 && (
+            <div className="text-xs p-2 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>
+              ✅ 已達綠燈標準！繼續保持💪
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
