@@ -2814,6 +2814,8 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
   const [pushing, setPushing] = useState('');
   const [result, setResult] = useState(null);
   const [bindings, setBindings] = useState(null);
+  const [allMemberNames, setAllMemberNames] = useState([]);
+  const [bindingsOpen, setBindingsOpen] = useState(false);
   const [speechWeeks, setSpeechWeeks] = useState(2);
   const [speechTarget, setSpeechTarget] = useState('both');
 
@@ -2823,7 +2825,13 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
       if (res.ok) setBindings(await res.json());
     } catch {}
   };
-  useEffect(() => { fetchBindings(); }, []);
+  const fetchMembers = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/members', { headers });
+      if (res.ok) { const data = await res.json(); setAllMemberNames((data.members || []).map(m => m.name).sort()); }
+    } catch {}
+  };
+  useEffect(() => { fetchBindings(); fetchMembers(); }, []);
 
   const pushAction = async (url, body, label) => {
     if (!confirm(`確定${label}？`)) return;
@@ -2833,9 +2841,9 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (res.ok) { setResult({ ok: true, ...data }); showToast(`✅ ${label}完成：發送 ${data.sent} 人`); }
+      if (res.ok) { setResult({ ok: true, ...data }); showToast(`✅ ${label}完成`); }
       else { setResult({ ok: false, error: data.error }); showToast(data.error || '推播失敗', 'error'); }
-    } catch (e) { setResult({ ok: false, error: e.message }); showToast('推播失敗：' + e.message, 'error'); }
+    } catch (e) { setResult({ ok: false, error: e.message }); showToast('推播失敗', 'error'); }
     finally { setPushing(''); }
   };
 
@@ -2843,45 +2851,65 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
     if (!confirm(`確定解除「${name}」的 LINE 綁定？`)) return;
     try {
       const res = await fetch(proxyUrl + '/api/bindings/' + encodeURIComponent(userId), { method: 'DELETE', headers });
-      if (res.ok) { showToast(`已解除「${name}」的綁定`); fetchBindings(); }
-      else showToast('解除失敗', 'error');
-    } catch (e) { showToast('解除失敗：' + e.message, 'error'); }
+      if (res.ok) { showToast(`已解除「${name}」`); fetchBindings(); }
+    } catch (e) { showToast('解除失敗', 'error'); }
   };
 
   const unbindAll = async () => {
-    if (!confirm('確定清除全部 LINE 綁定？所有會員都需要重新輸入「我是○○○」綁定')) return;
+    if (!confirm('確定清除全部 LINE 綁定？所有會員需重新綁定')) return;
     try {
       const res = await fetch(proxyUrl + '/api/bindings-all', { method: 'DELETE', headers });
       if (res.ok) { showToast('已清除全部綁定'); fetchBindings(); }
-      else showToast('清除失敗', 'error');
-    } catch (e) { showToast('清除失敗：' + e.message, 'error'); }
+    } catch (e) { showToast('清除失敗', 'error'); }
   };
 
   const bindingEntries = bindings ? Object.entries(bindings).sort((a, b) => a[1].localeCompare(b[1])) : [];
+  const boundNames = new Set(bindingEntries.map(([, name]) => name));
+  const unboundNames = allMemberNames.filter(n => !boundNames.has(n));
   const targetLabel = { speaker: '演講人', helper: '小幫手', both: '演講人 + 小幫手' };
 
   return (
     <div>
-      {/* LINE 綁定管理 */}
-      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-semibold">LINE 綁定管理（{bindingEntries.length} 人）</div>
-          {bindingEntries.length > 0 && (
-            <button onClick={unbindAll} className="text-xs text-red-500 hover:text-red-700">清除全部綁定</button>
-          )}
-        </div>
-        {bindingEntries.length === 0 ? (
-          <div className="text-sm text-stone-400 py-4 text-center">尚無會員綁定 LINE</div>
-        ) : (
-          <div className="space-y-1">
-            {bindingEntries.map(([uid, name]) => (
-              <div key={uid} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-stone-50 text-sm">
-                <span>{name}</span>
-                <button onClick={() => unbind(uid, name)} className="text-stone-400 hover:text-red-600" title="解除綁定">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+      {/* LINE 綁定管理（折疊） */}
+      <div className="bg-white rounded-lg border border-stone-200 mb-4 overflow-hidden">
+        <button onClick={() => setBindingsOpen(!bindingsOpen)}
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-stone-50">
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold">LINE 綁定管理</div>
+            <div className="text-xs text-stone-500">
+              已綁 <span className="font-bold" style={{ color: '#2D5A27' }}>{bindingEntries.length}</span>
+              {unboundNames.length > 0 && <> / 未綁 <span className="font-bold" style={{ color: '#A01E2E' }}>{unboundNames.length}</span></>}
+            </div>
+          </div>
+          {bindingsOpen ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+        </button>
+        {bindingsOpen && (
+          <div className="border-t border-stone-100 p-4">
+            {bindingEntries.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-stone-600">✅ 已綁定（{bindingEntries.length}人）</div>
+                  <button onClick={unbindAll} className="text-[10px] text-red-500 hover:text-red-700">清除全部</button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {bindingEntries.map(([uid, name]) => (
+                    <span key={uid} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-800 rounded">
+                      {name}
+                      <button onClick={() => unbind(uid, name)} className="text-green-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+            {unboundNames.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-600 mb-2">❌ 未綁定（{unboundNames.length}人）</div>
+                <div className="text-xs text-stone-500 p-2 bg-red-50 rounded border border-red-100">
+                  {unboundNames.join('、')}
+                </div>
+                <div className="text-[10px] text-stone-400 mt-1">請提醒以上會員在 LINE 輸入「我是○○○」完成綁定</div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2890,20 +2918,17 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
       <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
         <div className="text-sm font-semibold mb-3">KPI 推播</div>
         <div className="space-y-2">
-          <button onClick={() => pushAction('/api/push', { target: 'non-green' }, '推播非綠燈會員')}
-            disabled={!!pushing}
+          <button onClick={() => pushAction('/api/push', { target: 'non-green' }, '推播非綠燈會員')} disabled={!!pushing}
             className="w-full px-4 py-3 text-sm bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-left hover:bg-amber-100 disabled:opacity-50 flex items-center justify-between">
             <div><div className="font-semibold">🟡🔴 推播非綠燈會員</div><div className="text-xs mt-0.5">發送 KPI 成績和綠燈攻略</div></div>
             {pushing === '推播非綠燈會員' && <span className="text-xs">發送中⋯</span>}
           </button>
-          <button onClick={() => pushAction('/api/push', { target: 'all' }, '推播全員')}
-            disabled={!!pushing}
+          <button onClick={() => pushAction('/api/push', { target: 'all' }, '推播全員')} disabled={!!pushing}
             className="w-full px-4 py-3 text-sm bg-stone-50 text-stone-700 border border-stone-200 rounded-md text-left hover:bg-stone-100 disabled:opacity-50 flex items-center justify-between">
             <div><div className="font-semibold">📢 推播全員成績</div><div className="text-xs mt-0.5">發送給所有已綁定會員</div></div>
             {pushing === '推播全員' && <span className="text-xs">發送中⋯</span>}
           </button>
-          <button onClick={() => pushAction('/api/push-washout', { target: 'green-drop' }, '推播 Washout 警告')}
-            disabled={!!pushing}
+          <button onClick={() => pushAction('/api/push-washout', { target: 'green-drop' }, '推播 Washout 警告')} disabled={!!pushing}
             className="w-full px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 rounded-md text-left hover:bg-red-100 disabled:opacity-50 flex items-center justify-between">
             <div><div className="font-semibold">⚠️ 推播 Washout 警告</div><div className="text-xs mt-0.5">提醒可能掉燈的會員</div></div>
             {pushing === '推播 Washout 警告' && <span className="text-xs">發送中⋯</span>}
@@ -2912,17 +2937,15 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
       </div>
 
       {/* 演講進度推播 */}
-      <div className="bg-white rounded-lg border border-stone-200 p-4">
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
         <div className="text-sm font-semibold mb-3">演講進度推播</div>
         <div className="flex flex-wrap gap-2 mb-3">
           <div>
             <div className="text-xs text-stone-500 mb-1">推播範圍</div>
             <select value={speechWeeks} onChange={e => setSpeechWeeks(parseInt(e.target.value))}
               className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white">
-              <option value={1}>未來 1 週</option>
-              <option value={2}>未來 2 週</option>
-              <option value={4}>未來 4 週</option>
-              <option value={6}>未來 6 週</option>
+              <option value={1}>未來 1 週</option><option value={2}>未來 2 週</option>
+              <option value={4}>未來 4 週</option><option value={6}>未來 6 週</option>
             </select>
           </div>
           <div>
@@ -2930,27 +2953,33 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
             <select value={speechTarget} onChange={e => setSpeechTarget(e.target.value)}
               className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white">
               <option value="both">演講人 + 小幫手</option>
-              <option value="speaker">僅演講人</option>
-              <option value="helper">僅小幫手</option>
+              <option value="speaker">僅演講人</option><option value="helper">僅小幫手</option>
             </select>
           </div>
         </div>
-        <button
-          onClick={() => pushAction('/api/push-speech', { weeks: speechWeeks, target: speechTarget }, `推播演講進度（${targetLabel[speechTarget]}，${speechWeeks}週）`)}
+        <button onClick={() => pushAction('/api/push-speech', { weeks: speechWeeks, target: speechTarget }, `推播演講進度（${targetLabel[speechTarget]}，${speechWeeks}週）`)}
           disabled={!!pushing}
-          className="w-full px-4 py-3 text-sm border border-stone-200 rounded-md text-left hover:bg-stone-50 disabled:opacity-50 flex items-center justify-between"
+          className="w-full px-4 py-3 text-sm border rounded-md text-left hover:bg-stone-50 disabled:opacity-50 flex items-center justify-between"
           style={{ background: '#F0FFF0', color: '#2D5A27', borderColor: '#B8E6B8' }}>
-          <div>
-            <div className="font-semibold">🎤 推播演講準備進度</div>
-            <div className="text-xs mt-0.5">提醒{targetLabel[speechTarget]}注意未完成項目與咖啡會議進度</div>
-          </div>
+          <div><div className="font-semibold">🎤 推播演講準備進度</div><div className="text-xs mt-0.5">提醒{targetLabel[speechTarget]}注意未完成項目</div></div>
           {pushing.includes('演講進度') && <span className="text-xs">發送中⋯</span>}
+        </button>
+      </div>
+
+      {/* 今日咖啡會議推播 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-3">咖啡會議推播</div>
+        <button onClick={() => pushAction('/api/push-coffee-today', {}, '推播今日咖啡行程')} disabled={!!pushing}
+          className="w-full px-4 py-3 text-sm border rounded-md text-left hover:bg-stone-50 disabled:opacity-50 flex items-center justify-between"
+          style={{ background: '#FFF8F0', color: '#8B6F47', borderColor: '#E8D5B8' }}>
+          <div><div className="font-semibold">☕ 推播今日咖啡會議行程</div><div className="text-xs mt-0.5">通知全分會今天有哪些咖啡會議</div></div>
+          {pushing === '推播今日咖啡行程' && <span className="text-xs">發送中⋯</span>}
         </button>
       </div>
 
       {result && (
         <div className={`mt-3 p-3 rounded text-sm ${result.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-          {result.ok ? `✅ 成功發送 ${result.sent} 人${result.failed ? `，失敗 ${result.failed} 人` : ''}` : `❌ ${result.error}`}
+          {result.ok ? `✅ ${result.sent !== undefined ? '發送 ' + result.sent + ' 人' : ''}${result.coffeeCount ? '（' + result.coffeeCount + ' 場）' : ''}${result.failed ? '，失敗 ' + result.failed : ''}${result.message ? ' ' + result.message : ''}` : `❌ ${result.error}`}
         </div>
       )}
     </div>
