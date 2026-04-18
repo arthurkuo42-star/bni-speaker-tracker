@@ -120,12 +120,36 @@ const apiClient = {
 // ===== 運營台主體 =====
 // ============ 儲存層（artifact 用 window.storage；整合 Speaker Tracker 時替換為 proxy fetch） ============
 const STORAGE_KEYS = {
-  GROUPS: "bni_meeting_groups_v1",
+  GROUP_EXTRAS: "bni_group_extras_v1",      // 組長/顏色 metadata（小組本身來自主站 KPI）
   MEETINGS: "bni_group_meetings_v1",
-  MEMBERS: "bni_speaker_tracker_v5",   // 讀主檔的 members 欄位，不單獨寫
+  MEMBERS: "bni_speaker_tracker_v5",         // 讀主檔的 members 欄位，不單獨寫
   MENTEES: "bni_mentees_v1",
-  CURRENT_USER: null,                   // 身份用 localStorage 本地保存
+  CURRENT_USER: null,                        // 身份用 localStorage 本地保存
 };
+
+// ============ 小組顏色 palette ============
+const GROUP_COLORS = ["#B8860B", "#8B1A1A", "#2D5A27", "#6B4C8A", "#8B6F47", "#1E5A8A", "#A0522D", "#556B2F"];
+
+// 將主站 KPI 小組（{組名: [姓名...]}）與 members 合併成運營台 groups[] 格式
+function buildGroupsFromKpi(kpiGroups, members, extras) {
+  if (!kpiGroups || typeof kpiGroups !== "object") return [];
+  const nameToId = {};
+  members.forEach(m => { if (m.name) nameToId[m.name.trim()] = m.id; });
+  const entries = Object.entries(kpiGroups);
+  return entries.map(([groupName, memberNames], i) => {
+    const groupId = "kpi_" + groupName; // 穩定 ID（組名當鍵）
+    const memberIds = (memberNames || []).map(n => nameToId[String(n).trim()]).filter(Boolean);
+    const extra = (extras && extras[groupId]) || {};
+    return {
+      id: groupId,
+      name: groupName,
+      color: extra.color || GROUP_COLORS[i % GROUP_COLORS.length],
+      leaderId: extra.leaderId || null,
+      memberIds,
+      _sourceMemberNames: memberNames || [],  // 保留原始姓名陣列供除錯
+    };
+  });
+}
 
 async function loadState(key, fallback) {
   if (!key) return fallback;
@@ -753,45 +777,46 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
 // ============ 組別管理 ============
 function GroupsView({ groups, setGroups, members, meetings }) {
   const [editing, setEditing] = useState(null);
-  const blank = () => ({ id: uid("g"), name: "", color: "#B8860B", leaderId: "", memberIds: [] });
-
+  // 小組本身來自主站 KPI 小組管理，這裡只能調整組長與顏色
   const save = (g) => {
-    if (!g.name.trim()) return alert("請輸入小組名稱");
-    setGroups(groups.some(x => x.id === g.id) ? groups.map(x => x.id === g.id ? g : x) : [...groups, g]);
-    setEditing(null);
-  };
-  const remove = (id) => {
-    if (meetings.some(m => m.groupId === id)) return alert("此小組已有會議記錄，無法刪除");
-    if (!confirm("確定刪除此小組？")) return;
-    setGroups(groups.filter(g => g.id !== id));
+    setGroups(groups.map(x => x.id === g.id ? g : x));
     setEditing(null);
   };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-stone-800">KPI 小組管理</h2>
-        <Btn variant="primary" onClick={() => setEditing(blank())}><Plus className="w-4 h-4" />新增小組</Btn>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 className="text-lg font-semibold text-stone-800">KPI 小組（{groups.length} 組）</h2>
+        <a href="index.html" className="text-xs text-stone-500 hover:text-[#8B1A1A] underline">→ 到主站新增/調整小組</a>
       </div>
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-800 flex items-start gap-2">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
         <div>
-          <b>KPI 小組</b>為分會內督促 KPI 績效的聚會分組，與<b>產業服務鏈</b>是不同維度的分組，兩者不必然相同。
-          小組可隨季度重組，重組時建議先保留既有小組的歷史記錄，再新增下一季小組。
+          小組名單與成員由<b>主站「後台 → KPI 管理 → 小組管理」</b>統一管理。本頁可調整<b>組長</b>和<b>識別色</b>（僅運營台顯示用），不會動到主站 KPI 小組本身。
+          <br />若某位成員顯示為「未匹配」，代表主站 KPI 小組裡的姓名與會員名單對不上（常因全形／半形空白、錯別字），請到主站校正。
         </div>
       </div>
+
+      {groups.length === 0 && (
+        <div className="bg-white border border-dashed border-stone-300 rounded-xl py-10 text-center text-stone-400">
+          <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">尚未讀到主站 KPI 小組資料</p>
+          <p className="text-xs mt-1">請先到主站「後台 → KPI 管理 → 小組管理」設定小組</p>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {groups.map(g => {
           const mCount = meetings.filter(m => m.groupId === g.id).length;
           const leader = members.find(x => x.id === g.leaderId);
+          const unmatched = (g._sourceMemberNames || []).filter(n => !members.find(m => m.name?.trim() === String(n).trim()));
           return (
             <div key={g.id} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
               <div className="h-1.5" style={{ backgroundColor: g.color }} />
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-stone-800">{g.name}</h3>
-                  <button onClick={() => setEditing(g)} className="text-stone-400 hover:text-[#8B1A1A] p-1">
+                  <button onClick={() => setEditing({ ...g })} className="text-stone-400 hover:text-[#8B1A1A] p-1" title="編輯組長／顏色">
                     <Edit2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -800,13 +825,19 @@ function GroupsView({ groups, setGroups, members, meetings }) {
                     <UserCheck className="w-3.5 h-3.5" />組長：{leader.name}
                   </div>
                 )}
-                <div className="text-xs text-stone-500 mb-2">{g.memberIds.length} 位成員 · {mCount} 次組聚</div>
+                <div className="text-xs text-stone-500 mb-2">
+                  {g.memberIds.length} 位成員 · {mCount} 次組聚
+                  {unmatched.length > 0 && <span className="text-red-600 ml-1">· {unmatched.length} 位未匹配</span>}
+                </div>
                 <div className="flex flex-wrap gap-1">
-                  {g.memberIds.slice(0, 6).map(id => {
+                  {g.memberIds.slice(0, 8).map(id => {
                     const m = members.find(x => x.id === id);
                     return m ? <span key={id} className={`text-xs px-2 py-0.5 rounded ${id === g.leaderId ? "bg-amber-100 text-amber-800 font-medium" : "bg-stone-100 text-stone-600"}`}>{m.name}</span> : null;
                   })}
-                  {g.memberIds.length > 6 && <span className="text-xs text-stone-400">+{g.memberIds.length - 6}</span>}
+                  {g.memberIds.length > 8 && <span className="text-xs text-stone-400">+{g.memberIds.length - 8}</span>}
+                  {unmatched.map((n, i) => (
+                    <span key={"u"+i} className="text-xs px-2 py-0.5 rounded bg-red-50 text-red-600 line-through" title="主站 KPI 小組裡有此姓名，但會員名單找不到對應會員">{n}</span>
+                  ))}
                 </div>
               </div>
             </div>
@@ -814,42 +845,29 @@ function GroupsView({ groups, setGroups, members, meetings }) {
         })}
       </div>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.name ? "編輯小組" : "新增小組"} maxWidth="max-w-lg">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={`編輯「${editing?.name}」顯示設定`} maxWidth="max-w-lg">
         {editing && (
           <div>
-            <Field label="小組名稱" required>
-              <input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" placeholder="例：KPI 第一組、2026Q2-A 組..." />
-            </Field>
+            <div className="text-xs text-stone-500 mb-3">小組名稱與成員只能在主站修改。這裡的設定只影響運營台顯示。</div>
             <Field label="識別色">
               <div className="flex gap-2 flex-wrap">
-                {["#B8860B", "#8B1A1A", "#0369a1", "#059669", "#7c3aed", "#db2777", "#c2410c", "#475569"].map(c => (
+                {GROUP_COLORS.map(c => (
                   <button key={c} type="button" onClick={() => setEditing({ ...editing, color: c })}
                     className={`w-8 h-8 rounded-full border-2 ${editing.color === c ? "border-stone-800 scale-110" : "border-stone-200"} transition`}
                     style={{ backgroundColor: c }} />
                 ))}
               </div>
             </Field>
-            <Field label={`成員（${editing.memberIds.length} 人）`}>
-              <MemberMultiSelect members={members} selectedIds={editing.memberIds} onChange={v => setEditing({ ...editing, memberIds: v })} />
-            </Field>
-            <Field label="小組長" hint="小組長會在新增會議時自動預填為記錄人">
+            <Field label="組長" hint="組長會在新增組聚時自動預填為記錄人">
               <MemberSelect
                 members={members.filter(m => editing.memberIds.includes(m.id))}
                 value={editing.leaderId || ""}
                 onChange={v => setEditing({ ...editing, leaderId: v })}
                 placeholder="（未指定）" />
             </Field>
-            <div className="flex items-center justify-between pt-3 border-t border-stone-200">
-              <div>
-                {groups.some(g => g.id === editing.id) && (
-                  <Btn variant="danger" size="sm" onClick={() => remove(editing.id)}><Trash2 className="w-3.5 h-3.5" />刪除</Btn>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Btn variant="outline" onClick={() => setEditing(null)}>取消</Btn>
-                <Btn variant="primary" onClick={() => save(editing)}><Save className="w-4 h-4" />儲存</Btn>
-              </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+              <Btn variant="outline" onClick={() => setEditing(null)}>取消</Btn>
+              <Btn variant="primary" onClick={() => save(editing)}><Save className="w-4 h-4" />儲存</Btn>
             </div>
           </div>
         )}
@@ -1753,17 +1771,20 @@ function App() {
   // 初始載入
   useEffect(() => {
     (async () => {
-      const [g, m, mainData, mte] = await Promise.all([
-        loadState(STORAGE_KEYS.GROUPS, null),
+      // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組
+      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes] = await Promise.all([
         loadState(STORAGE_KEYS.MEETINGS, null),
-        loadState(STORAGE_KEYS.MEMBERS, null),  // bni_speaker_tracker_v5 主檔
+        loadState(STORAGE_KEYS.MEMBERS, null),
         loadState(STORAGE_KEYS.MENTEES, null),
+        loadState(STORAGE_KEYS.GROUP_EXTRAS, {}),
+        fetch(PROXY_URL + '/api/groups').then(r => r.ok ? r.json() : {}).catch(() => ({})),
       ]);
       const liveMembers = (mainData && Array.isArray(mainData.members)) ? mainData.members : [];
-      setGroups(g || SEED_GROUPS);
-      setMeetings(m || SEED_MEETINGS);
+      const builtGroups = buildGroupsFromKpi(kpiGroupsRes, liveMembers, extrasData);
+      setGroups(builtGroups);
+      setMeetings(meetingsData || []);
       setMembers(liveMembers.length ? liveMembers : SEED_MEMBERS);
-      setMentees(mte || SEED_MENTEES);
+      setMentees(menteesData || SEED_MENTEES);
       const savedUid = (typeof localStorage !== 'undefined') ? localStorage.getItem('bni_operations_user') : null;
       setCurrentUserId(savedUid || (liveMembers[0]?.id || null));
       setLoaded(true);
@@ -1771,7 +1792,15 @@ function App() {
   }, []);
 
   // 自動儲存
-  useEffect(() => { if (loaded) saveState(STORAGE_KEYS.GROUPS, groups); }, [groups, loaded]);
+  // groups 本體來自主站 KPI，只把 metadata (leaderId/color) 另存
+  useEffect(() => {
+    if (!loaded) return;
+    const extras = {};
+    groups.forEach(g => {
+      if (g.leaderId || g.color) extras[g.id] = { leaderId: g.leaderId, color: g.color };
+    });
+    saveState(STORAGE_KEYS.GROUP_EXTRAS, extras);
+  }, [groups, loaded]);
   useEffect(() => { if (loaded) saveState(STORAGE_KEYS.MEETINGS, meetings); }, [meetings, loaded]);
   // members 為唯讀，由 Speaker Tracker 主檔管理
   useEffect(() => { if (loaded) saveState(STORAGE_KEYS.MENTEES, mentees); }, [mentees, loaded]);
