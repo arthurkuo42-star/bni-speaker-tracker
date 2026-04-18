@@ -1009,6 +1009,7 @@ function AdminPanel({ data, saveData, adminTab, setAdminTab, showToast }) {
     { id: 'progress', label: '進度更新', icon: ListChecks },
     { id: 'members', label: '會員管理', icon: Users },
     { id: 'settings', label: '任務模板', icon: Settings },
+    { id: 'kpi-admin', label: 'KPI 管理', icon: Target },
   ];
 
   return (
@@ -1022,7 +1023,7 @@ function AdminPanel({ data, saveData, adminTab, setAdminTab, showToast }) {
               key={t.id}
               onClick={() => setAdminTab(t.id)}
               className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 flex items-center gap-1.5 transition-colors ${adminTab === t.id ? 'font-semibold' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
-              style={adminTab === t.id ? { borderColor: '#A01E2E', color: '#A01E2E' } : {}}
+              style={adminTab === t.id ? { borderColor: t.id === 'kpi-admin' ? '#2D5A27' : '#A01E2E', color: t.id === 'kpi-admin' ? '#2D5A27' : '#A01E2E' } : {}}
             >
               <Icon className="w-4 h-4" />
               {t.label}
@@ -1035,6 +1036,7 @@ function AdminPanel({ data, saveData, adminTab, setAdminTab, showToast }) {
       {adminTab === 'progress' && <ProgressManager data={data} saveData={saveData} showToast={showToast} />}
       {adminTab === 'members' && <MemberManager data={data} saveData={saveData} showToast={showToast} />}
       {adminTab === 'settings' && <TaskTemplateManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'kpi-admin' && <KpiAdminPanel showToast={showToast} />}
     </div>
   );
 }
@@ -2359,6 +2361,420 @@ function KpiMemberRow({ member, expanded, onToggle }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============ KPI 管理後台 ============
+function KpiAdminPanel({ showToast }) {
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+  const [adminKey, setAdminKey] = useState(() => {
+    try { return localStorage.getItem('bni_admin_key') || ''; } catch { return ''; }
+  });
+  const [verified, setVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [subTab, setSubTab] = useState('months');
+
+  if (!proxyUrl) return (
+    <div className="text-center py-12 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      KPI 管理功能僅在部署版本可用
+    </div>
+  );
+
+  const kpiHeaders = () => ({ 'X-Admin-Key': adminKey });
+
+  const verifyKey = async () => {
+    setVerifying(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/members', { headers: kpiHeaders() });
+      if (res.status === 401) { showToast('管理員密鑰錯誤', 'error'); return; }
+      if (res.ok) {
+        try { localStorage.setItem('bni_admin_key', adminKey); } catch {}
+        setVerified(true);
+        showToast('驗證成功');
+      } else {
+        showToast('連線失敗：HTTP ' + res.status, 'error');
+      }
+    } catch (e) { showToast('連線失敗：' + e.message, 'error'); }
+    finally { setVerifying(false); }
+  };
+
+  if (!verified) return (
+    <div className="max-w-md mx-auto py-12" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
+        <Target className="w-10 h-10 mx-auto mb-3" style={{ color: '#2D5A27' }} />
+        <h3 className="text-lg font-bold mb-1" style={{ color: '#1A1414' }}>KPI 管理員驗證</h3>
+        <div className="text-sm text-stone-500 mb-4">請輸入 KPI 管理員密鑰（ADMIN_KEY）</div>
+        <input
+          type="password"
+          value={adminKey}
+          onChange={e => setAdminKey(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && verifyKey()}
+          placeholder="輸入管理員密鑰"
+          className="w-full px-4 py-2.5 text-sm border border-stone-300 rounded-md mb-3 text-center"
+        />
+        <button onClick={verifyKey} disabled={verifying || !adminKey}
+          className="w-full py-2.5 text-sm text-white rounded-md font-semibold disabled:opacity-50"
+          style={{ background: '#2D5A27' }}>
+          {verifying ? '驗證中⋯' : '驗證'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const subTabs = [
+    { id: 'months', label: '月報管理', icon: Upload },
+    { id: 'groups', label: '小組管理', icon: Users },
+    { id: 'config', label: '參數設定', icon: Settings },
+    { id: 'push', label: 'LINE 推播', icon: Megaphone },
+  ];
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-bold" style={{ color: '#1A1414' }}>KPI 管理</h3>
+        <button onClick={() => { setVerified(false); setAdminKey(''); try { localStorage.removeItem('bni_admin_key'); } catch {} }}
+          className="text-xs text-stone-400 hover:text-stone-600">登出 KPI 管理</button>
+      </div>
+      <div className="flex gap-1 mb-5 overflow-x-auto">
+        {subTabs.map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setSubTab(t.id)}
+              className={`px-3 py-1.5 text-xs rounded-md flex items-center gap-1 whitespace-nowrap ${subTab === t.id ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+              style={subTab === t.id ? { background: '#2D5A27' } : {}}>
+              <Icon className="w-3.5 h-3.5" />{t.label}
+            </button>
+          );
+        })}
+      </div>
+      {subTab === 'months' && <KpiMonthManager proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'groups' && <KpiGroupManager proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'config' && <KpiConfigEditor proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'push' && <KpiPushPanel proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+    </div>
+  );
+}
+
+// ─── 月報管理 ───
+function KpiMonthManager({ proxyUrl, headers, showToast }) {
+  const [months, setMonths] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [month, setMonth] = useState('');
+  const fileRef = useRef(null);
+
+  const fetchMonths = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/months', { headers });
+      if (res.ok) setMonths((await res.json()).months || []);
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchMonths(); }, []);
+
+  // 預設月份選項（近12個月，民國年格式）
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const rocYear = d.getFullYear() - 1911;
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      opts.push(`${rocYear}-${m}`);
+    }
+    return opts;
+  }, []);
+
+  const handleUpload = async () => {
+    if (!month) { showToast('請選擇月份', 'error'); return; }
+    if (!fileRef.current?.files?.[0]) { showToast('請選擇 Excel 檔案', 'error'); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('month', month);
+      formData.append('file', fileRef.current.files[0]);
+      const res = await fetch(proxyUrl + '/api/upload', {
+        method: 'POST', headers: { 'X-Admin-Key': headers['X-Admin-Key'] }, body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ ${month} 上傳成功（${data.memberCount} 位會員）`);
+        fileRef.current.value = '';
+        fetchMonths();
+      } else {
+        showToast(data.error || '上傳失敗', 'error');
+      }
+    } catch (e) { showToast('上傳失敗：' + e.message, 'error'); }
+    finally { setUploading(false); }
+  };
+
+  const deleteMonth = async (m) => {
+    if (!confirm(`確定刪除 ${m} 的月報資料？`)) return;
+    try {
+      const res = await fetch(proxyUrl + '/api/month/' + m, { method: 'DELETE', headers });
+      if (res.ok) { showToast('已刪除 ' + m); fetchMonths(); }
+      else showToast('刪除失敗', 'error');
+    } catch (e) { showToast('刪除失敗：' + e.message, 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">上傳月報 Excel</div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <div className="text-xs text-stone-500 mb-1">月份</div>
+            <select value={month} onChange={e => setMonth(e.target.value)}
+              className="px-3 py-2 text-sm border border-stone-300 rounded-md bg-white">
+              <option value="">— 選擇月份 —</option>
+              {monthOptions.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500 mb-1">Excel 檔案</div>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
+              className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-stone-100 file:text-stone-700 hover:file:bg-stone-200" />
+          </div>
+          <button onClick={handleUpload} disabled={uploading}
+            className="px-4 py-2 text-sm text-white rounded-md flex items-center gap-1 disabled:opacity-50"
+            style={{ background: '#2D5A27' }}>
+            <Upload className="w-4 h-4" />{uploading ? '上傳中⋯' : '上傳'}
+          </button>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-3">已上傳月份</div>
+        {loading ? <div className="text-sm text-stone-400 py-4 text-center">載入中⋯</div> :
+         months.length === 0 ? <div className="text-sm text-stone-400 py-4 text-center">尚未上傳任何月報</div> :
+         <div className="space-y-1">
+           {months.map(m => (
+             <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-stone-50">
+               <div className="text-sm"><span className="font-semibold">{m.month}</span><span className="text-stone-500 ml-2">{m.memberCount} 位會員</span></div>
+               <button onClick={() => deleteMonth(m.month)} className="text-stone-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+             </div>
+           ))}
+         </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── 小組管理 ───
+function KpiGroupManager({ proxyUrl, headers, showToast }) {
+  const [groups, setGroups] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+
+  const fetchGroups = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/groups', { headers });
+      if (res.ok) setGroups(await res.json());
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchGroups(); }, []);
+
+  const handleUpload = async () => {
+    if (!fileRef.current?.files?.[0]) { showToast('請選擇 Excel 檔案', 'error'); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileRef.current.files[0]);
+      const res = await fetch(proxyUrl + '/api/groups/upload', {
+        method: 'POST', headers: { 'X-Admin-Key': headers['X-Admin-Key'] }, body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ 小組上傳成功（${data.groupCount} 組、${data.totalMembers} 人）`);
+        fileRef.current.value = '';
+        fetchGroups();
+      } else { showToast(data.error || '上傳失敗', 'error'); }
+    } catch (e) { showToast('上傳失敗：' + e.message, 'error'); }
+    finally { setUploading(false); }
+  };
+
+  const groupEntries = Object.entries(groups);
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-2">上傳小組名單 Excel</div>
+        <div className="text-xs text-stone-500 mb-3">格式 A：兩欄（組別、姓名）｜格式 B：每欄一組（欄名＝組名）</div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
+            className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-stone-100 file:text-stone-700" />
+          <button onClick={handleUpload} disabled={uploading}
+            className="px-4 py-2 text-sm text-white rounded-md flex items-center gap-1 disabled:opacity-50"
+            style={{ background: '#2D5A27' }}>
+            <Upload className="w-4 h-4" />{uploading ? '上傳中⋯' : '上傳'}
+          </button>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-3">目前小組（{groupEntries.length} 組）</div>
+        {loading ? <div className="text-sm text-stone-400 py-4 text-center">載入中⋯</div> :
+         groupEntries.length === 0 ? <div className="text-sm text-stone-400 py-4 text-center">尚未設定小組</div> :
+         <div className="space-y-2">
+           {groupEntries.map(([name, members]) => (
+             <div key={name} className="p-3 rounded-md bg-stone-50">
+               <div className="text-sm font-semibold mb-1">{name}（{members.length}人）</div>
+               <div className="text-xs text-stone-600">{members.join('、')}</div>
+             </div>
+           ))}
+         </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── 參數設定 ───
+function KpiConfigEditor({ proxyUrl, headers, showToast }) {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/config', { headers });
+        if (res.ok) setConfig(await res.json());
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/config', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks }),
+      });
+      if (res.ok) showToast('✅ 設定已儲存');
+      else showToast('儲存失敗', 'error');
+    } catch (e) { showToast('儲存失敗：' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading || !config) return <div className="text-sm text-stone-400 py-8 text-center">載入中⋯</div>;
+
+  return (
+    <div className="bg-white rounded-lg border border-stone-200 p-4">
+      <div className="text-sm font-semibold mb-4">KPI 計算參數</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <div className="text-xs text-stone-500 mb-1">本月剩餘週數</div>
+          <input type="number" min="0" max="5" value={config.remainWeeks || 0}
+            onChange={e => setConfig({ ...config, remainWeeks: parseInt(e.target.value) || 0 })}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <div className="text-xs text-stone-400 mt-1">影響目前成績計算（分母加入剩餘週數）</div>
+        </div>
+        <div>
+          <div className="text-xs text-stone-500 mb-1">下月預計週數</div>
+          <input type="number" min="1" max="6" value={config.nextMonthWeeks || 4}
+            onChange={e => setConfig({ ...config, nextMonthWeeks: parseInt(e.target.value) || 4 })}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <div className="text-xs text-stone-400 mt-1">用於 Washout 預測計算</div>
+        </div>
+      </div>
+      {config.updatedAt && (
+        <div className="text-xs text-stone-400 mb-3">上次更新：{new Date(config.updatedAt).toLocaleString('zh-TW')}</div>
+      )}
+      <button onClick={save} disabled={saving}
+        className="px-5 py-2 text-sm text-white rounded-md font-semibold disabled:opacity-50"
+        style={{ background: '#2D5A27' }}>
+        {saving ? '儲存中⋯' : '儲存設定'}
+      </button>
+    </div>
+  );
+}
+
+// ─── LINE 推播 ───
+function KpiPushPanel({ proxyUrl, headers, showToast }) {
+  const [pushing, setPushing] = useState('');
+  const [result, setResult] = useState(null);
+  const [bindings, setBindings] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/bindings', { headers });
+        if (res.ok) setBindings(await res.json());
+      } catch {}
+    })();
+  }, []);
+
+  const pushAction = async (url, body, label) => {
+    if (!confirm(`確定${label}？將發送 LINE 訊息給綁定的會員`)) return;
+    setPushing(label);
+    setResult(null);
+    try {
+      const res = await fetch(proxyUrl + url, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult({ ok: true, ...data });
+        showToast(`✅ ${label}完成：發送 ${data.sent} 人`);
+      } else {
+        setResult({ ok: false, error: data.error });
+        showToast(data.error || '推播失敗', 'error');
+      }
+    } catch (e) {
+      setResult({ ok: false, error: e.message });
+      showToast('推播失敗：' + e.message, 'error');
+    } finally { setPushing(''); }
+  };
+
+  const bindingCount = bindings ? Object.keys(bindings).length : '—';
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">LINE 綁定狀態</div>
+        <div className="text-2xl font-bold mb-1" style={{ color: '#2D5A27' }}>{bindingCount}</div>
+        <div className="text-xs text-stone-500 mb-3">位會員已綁定 LINE 帳號</div>
+        {bindings && Object.keys(bindings).length > 0 && (
+          <div className="text-xs text-stone-600 p-2 bg-stone-50 rounded">
+            {Object.values(bindings).sort().join('、')}
+          </div>
+        )}
+      </div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-4">推播通知</div>
+        <div className="space-y-2">
+          <button
+            onClick={() => pushAction('/api/push', { target: 'non-green' }, '推播非綠燈會員')}
+            disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-left hover:bg-amber-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">🟡🔴 推播非綠燈會員</div><div className="text-xs mt-0.5">發送 KPI 成績和綠燈攻略建議</div></div>
+            {pushing === '推播非綠燈會員' && <span className="text-xs">發送中⋯</span>}
+          </button>
+          <button
+            onClick={() => pushAction('/api/push', { target: 'all' }, '推播全員')}
+            disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-stone-50 text-stone-700 border border-stone-200 rounded-md text-left hover:bg-stone-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">📢 推播全員成績</div><div className="text-xs mt-0.5">發送給所有已綁定的會員</div></div>
+            {pushing === '推播全員' && <span className="text-xs">發送中⋯</span>}
+          </button>
+          <button
+            onClick={() => pushAction('/api/push-washout', { target: 'green-drop' }, '推播 Washout 警告')}
+            disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 rounded-md text-left hover:bg-red-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">⚠️ 推播 Washout 警告</div><div className="text-xs mt-0.5">提醒可能從綠燈掉燈的會員</div></div>
+            {pushing === '推播 Washout 警告' && <span className="text-xs">發送中⋯</span>}
+          </button>
+        </div>
+        {result && (
+          <div className={`mt-3 p-3 rounded text-sm ${result.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+            {result.ok ? `✅ 成功發送 ${result.sent} 人${result.failed ? `，失敗 ${result.failed} 人` : ''}` : `❌ ${result.error}`}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
