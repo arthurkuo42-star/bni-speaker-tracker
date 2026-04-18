@@ -80,6 +80,11 @@ const ChevronRight = (p) => React.createElement(IconWrap, { ...p, children: '<po
 const ArrowLeft = (p) => React.createElement(IconWrap, { ...p, children: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>' });
 const TrendingUp = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>' });
 const BarChart3 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/>' });
+const Presentation2 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/>' });
+const MessageSquareQuote = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 12a2 2 0 0 0 2-2V8H7"/><path d="M14 12a2 2 0 0 0 2-2V8h-3"/>' });
+const Link2 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>' });
+const ArrowRightLeft = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="17 3 21 7 17 11"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="3" y1="17" x2="15" y2="17"/>' });
+const Coins = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>' });
 
 // ===== Storage (Railway Proxy + JSONBin，與 Speaker Tracker 共用同一個 bin) =====
 const PROXY_URL = window.BNI_PROXY_URL || '';
@@ -438,6 +443,7 @@ function getMenteeStats(mentee) {
 
 const uid = (p = "id") => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
+const fmtShort = (d) => d ? new Date(d).toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit" }) : "";
 const fmtDateTime = (d) => new Date(d).toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 const isOverdue = (a) => a.status === "pending" && a.dueDate && new Date(a.dueDate) < new Date(new Date().toDateString());
 const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
@@ -446,9 +452,9 @@ const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
 function Modal({ open, onClose, title, children, maxWidth = "max-w-2xl" }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4 bg-black/50 overflow-y-auto" onClick={onClose}>
-      <div className={`bg-white w-full ${maxWidth} rounded-none sm:rounded-2xl shadow-2xl my-0 sm:my-8 animate-in fade-in`} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white rounded-t-2xl z-10">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50 overflow-y-auto" onClick={onClose}>
+      <div className={`bg-white w-full ${maxWidth} rounded-none sm:rounded-2xl shadow-2xl animate-in fade-in min-h-full sm:min-h-0 sm:mb-8`} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white sm:rounded-t-2xl z-10">
           <h3 className="text-lg font-semibold text-stone-800">{title}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg"><X className="w-5 h-5 text-stone-500" /></button>
         </div>
@@ -530,21 +536,42 @@ function MemberSelect({ members, value, onChange, placeholder = "選擇..." }) {
 }
 
 // ============ 會議表單 ============
-function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
+function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, onCancel, onDelete }) {
   const [form, setForm] = useState(() => meeting || {
     id: uid("mt"), groupId: groups[0]?.id || "",
     date: new Date().toISOString().slice(0, 10), time: "19:00",
     location: "", scribe: "",
     attendees: [], absentees: [],
-    discussion: "", actionItems: [],
+    sharings: [],             // 1. 成長 / 喜悅分享
+    speaker: { memberId: "", topic: "" },  // 2. 主講人
+    feedback: [],             // 3. 對主講人建議
+    neededConnections: [],    // 4. 主講人需要的人脈
+    referrals: [],            // 5. 小組內引薦記錄
+    nextMeeting: { date: "", time: "", location: "" },  // 6. 下次組聚
+    discussion: "", actionItems: [],        // 保留相容欄位
     createdAt: new Date().toISOString(),
   });
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  // 遷移舊記錄：若 meeting 沒有新欄位，補齊空值
+  useEffect(() => {
+    if (!meeting) return;
+    setForm(p => ({
+      sharings: [], speaker: { memberId: "", topic: "" },
+      feedback: [], neededConnections: [], referrals: [],
+      nextMeeting: { date: "", time: "", location: "" },
+      ...p,
+    }));
+  }, []);
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const group = groups.find(g => g.id === form.groupId);
   const groupMembers = useMemo(() =>
     members.filter(m => group?.memberIds?.includes(m.id)),
     [members, group]
+  );
+  const attendingMembers = useMemo(() =>
+    groupMembers.filter(m => form.attendees.includes(m.id)),
+    [groupMembers, form.attendees]
   );
 
   // 選了某組，沒出席的自動算缺席；若記錄人空白，自動預填小組長
@@ -558,12 +585,54 @@ function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
     }));
   }, [form.attendees, form.groupId]);
 
-  const addAction = () => set("actionItems", [...form.actionItems, {
+  // ===== 各區塊 CRUD =====
+  const upd = (arr, id, k, v) => arr.map(x => x.id === id ? { ...x, [k]: v } : x);
+  const rm = (arr, id) => arr.filter(x => x.id !== id);
+
+  // 1. 分享
+  const addSharing = (memberId) => set("sharings", [...form.sharings, { id: uid("s"), memberId, content: "" }]);
+  const updSharing = (id, k, v) => set("sharings", upd(form.sharings, id, k, v));
+  const rmSharing = (id) => set("sharings", rm(form.sharings, id));
+
+  // 3. 回饋
+  const addFeedback = (fromMemberId) => set("feedback", [...form.feedback, { id: uid("fb"), fromMemberId, content: "" }]);
+  const updFeedback = (id, k, v) => set("feedback", upd(form.feedback, id, k, v));
+  const rmFeedback = (id) => set("feedback", rm(form.feedback, id));
+
+  // 4. 人脈需求
+  const addConnection = () => set("neededConnections", [...form.neededConnections, {
+    id: uid("nc"), profileWanted: "", offers: []
+  }]);
+  const updConnection = (id, k, v) => set("neededConnections", upd(form.neededConnections, id, k, v));
+  const rmConnection = (id) => set("neededConnections", rm(form.neededConnections, id));
+  const addOffer = (ncId) => set("neededConnections", form.neededConnections.map(nc =>
+    nc.id !== ncId ? nc : { ...nc, offers: [...nc.offers, {
+      id: uid("of"), introducerId: "", contactName: "", contactProfession: "",
+      status: "pending", createdAt: new Date().toISOString(),
+    }] }
+  ));
+  const updOffer = (ncId, ofId, k, v) => set("neededConnections", form.neededConnections.map(nc =>
+    nc.id !== ncId ? nc : { ...nc, offers: nc.offers.map(of => of.id === ofId ? { ...of, [k]: v } : of) }
+  ));
+  const rmOffer = (ncId, ofId) => set("neededConnections", form.neededConnections.map(nc =>
+    nc.id !== ncId ? nc : { ...nc, offers: nc.offers.filter(of => of.id !== ofId) }
+  ));
+
+  // 5. 引薦記錄
+  const addReferral = () => set("referrals", [...form.referrals, {
+    id: uid("rf"), fromMemberId: "", toMemberId: "",
+    referralName: "", content: "", amount: "",
+  }]);
+  const updReferral = (id, k, v) => set("referrals", upd(form.referrals, id, k, v));
+  const rmReferral = (id) => set("referrals", rm(form.referrals, id));
+
+  // 行動項（保留舊有）
+  const addAction = () => set("actionItems", [...(form.actionItems || []), {
     id: uid("a"), title: "", assignee: "", dueDate: "",
     status: "pending", notes: "", completedAt: null,
   }]);
-  const updAction = (id, k, v) => set("actionItems", form.actionItems.map(a => a.id === id ? { ...a, [k]: v } : a));
-  const rmAction = (id) => set("actionItems", form.actionItems.filter(a => a.id !== id));
+  const updAction = (id, k, v) => set("actionItems", (form.actionItems || []).map(a => a.id === id ? { ...a, [k]: v } : a));
+  const rmAction = (id) => set("actionItems", (form.actionItems || []).filter(a => a.id !== id));
 
   const submit = () => {
     if (!form.groupId) return alert("請選擇小組");
@@ -571,8 +640,19 @@ function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
     onSave({ ...form, updatedAt: new Date().toISOString() });
   };
 
+  // 誰還沒分享/回饋（用於下拉選單）
+  const sharedIds = form.sharings.map(s => s.memberId);
+  const pendingShareMembers = attendingMembers.filter(m => !sharedIds.includes(m.id));
+  const feedbackIds = form.feedback.map(f => f.fromMemberId);
+  const pendingFeedbackMembers = attendingMembers.filter(m => !feedbackIds.includes(m.id) && m.id !== form.speaker?.memberId);
+
+  const summary = (label, count) => count > 0
+    ? <span className="text-[10px] bg-[#B8860B] text-white px-1.5 py-0.5 rounded-full">{count}</span>
+    : <span className="text-[10px] bg-stone-100 text-stone-400 px-1.5 py-0.5 rounded-full">0</span>;
+
   return (
     <div>
+      {/* ============ 基本資訊 ============ */}
       <div className="grid grid-cols-2 gap-3">
         <Field label="小組" required>
           <select value={form.groupId} onChange={e => set("groupId", e.target.value)}
@@ -605,54 +685,228 @@ function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
         {group ? <MemberMultiSelect members={groupMembers} selectedIds={form.attendees} onChange={v => set("attendees", v)} /> : <div className="text-sm text-stone-400 italic">請先選擇小組</div>}
       </Field>
 
-      <Field label="討論內容">
-        <textarea value={form.discussion || ""} onChange={e => set("discussion", e.target.value)}
-          rows={4} placeholder="本次聚會討論要點..."
-          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
-      </Field>
+      {/* ============ 1. 成長 / 喜悅分享 ============ */}
+      <FormSection title="1. 成長 / 喜悅分享" badge={summary("", form.sharings.length)} icon={<Sparkles className="w-4 h-4 text-[#B8860B]" />}>
+        {attendingMembers.length === 0 ? (
+          <div className="text-xs text-stone-400 italic py-2">請先勾選出席成員</div>
+        ) : (
+          <>
+            <div className="space-y-2 mb-2">
+              {form.sharings.map(s => {
+                const m = members.find(x => x.id === s.memberId);
+                return (
+                  <div key={s.id} className="border border-stone-200 rounded-lg p-2.5 bg-stone-50">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-semibold text-stone-700">{m?.name || "?"}</span>
+                      <button onClick={() => rmSharing(s.id)} className="ml-auto p-1 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <textarea value={s.content} onChange={e => updSharing(s.id, "content", e.target.value)}
+                      rows={2} placeholder="分享成長進度或喜悅..."
+                      className="w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white" />
+                  </div>
+                );
+              })}
+            </div>
+            {pendingShareMembers.length > 0 && (
+              <select onChange={e => { if (e.target.value) { addSharing(e.target.value); e.target.value = ""; } }}
+                value="" className="w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-500">
+                <option value="">+ 新增分享（{pendingShareMembers.length} 位出席成員尚未分享）</option>
+                {pendingShareMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            )}
+          </>
+        )}
+      </FormSection>
 
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-stone-700">行動項目（{form.actionItems.length}）</label>
-          <Btn variant="outline" size="sm" onClick={addAction}><Plus className="w-3.5 h-3.5" />新增</Btn>
+      {/* ============ 2. 主講人 ============ */}
+      <FormSection title="2. 主講人專業簡報" badge={form.speaker?.topic ? <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">已填</span> : summary("", 0)} icon={<Presentation2 className="w-4 h-4 text-[#B8860B]" />}>
+        <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2">
+          <MemberSelect members={attendingMembers.length ? attendingMembers : groupMembers}
+            value={form.speaker?.memberId || ""}
+            onChange={v => set("speaker", { ...form.speaker, memberId: v })}
+            placeholder="選擇主講人..." />
+          <input value={form.speaker?.topic || ""}
+            onChange={e => set("speaker", { ...form.speaker, topic: e.target.value })}
+            placeholder="簡報標題（本次主講的主題）"
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
         </div>
-        <div className="space-y-2">
-          {form.actionItems.length === 0 && <div className="text-sm text-stone-400 italic text-center py-3 border border-dashed border-stone-200 rounded-lg">尚無行動項目</div>}
-          {form.actionItems.map((a, i) => (
-            <div key={a.id} className="border border-stone-200 rounded-lg p-3 bg-stone-50">
-              <div className="flex items-start gap-2 mb-2">
-                <span className="text-xs font-semibold text-stone-400 mt-1.5">#{i + 1}</span>
-                <input value={a.title} onChange={e => updAction(a.id, "title", e.target.value)}
-                  placeholder="待辦事項..."
-                  className="flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
-                <button onClick={() => rmAction(a.id)} className="p-1.5 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="text-xs text-stone-500">負責人</label>
-                  <MemberSelect members={groupMembers} value={a.assignee} onChange={v => updAction(a.id, "assignee", v)} placeholder="（未指派）" />
+      </FormSection>
+
+      {/* ============ 3. 對主講人的建議 ============ */}
+      <FormSection title="3. 對主講人的建議" badge={summary("", form.feedback.length)} icon={<MessageSquareQuote className="w-4 h-4 text-[#B8860B]" />}>
+        {!form.speaker?.memberId ? (
+          <div className="text-xs text-stone-400 italic py-2">請先選擇主講人</div>
+        ) : (
+          <>
+            <div className="space-y-2 mb-2">
+              {form.feedback.map(f => {
+                const m = members.find(x => x.id === f.fromMemberId);
+                return (
+                  <div key={f.id} className="border border-stone-200 rounded-lg p-2.5 bg-stone-50">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-semibold text-stone-700">{m?.name || "?"}</span>
+                      <button onClick={() => rmFeedback(f.id)} className="ml-auto p-1 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <textarea value={f.content} onChange={e => updFeedback(f.id, "content", e.target.value)}
+                      rows={2} placeholder={`給 ${members.find(x => x.id === form.speaker.memberId)?.name || "主講人"} 的建議...`}
+                      className="w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white" />
+                  </div>
+                );
+              })}
+            </div>
+            {pendingFeedbackMembers.length > 0 && (
+              <select onChange={e => { if (e.target.value) { addFeedback(e.target.value); e.target.value = ""; } }}
+                value="" className="w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-500">
+                <option value="">+ 新增建議（{pendingFeedbackMembers.length} 位尚未給建議）</option>
+                {pendingFeedbackMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            )}
+          </>
+        )}
+      </FormSection>
+
+      {/* ============ 4. 主講人需要的合作人脈 ============ */}
+      <FormSection title="4. 主講人需要的合作人脈" badge={summary("", form.neededConnections.reduce((s, nc) => s + nc.offers.length, 0))} icon={<Link2 className="w-4 h-4 text-[#B8860B]" />}>
+        {!form.speaker?.memberId ? (
+          <div className="text-xs text-stone-400 italic py-2">請先選擇主講人</div>
+        ) : (
+          <>
+            <div className="text-xs text-stone-500 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+              💡 這裡記錄的引薦意向不會直接寫入咖啡會議。組聚結束後，主講人可到主站「Coffee Meeting」頁面一鍵匯入，狀態才會正式轉為「邀約中」。
+            </div>
+            <div className="space-y-3">
+              {form.neededConnections.map((nc, idx) => (
+                <div key={nc.id} className="border border-stone-200 rounded-lg p-3 bg-stone-50">
+                  <div className="flex items-start gap-2 mb-2">
+                    <span className="text-xs font-bold text-[#8B1A1A] mt-1.5">需求 {idx + 1}</span>
+                    <input value={nc.profileWanted} onChange={e => updConnection(nc.id, "profileWanted", e.target.value)}
+                      placeholder="想認識的對象描述（例：熟悉不動產估價的代書）"
+                      className="flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
+                    <button onClick={() => rmConnection(nc.id)} className="p-1.5 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                  {nc.offers.length > 0 && (
+                    <div className="ml-4 pl-3 border-l-2 border-[#B8860B] space-y-1.5 mb-2">
+                      {nc.offers.map(of => {
+                        const intro = members.find(x => x.id === of.introducerId);
+                        return (
+                          <div key={of.id} className="bg-white rounded p-2 text-xs">
+                            <div className="grid grid-cols-[110px_1fr_auto] gap-1.5 items-center mb-1">
+                              <MemberSelect members={attendingMembers} value={of.introducerId} onChange={v => updOffer(nc.id, of.id, "introducerId", v)} placeholder="邀約人" />
+                              <input value={of.contactName} onChange={e => updOffer(nc.id, of.id, "contactName", e.target.value)}
+                                placeholder="人脈姓名" className="border border-stone-200 rounded px-2 py-1" />
+                              <button onClick={() => rmOffer(nc.id, of.id)} className="p-1 text-stone-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+                            </div>
+                            <input value={of.contactProfession} onChange={e => updOffer(nc.id, of.id, "contactProfession", e.target.value)}
+                              placeholder="人脈專業（例：不動產估價師）" className="w-full border border-stone-200 rounded px-2 py-1 text-xs" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <button onClick={() => addOffer(nc.id)}
+                    className="ml-4 text-xs text-[#8B1A1A] hover:underline flex items-center gap-1">
+                    <Plus className="w-3 h-3" />誰有此人脈？
+                  </button>
                 </div>
-                <div>
-                  <label className="text-xs text-stone-500">到期日</label>
+              ))}
+              <Btn variant="outline" size="sm" onClick={addConnection}><Plus className="w-3.5 h-3.5" />新增人脈需求</Btn>
+            </div>
+          </>
+        )}
+      </FormSection>
+
+      {/* ============ 5. 小組內引薦記錄 ============ */}
+      <FormSection title="5. 小組內彼此引薦" badge={summary("", form.referrals.length)} icon={<ArrowRightLeft className="w-4 h-4 text-[#B8860B]" />}>
+        <div className="space-y-2">
+          {form.referrals.map((r, i) => (
+            <div key={r.id} className="border border-stone-200 rounded-lg p-2.5 bg-stone-50">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-stone-400">#{i + 1}</span>
+                <MemberSelect members={attendingMembers} value={r.fromMemberId} onChange={v => updReferral(r.id, "fromMemberId", v)} placeholder="引薦人" />
+                <ArrowRightLeft className="w-3 h-3 text-stone-400" />
+                <MemberSelect members={attendingMembers} value={r.toMemberId} onChange={v => updReferral(r.id, "toMemberId", v)} placeholder="收到引薦" />
+                <button onClick={() => rmReferral(r.id)} className="ml-auto p-1 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+              <div className="grid grid-cols-[1fr_140px] gap-2 mb-2">
+                <input value={r.referralName} onChange={e => updReferral(r.id, "referralName", e.target.value)}
+                  placeholder="被引薦對象（例：林先生）"
+                  className="border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-stone-500">成交金額</span>
+                  <input type="number" value={r.amount || ""} onChange={e => updReferral(r.id, "amount", e.target.value)}
+                    placeholder="0" className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm text-right" />
+                </div>
+              </div>
+              <textarea value={r.content} onChange={e => updReferral(r.id, "content", e.target.value)}
+                rows={2} placeholder="引薦內容（業務類型、需求描述...）"
+                className="w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white" />
+            </div>
+          ))}
+          <Btn variant="outline" size="sm" onClick={addReferral}><Plus className="w-3.5 h-3.5" />新增引薦</Btn>
+        </div>
+      </FormSection>
+
+      {/* ============ 6. 下次組聚 ============ */}
+      <FormSection title="6. 下次組聚時間" badge={form.nextMeeting?.date ? <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">已填</span> : summary("", 0)} icon={<Calendar className="w-4 h-4 text-[#B8860B]" />}>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-stone-500">日期</label>
+            <input type="date" value={form.nextMeeting?.date || ""}
+              onChange={e => set("nextMeeting", { ...form.nextMeeting, date: e.target.value })}
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-stone-500">時間</label>
+            <input type="time" value={form.nextMeeting?.time || ""}
+              onChange={e => set("nextMeeting", { ...form.nextMeeting, time: e.target.value })}
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div className="mt-2">
+          <label className="text-xs text-stone-500">地點（留空則沿用本次）</label>
+          <input value={form.nextMeeting?.location || ""}
+            onChange={e => set("nextMeeting", { ...form.nextMeeting, location: e.target.value })}
+            placeholder={form.location || "例：事務所會議室..."}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </FormSection>
+
+      {/* ============ 附加：其他討論與行動項（預設收起） ============ */}
+      <FormSection title="其他討論與行動項" defaultOpen={false}
+        badge={summary("", (form.actionItems?.length || 0) + (form.discussion ? 1 : 0))}
+        icon={<FileText className="w-4 h-4 text-stone-500" />}>
+        <Field label="其他討論">
+          <textarea value={form.discussion || ""} onChange={e => set("discussion", e.target.value)}
+            rows={3} placeholder="若有其他議題..."
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
+        </Field>
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-stone-700">行動項目（{(form.actionItems || []).length}）</label>
+            <Btn variant="outline" size="sm" onClick={addAction}><Plus className="w-3.5 h-3.5" />新增</Btn>
+          </div>
+          <div className="space-y-2">
+            {(form.actionItems || []).length === 0 && <div className="text-xs text-stone-400 italic text-center py-2 border border-dashed border-stone-200 rounded-lg">尚無行動項目</div>}
+            {(form.actionItems || []).map((a, i) => (
+              <div key={a.id} className="border border-stone-200 rounded-lg p-2.5 bg-stone-50">
+                <div className="flex items-start gap-2 mb-1.5">
+                  <span className="text-xs font-semibold text-stone-400 mt-1.5">#{i + 1}</span>
+                  <input value={a.title} onChange={e => updAction(a.id, "title", e.target.value)}
+                    placeholder="待辦事項..." className="flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
+                  <button onClick={() => rmAction(a.id)} className="p-1.5 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <MemberSelect members={groupMembers} value={a.assignee} onChange={v => updAction(a.id, "assignee", v)} placeholder="（未指派）" />
                   <input type="date" value={a.dueDate || ""} onChange={e => updAction(a.id, "dueDate", e.target.value)}
                     className="w-full border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => updAction(a.id, "status", a.status === "done" ? "pending" : "done")
-                  || updAction(a.id, "completedAt", a.status === "done" ? null : new Date().toISOString())}
-                  className={`text-xs px-2 py-1 rounded-md ${a.status === "done" ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-600"}`}>
-                  {a.status === "done" ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />已完成</> : "待完成"}
-                </button>
-                <input value={a.notes || ""} onChange={e => updAction(a.id, "notes", e.target.value)}
-                  placeholder="備註..." className="flex-1 border border-stone-200 rounded-md px-2 py-1 text-xs bg-white" />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      </FormSection>
 
-      <div className="flex items-center justify-between pt-3 border-t border-stone-200">
+      <div className="flex items-center justify-between pt-3 border-t border-stone-200 mt-4 sticky bottom-0 bg-white pb-1">
         <div>
           {meeting && onDelete && (
             <Btn variant="danger" size="sm" onClick={() => { if (confirm("確定刪除此會議記錄？")) onDelete(meeting.id); }}>
@@ -669,15 +923,52 @@ function MeetingForm({ meeting, groups, members, onSave, onCancel, onDelete }) {
   );
 }
 
+// 通用摺疊 Section
+function FormSection({ title, icon, badge, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden mb-3">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-stone-50 transition">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h4 className="font-semibold text-sm text-stone-800">{title}</h4>
+          {badge}
+        </div>
+        {open ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+      </button>
+      {open && <div className="px-3.5 pb-3.5 pt-1 border-t border-stone-100">{children}</div>}
+    </div>
+  );
+}
+
 // ============ 會議卡片 ============
 function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
   const [expanded, setExpanded] = useState(false);
   const getMember = (id) => members.find(m => m.id === id);
   const totalInGroup = group?.memberIds.length || 0;
   const attendRate = totalInGroup ? (meeting.attendees.length / totalInGroup * 100).toFixed(0) : 0;
-  const pending = meeting.actionItems.filter(a => a.status === "pending");
-  const done = meeting.actionItems.filter(a => a.status === "done");
+  const actionItems = meeting.actionItems || [];
+  const pending = actionItems.filter(a => a.status === "pending");
+  const done = actionItems.filter(a => a.status === "done");
   const overdue = pending.filter(isOverdue);
+
+  // 6 大欄位統計
+  const sharings = meeting.sharings || [];
+  const speaker = meeting.speaker || {};
+  const speakerMember = speaker.memberId ? getMember(speaker.memberId) : null;
+  const feedback = meeting.feedback || [];
+  const neededConnections = meeting.neededConnections || [];
+  const offerCount = neededConnections.reduce((s, nc) => s + (nc.offers?.length || 0), 0);
+  const referrals = meeting.referrals || [];
+  const referralTotal = referrals.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const nextMeeting = meeting.nextMeeting || {};
+
+  const pill = (label, val, color) => (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded ${color}`}>
+      {label}<b className="ml-0.5">{val}</b>
+    </span>
+  );
 
   return (
     <div className="bg-white border border-stone-200 rounded-xl overflow-hidden hover:shadow-md transition">
@@ -700,7 +991,17 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 my-3 text-center">
+        {speakerMember && (
+          <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2 flex items-center gap-2">
+            <Presentation2 className="w-4 h-4 text-[#B8860B] flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] text-[#B8860B] font-semibold">本次主講：{speakerMember.name}</div>
+              {speaker.topic && <div className="text-xs text-stone-700 truncate">{speaker.topic}</div>}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-2 my-2 text-center">
           <div className="bg-emerald-50 rounded-lg py-1.5">
             <div className="text-lg font-bold text-emerald-700">{meeting.attendees.length}<span className="text-xs font-normal text-emerald-600">/{totalInGroup}</span></div>
             <div className="text-[10px] text-emerald-600">出席（{attendRate}%）</div>
@@ -715,6 +1016,15 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
           </div>
         </div>
 
+        {/* 6 大欄位摘要 pill */}
+        <div className="flex flex-wrap gap-1 mb-2">
+          {sharings.length > 0 && pill("分享", sharings.length, "bg-amber-50 text-amber-700")}
+          {feedback.length > 0 && pill("建議", feedback.length, "bg-blue-50 text-blue-700")}
+          {offerCount > 0 && pill("人脈引薦", offerCount, "bg-purple-50 text-purple-700")}
+          {referrals.length > 0 && pill(`引薦 NT$${referralTotal.toLocaleString()}`, referrals.length, "bg-pink-50 text-pink-700")}
+          {nextMeeting.date && pill("下次", fmtShort(nextMeeting.date), "bg-stone-100 text-stone-600")}
+        </div>
+
         {meeting.discussion && (
           <div className="text-sm text-stone-600 mb-2">
             <p className={expanded ? "" : "line-clamp-2"}>{meeting.discussion}</p>
@@ -727,14 +1037,14 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
         </button>
 
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+          <div className="mt-3 pt-3 border-t border-stone-100 space-y-3 text-sm">
             <div>
               <div className="text-xs font-semibold text-stone-700 mb-1.5">出席 ({meeting.attendees.length})</div>
               <div className="flex flex-wrap gap-1">
                 {meeting.attendees.map(id => <span key={id} className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded">{getMember(id)?.name || id}</span>)}
               </div>
             </div>
-            {meeting.absentees.length > 0 && (
+            {meeting.absentees?.length > 0 && (
               <div>
                 <div className="text-xs font-semibold text-stone-700 mb-1.5">缺席 ({meeting.absentees.length})</div>
                 <div className="flex flex-wrap gap-1">
@@ -742,11 +1052,90 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
                 </div>
               </div>
             )}
-            {meeting.actionItems.length > 0 && (
+
+            {sharings.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"><Sparkles className="w-3 h-3 text-[#B8860B]" />成長/喜悅分享</div>
+                <div className="space-y-1">
+                  {sharings.map(s => (
+                    <div key={s.id} className="text-xs bg-amber-50/50 rounded p-1.5">
+                      <b className="text-[#B8860B]">{getMember(s.memberId)?.name || "?"}：</b>
+                      <span className="text-stone-700">{s.content || "（未填）"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {feedback.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"><MessageSquareQuote className="w-3 h-3 text-blue-600" />對主講人的建議</div>
+                <div className="space-y-1">
+                  {feedback.map(f => (
+                    <div key={f.id} className="text-xs bg-blue-50/50 rounded p-1.5">
+                      <b className="text-blue-700">{getMember(f.fromMemberId)?.name || "?"}：</b>
+                      <span className="text-stone-700">{f.content || "（未填）"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {neededConnections.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"><Link2 className="w-3 h-3 text-purple-600" />主講人需要的合作人脈</div>
+                <div className="space-y-1.5">
+                  {neededConnections.map(nc => (
+                    <div key={nc.id} className="text-xs bg-purple-50/50 rounded p-1.5">
+                      <div className="text-stone-700">🎯 {nc.profileWanted || "（未填）"}</div>
+                      {nc.offers?.length > 0 && (
+                        <div className="mt-1 ml-3 space-y-0.5 text-[11px]">
+                          {nc.offers.map(of => (
+                            <div key={of.id} className="text-stone-600">
+                              → <b>{getMember(of.introducerId)?.name || "?"}</b> 可引薦 <b>{of.contactName || "?"}</b>（{of.contactProfession || "?"}）
+                              {of.status === "imported" && <span className="ml-1 text-[9px] bg-emerald-500 text-white px-1 rounded">已匯入咖啡會議</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {referrals.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-pink-600" />小組內引薦（總額 NT${referralTotal.toLocaleString()}）</div>
+                <div className="space-y-1">
+                  {referrals.map(r => (
+                    <div key={r.id} className="text-xs bg-pink-50/50 rounded p-1.5">
+                      <b className="text-pink-700">{getMember(r.fromMemberId)?.name || "?"}</b> → <b>{getMember(r.toMemberId)?.name || "?"}</b>
+                      {r.referralName && <span className="text-stone-500"> · {r.referralName}</span>}
+                      {r.amount && <span className="ml-1 text-emerald-700 font-semibold">NT${Number(r.amount).toLocaleString()}</span>}
+                      {r.content && <div className="text-stone-600 mt-0.5">{r.content}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {nextMeeting.date && (
+              <div className="bg-stone-50 rounded-lg p-2 flex items-center gap-2">
+                <Calendar className="w-3.5 h-3.5 text-stone-500" />
+                <span className="text-xs text-stone-700">
+                  <b>下次組聚：</b>{fmtDate(nextMeeting.date)}
+                  {nextMeeting.time && <span> {nextMeeting.time}</span>}
+                  {nextMeeting.location && <span> · {nextMeeting.location}</span>}
+                </span>
+              </div>
+            )}
+
+            {actionItems.length > 0 && (
               <div>
                 <div className="text-xs font-semibold text-stone-700 mb-1.5">行動項目</div>
                 <div className="space-y-1">
-                  {meeting.actionItems.map(a => {
+                  {actionItems.map(a => {
                     const over = isOverdue(a);
                     return (
                       <div key={a.id} className="flex items-start gap-2 text-sm">
@@ -1925,6 +2314,7 @@ function App() {
         title={editingMeeting?.id ? "編輯會議記錄" : "新增會議記錄"} maxWidth="max-w-3xl">
         {editingMeeting && (
           <MeetingForm meeting={editingMeeting.id ? editingMeeting : null} groups={groups} members={members}
+            mentees={mentees} setMentees={setMentees}
             onSave={saveMeeting} onCancel={() => setEditingMeeting(null)} onDelete={deleteMeeting} />
         )}
       </Modal>
