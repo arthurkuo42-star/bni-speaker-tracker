@@ -391,6 +391,9 @@ function App() {
         {view === 'coffee' && (
           <CoffeeMeetingPage data={data} saveData={saveData} showToast={showToast} />
         )}
+        {view === 'chains' && (
+          <ServiceChainView />
+        )}
         {view === 'admin' && !adminAuth && (
           <AdminGate pinSet={pinSet} setPinSet={setPinSet} onPass={() => setAdminAuth(true)} showToast={showToast} />
         )}
@@ -456,6 +459,14 @@ function Header({ view, setView, adminAuth, setAdminAuth, chapterName }) {
           >
             <Coffee className="w-4 h-4" />
             <span className="hidden md:inline">咖啡</span>
+          </button>
+          <button
+            onClick={() => { setView('chains'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'chains' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'chains' ? '#6B4C8A' : undefined }}
+          >
+            <ListChecks className="w-4 h-4" />
+            <span className="hidden md:inline">服務鏈</span>
           </button>
           <button
             onClick={() => { setView('admin'); }}
@@ -2477,6 +2488,7 @@ function KpiAdminPanel({ showToast }) {
     { id: 'groups', label: '小組管理', icon: Users },
     { id: 'config', label: '參數設定', icon: Settings },
     { id: 'push', label: 'LINE 推播', icon: Megaphone },
+    { id: 'chains', label: '服務鏈', icon: ListChecks },
   ];
 
   return (
@@ -2502,6 +2514,7 @@ function KpiAdminPanel({ showToast }) {
       {subTab === 'groups' && <KpiGroupManager proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
       {subTab === 'config' && <KpiConfigEditor proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
       {subTab === 'push' && <KpiPushPanel proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'chains' && <ServiceChainEditor proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
     </div>
   );
 }
@@ -2982,6 +2995,230 @@ function KpiPushPanel({ proxyUrl, headers, showToast }) {
           {result.ok ? `✅ ${result.sent !== undefined ? '發送 ' + result.sent + ' 人' : ''}${result.coffeeCount ? '（' + result.coffeeCount + ' 場）' : ''}${result.failed ? '，失敗 ' + result.failed : ''}${result.message ? ' ' + result.message : ''}` : `❌ ${result.error}`}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============ 產業服務鏈 ============
+const CHAIN_COLORS = {
+  'ac-purple': '#6B4C8A', 'ac-blue': '#2B6CB0', 'ac-green': '#2D5A27',
+  'ac-red': '#A01E2E', 'ac-orange': '#C67A2E', 'ac-yellow': '#8B6F00',
+  'ac-teal': '#2C7A7B', 'ac-gray': '#4A5568', 'ac-pink': '#B83280', 'ac-indigo': '#4C51BF',
+};
+
+function ServiceChainView() {
+  const [loading, setLoading] = useState(true);
+  const [chains, setChains] = useState([]);
+  const [error, setError] = useState(null);
+  const [expandedChains, setExpandedChains] = useState(new Set());
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+
+  useEffect(() => {
+    if (!proxyUrl) { setLoading(false); setError('僅在部署版本可用'); return; }
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/chains-data');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        setChains(data.chains || []);
+      } catch (e) { setError('載入失敗：' + e.message); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const toggleChain = (i) => {
+    setExpandedChains(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+  };
+
+  const totalMembers = chains.reduce((sum, c) => sum + (c.groups || []).reduce((s, g) => s + (g.members || []).length, 0), 0);
+
+  if (loading) return <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>載入產業服務鏈⋯</div>;
+  if (error) return <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>{error}</div>;
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">SERVICE CHAINS</div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          產業 <span style={{ color: '#6B4C8A' }}>服務鏈</span>
+        </h2>
+        <div className="text-sm text-stone-500">{chains.length} 條服務鏈 · {totalMembers} 位會員</div>
+      </div>
+      <div className="space-y-2">
+        {chains.map((chain, ci) => {
+          const color = CHAIN_COLORS[chain.ac] || '#4A5568';
+          const expanded = expandedChains.has(ci);
+          const memberCount = (chain.groups || []).reduce((s, g) => s + (g.members || []).length, 0);
+          return (
+            <div key={ci} className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+              <button onClick={() => toggleChain(ci)}
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-stone-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
+                  <div>
+                    <div className="text-sm font-bold" style={{ color: '#1A1414' }}>{chain.name}</div>
+                    {chain.aud && <div className="text-[11px] text-stone-500">{chain.aud}</div>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-stone-500">{memberCount}人</span>
+                  {expanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+                </div>
+              </button>
+              {expanded && (
+                <div className="border-t border-stone-100 px-4 py-3">
+                  {(chain.groups || []).map((group, gi) => (
+                    <div key={gi} className="mb-3 last:mb-0">
+                      <div className="text-xs font-semibold mb-1.5" style={{ color }}>{group.label}（{(group.members || []).length}人）</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(group.members || []).map(([name, industry], mi) => (
+                          <span key={mi} className="inline-flex items-baseline gap-1 px-2 py-1 text-xs rounded" style={{ background: color + '10', color }}>
+                            <span className="font-medium">{name}</span>
+                            <span className="text-[10px] opacity-70">{industry}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── 服務鏈管理（Admin） ───
+function ServiceChainEditor({ proxyUrl, headers, showToast }) {
+  const [loading, setLoading] = useState(true);
+  const [chainsData, setChainsData] = useState(null);
+  const [edited, setEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newMember, setNewMember] = useState({});
+
+  const fetchChains = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/chains-data');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      setChainsData(await res.json());
+      setEdited(false);
+    } catch (e) { showToast('載入失敗：' + e.message, 'error'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchChains(); }, []);
+
+  const saveChains = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/chains-data', {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(chainsData),
+      });
+      if (res.ok) { showToast('✅ 服務鏈已儲存（同步至服務鏈網站）'); setEdited(false); }
+      else showToast('儲存失敗', 'error');
+    } catch (e) { showToast('儲存失敗：' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const removeMember = (chainIdx, groupIdx, memberIdx) => {
+    const next = JSON.parse(JSON.stringify(chainsData));
+    next.chains[chainIdx].groups[groupIdx].members.splice(memberIdx, 1);
+    setChainsData(next); setEdited(true);
+  };
+
+  const addMember = (chainIdx, groupIdx) => {
+    const key = `${chainIdx}-${groupIdx}`;
+    const val = (newMember[key] || '').trim();
+    if (!val) return;
+    const parts = val.split(/[,，/／]/).map(s => s.trim()).filter(s => s);
+    const name = parts[0] || val;
+    const industry = parts[1] || '';
+    const next = JSON.parse(JSON.stringify(chainsData));
+    next.chains[chainIdx].groups[groupIdx].members.push([name, industry]);
+    setChainsData(next); setEdited(true);
+    setNewMember({ ...newMember, [key]: '' });
+  };
+
+  const moveMember = (fromChain, fromGroup, memberIdx, toChain, toGroup) => {
+    const next = JSON.parse(JSON.stringify(chainsData));
+    const member = next.chains[fromChain].groups[fromGroup].members.splice(memberIdx, 1)[0];
+    next.chains[toChain].groups[toGroup].members.push(member);
+    setChainsData(next); setEdited(true);
+  };
+
+  if (loading) return <div className="text-sm text-stone-400 py-8 text-center">載入中⋯</div>;
+  if (!chainsData || !chainsData.chains) return <div className="text-sm text-stone-400 py-8 text-center">無服務鏈資料</div>;
+
+  // Build move targets
+  const moveTargets = [];
+  chainsData.chains.forEach((c, ci) => {
+    (c.groups || []).forEach((g, gi) => {
+      moveTargets.push({ ci, gi, label: `${c.name} → ${g.label}` });
+    });
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-stone-500">編輯後自動同步至 <a href="https://arthurkuo42-star.github.io/futding-chains/" target="_blank" className="underline">服務鏈網站</a></div>
+        {edited && (
+          <button onClick={saveChains} disabled={saving}
+            className="px-4 py-1.5 text-sm text-white rounded-md font-semibold disabled:opacity-50" style={{ background: '#6B4C8A' }}>
+            {saving ? '儲存中⋯' : '💾 儲存變更'}
+          </button>
+        )}
+      </div>
+      <div className="space-y-3">
+        {chainsData.chains.map((chain, ci) => {
+          const color = CHAIN_COLORS[chain.ac] || '#4A5568';
+          return (
+            <div key={ci} className="bg-white rounded-lg border border-stone-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full" style={{ background: color }} />
+                <div className="text-sm font-bold">{chain.name}</div>
+              </div>
+              {(chain.groups || []).map((group, gi) => (
+                <div key={gi} className="mb-3 last:mb-0 pl-2 border-l-2" style={{ borderColor: color + '40' }}>
+                  <div className="text-xs font-semibold mb-1.5" style={{ color }}>{group.label}（{(group.members || []).length}人）</div>
+                  <div className="space-y-1 mb-2">
+                    {(group.members || []).map(([name, industry], mi) => (
+                      <div key={mi} className="flex items-center gap-2 py-1 px-2 rounded bg-stone-50 text-sm">
+                        <span className="flex-1">{name} <span className="text-xs text-stone-400">{industry}</span></span>
+                        <select defaultValue="" onChange={e => {
+                          if (!e.target.value) return;
+                          const [tc, tg] = e.target.value.split('-').map(Number);
+                          moveMember(ci, gi, mi, tc, tg);
+                          e.target.value = '';
+                        }} className="text-[10px] border border-stone-200 rounded px-1 py-0.5 bg-white text-stone-500 max-w-[120px]">
+                          <option value="" disabled>移至⋯</option>
+                          {moveTargets.filter(t => !(t.ci === ci && t.gi === gi)).map(t => (
+                            <option key={`${t.ci}-${t.gi}`} value={`${t.ci}-${t.gi}`}>{t.label}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => removeMember(ci, gi, mi)} className="text-stone-400 hover:text-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" placeholder="新增：姓名，行業" value={newMember[`${ci}-${gi}`] || ''}
+                      onChange={e => setNewMember({ ...newMember, [`${ci}-${gi}`]: e.target.value })}
+                      onKeyDown={e => e.key === 'Enter' && addMember(ci, gi)}
+                      className="flex-1 px-2 py-1 text-xs border border-stone-200 rounded" />
+                    <button onClick={() => addMember(ci, gi)} className="px-2 py-1 text-xs text-white rounded" style={{ background: color }}>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
