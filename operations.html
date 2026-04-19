@@ -68,6 +68,7 @@ const BookOpen = (p) => React.createElement(IconWrap, { ...p, children: '<path d
 const GraduationCap = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>' });
 const Award = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>' });
 const Target = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' });
+const Eye = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' });
 const Coffee = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' });
 const Camera = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' });
 const CheckSquare = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' });
@@ -2153,9 +2154,18 @@ function Dashboard({ meetings, groups, members, mentees = [], currentUserId }) {
 }
 
 // ============ 主 App ============
+function getInitialTab() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab");
+    if (t === "meetings" || t === "mentorship" || t === "groups") return t;
+  } catch {}
+  return "meetings";
+}
+
 function App() {
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("meetings");
+  const [tab, setTab] = useState(getInitialTab);
   const [groups, setGroups] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [members, setMembers] = useState([]);
@@ -2241,43 +2251,58 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      {/* 頂部 */}
-      <header className="bg-gradient-to-r from-[#8B1A1A] to-[#6d1414] text-white sticky top-0 z-30 shadow">
-        <div className="max-w-5xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-[#B8860B]" />
-              <div>
-                <h1 className="text-lg font-bold leading-tight">BNI 富鼎分會 · 運營台</h1>
-                <p className="text-[11px] text-white/70">組聚 · 導生 · 演講追蹤</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href="index.html" className="text-xs text-white/80 hover:text-white border border-white/20 rounded-lg px-2 py-1 hidden sm:inline">← 主站</a>
-              <select value={currentUserId || ""} onChange={e => setCurrentUserId(e.target.value || null)}
-                className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-white">
-                <option value="">（切換身份）</option>
-                {members.map(m => <option key={m.id} value={m.id} className="text-stone-800">{m.name}</option>)}
-              </select>
-            </div>
+      {/* 頂部 ─ 視覺與 index.html 一致 */}
+      <header className="border-b-2" style={{ borderColor: '#A01E2E', background: 'white' }}>
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] tracking-[0.3em] text-stone-500 mb-1">BNI · CHAPTER ASSISTANT</div>
+            <h1 className="text-xl md:text-2xl font-bold" style={{ color: '#1A1414' }}>
+              富鼎分會 <span className="text-stone-400 mx-1">·</span> <span style={{ color: '#A01E2E' }}>分會助理</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={currentUserId || ""} onChange={e => setCurrentUserId(e.target.value || null)}
+              className="bg-white border border-stone-200 rounded-md px-2 py-1.5 text-xs text-stone-700">
+              <option value="">（切換身份）</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
           </div>
         </div>
-        <div className="max-w-5xl mx-auto px-2 flex overflow-x-auto">
+        {/* Tab 列 ─ 前 4 個連回主站、後 3 個為運營台內部 */}
+        <div className="max-w-7xl mx-auto px-4 md:px-6 pb-3 flex items-center gap-1 md:gap-2 flex-wrap">
           {[
-            { k: "meetings", l: "組聚", i: <FileText className="w-4 h-4" /> },
-            { k: "mentorship", l: "導生", i: <GraduationCap className="w-4 h-4" /> },
-            { k: "dashboard", l: "儀表板", i: <BarChart3 className="w-4 h-4" /> },
-            { k: "groups", l: "小組", i: <Users className="w-4 h-4" /> },
+            { href: "index.html?view=kpi", l: "紅綠燈", i: <Target className="w-4 h-4" />, ext: true },
+            { href: "index.html?view=dashboard", l: "演講", i: <Eye className="w-4 h-4" />, ext: true },
+            { href: "index.html?view=coffee", l: "咖啡", i: <Coffee className="w-4 h-4" />, ext: true },
           ].map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition whitespace-nowrap ${tab === t.k ? "border-[#B8860B] text-white font-semibold" : "border-transparent text-white/70 hover:text-white"}`}>
-              {t.i}{t.l}
+            <a key={t.href} href={t.href}
+              className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">
+              {t.i}<span className="hidden md:inline">{t.l}</span>
+            </a>
+          ))}
+          {[
+            { k: "meetings", l: "組聚", i: <FileText className="w-4 h-4" />, color: "#B8860B" },
+            { k: "mentorship", l: "導生", i: <GraduationCap className="w-4 h-4" />, color: "#8B1A1A" },
+          ].map(t => (
+            <button key={t.k} onClick={() => { setTab(t.k); try { window.history.replaceState({}, '', '?tab=' + t.k); } catch {} }}
+              className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${tab === t.k ? "text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"}`}
+              style={tab === t.k ? { background: t.color } : {}}>
+              {t.i}<span className="hidden md:inline">{t.l}</span>
             </button>
           ))}
+          <a href="index.html?view=chains"
+            className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">
+            <Users className="w-4 h-4" /><span className="hidden md:inline">服務鏈</span>
+          </a>
+          <button onClick={() => { setTab("groups"); try { window.history.replaceState({}, '', '?tab=groups'); } catch {} }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${tab === "groups" ? "text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"}`}
+            style={tab === "groups" ? { background: '#475569' } : {}}>
+            <Settings className="w-4 h-4" /><span className="hidden md:inline">行政小組</span>
+          </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-5">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-5">
         {tab === "meetings" && (
           <div>
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -2313,8 +2338,14 @@ function App() {
           </div>
         )}
 
-        {tab === "mentorship" && <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} />}
-        {tab === "dashboard" && <Dashboard meetings={meetings} groups={groups} members={members} mentees={mentees} currentUserId={currentUserId} />}
+        {tab === "mentorship" && (
+          <div className="space-y-6">
+            <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} />
+            <div className="border-t border-stone-200 pt-6">
+              <Dashboard meetings={meetings} groups={groups} members={members} mentees={mentees} currentUserId={currentUserId} />
+            </div>
+          </div>
+        )}
         {tab === "groups" && <GroupsView groups={groups} setGroups={setGroups} members={members} meetings={meetings} />}
       </main>
 
