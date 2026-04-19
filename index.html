@@ -741,25 +741,6 @@ function SlotDisplay({ label, slot, memberById, taskTemplate, meetingDate, perso
   const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
   const helper = slot.helperId ? memberById[slot.helperId] : null;
 
-  const today = new Date();
-  const daysDiff = daysBetween(today, meetingDate);
-  const weeksUntilSpeech = Math.max(0, Math.ceil(daysDiff / 7));
-
-  // 當前應該要完成的任務（weekBefore 大於等於 weeksUntilSpeech 的都應完成）
-  const tasksWithStatus = taskTemplate.map(t => {
-    const taskData = slot.tasks?.[t.id] || {};
-    const done = taskData.done || false;
-    const note = taskData.note || '';
-    const shouldBeDone = t.weekBefore >= weeksUntilSpeech;
-    const overdue = shouldBeDone && !done;
-    return { ...t, done, note, shouldBeDone, overdue };
-  });
-
-  const completedCount = tasksWithStatus.filter(t => t.done).length;
-  const totalCount = tasksWithStatus.length;
-  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-  const overdueCount = tasksWithStatus.filter(t => t.overdue).length;
-
   // 個人角色判斷
   const myRole = personalMemberId
     ? (slot.speakerId === personalMemberId ? 'speaker' : slot.helperId === personalMemberId ? 'helper' : null)
@@ -798,12 +779,6 @@ function SlotDisplay({ label, slot, memberById, taskTemplate, meetingDate, perso
             </div>
           )}
         </div>
-        {overdueCount > 0 && (
-          <div className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-            <AlertCircle className="w-3 h-3" />
-            {overdueCount} 項落後
-          </div>
-        )}
       </div>
 
       {/* 演講人 & 小幫手 */}
@@ -833,133 +808,32 @@ function SlotDisplay({ label, slot, memberById, taskTemplate, meetingDate, perso
       </div>
 
       {/* 主題 */}
-      <div className="mb-4 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
+      <div className="mb-3 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
         <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>演講主題</div>
         <div className="text-sm font-medium" style={{ color: '#1A1414' }}>
           {slot.topic || <span className="text-stone-400 italic" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>尚未確認主題</span>}
         </div>
       </div>
 
-      {/* 雙軌分組顯示 */}
-      {['content', 'coffee'].map(trackKey => {
-        // 咖啡會議軌：從 coffeeMeetings 動態計算（不走 taskTemplate）
-        if (trackKey === 'coffee') {
-          const mySelfCoffees = (coffeeMeetings || []).filter(cm => cm.inviterId === slot.speakerId);
-          const doneCount = mySelfCoffees.filter(cm => cm.meetingStatus === 'done').length;
-          const targetCount = coffeeTarget || 5;
-          const trackProgress = targetCount > 0 ? Math.min(100, Math.round((doneCount / targetCount) * 100)) : 0;
-          const confirmedCount = mySelfCoffees.filter(cm => cm.attendanceWillingness === 'confirmed').length;
-
-          return (
-            <div key={trackKey} className="mb-5">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <Coffee className="w-3.5 h-3.5" style={{ color: '#8B6F47' }} />
-                  <div className="text-xs font-semibold" style={{ fontFamily: "'Noto Sans TC', sans-serif", color: '#1A1414' }}>
-                    咖啡會議邀約
-                  </div>
-                </div>
-                <div className="text-xs text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-                  完成 {doneCount} / 目標 {targetCount}
-                  {confirmedCount > 0 && <span className="ml-1" style={{ color: '#4A6741' }}>· 確認出席 {confirmedCount}</span>}
-                </div>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: '#F0EBE3' }}>
-                <div className="h-full transition-all" style={{ width: `${trackProgress}%`, background: '#8B6F47' }} />
-              </div>
-              {mySelfCoffees.length > 0 ? (
-                <div className="space-y-1">
-                  {mySelfCoffees.slice(0, 6).map(cm => (
-                    <div key={cm.id} className="flex items-center gap-2 text-sm py-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-                      {cm.meetingStatus === 'done' ? (
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#8B6F47' }} />
-                      ) : cm.meetingStatus === 'cancelled' ? (
-                        <X className="w-4 h-4 flex-shrink-0 text-stone-400" />
-                      ) : (
-                        <Coffee className="w-4 h-4 flex-shrink-0 text-stone-400" />
-                      )}
-                      <span className="flex-1 min-w-0 truncate">
-                        <span className={cm.meetingStatus === 'cancelled' ? 'line-through text-stone-400' : ''}>{cm.guestName}</span>
-                        {cm.guestIndustry && <span className="text-stone-500 ml-1 text-xs">· {cm.guestIndustry}</span>}
-                      </span>
-                      {cm.attendanceWillingness === 'confirmed' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: '#4A6741', background: '#EDF3E8' }}>願出席</span>
-                      )}
-                    </div>
-                  ))}
-                  {mySelfCoffees.length > 6 && (
-                    <div className="text-xs text-stone-400 italic pl-6">還有 {mySelfCoffees.length - 6} 筆⋯</div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-stone-400 italic py-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-                  尚未記錄咖啡會議，請至「咖啡會議」頁新增
-                </div>
-              )}
+      {/* 主力客群 */}
+      {(slot.targetAudience || slot.generalReferral) && (
+        <div className="grid grid-cols-1 gap-2 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {slot.targetAudience && (
+            <div className="p-2.5 rounded-md border border-stone-100">
+              <div className="text-[10px] text-stone-400 mb-0.5 tracking-wider">主力客群</div>
+              <div className="text-sm text-stone-700">{slot.targetAudience}</div>
             </div>
-          );
-        }
-
-        // 演講內容軌：從 taskTemplate 勾選
-        const trackTasks = tasksWithStatus.filter(t => (t.track || 'content') === trackKey);
-        if (trackTasks.length === 0) return null;
-        const trackDone = trackTasks.filter(t => t.done).length;
-        const trackTotal = trackTasks.length;
-        const trackProgress = Math.round((trackDone / trackTotal) * 100);
-        const trackLabel = '演講準備';
-        const trackColor = '#A01E2E';
-        const TrackIcon = Presentation;
-
-        return (
-          <div key={trackKey} className="mb-5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <TrackIcon className="w-3.5 h-3.5" style={{ color: trackColor }} />
-                <div className="text-xs font-semibold" style={{ fontFamily: "'Noto Sans TC', sans-serif", color: '#1A1414' }}>
-                  {trackLabel}
-                </div>
+          )}
+          {slot.generalReferral && (
+            <div className="p-2.5 rounded-md border border-stone-100" style={{ background: '#FFFBEA' }}>
+              <div className="text-[10px] text-amber-700 mb-0.5 tracking-wider flex items-center gap-1">
+                <Lightbulb className="w-3 h-3" /> 引薦內容
               </div>
-              <div className="text-xs text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-                {trackDone} / {trackTotal} · {trackProgress}%
-              </div>
+              <div className="text-sm text-stone-700">{slot.generalReferral}</div>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: '#F0EBE3' }}>
-              <div
-                className="h-full transition-all"
-                style={{ width: `${trackProgress}%`, background: trackColor }}
-              />
-            </div>
-            <div className="space-y-1">
-              {trackTasks.map(task => {
-                const Icon = ICON_MAP[task.icon] || Circle;
-                return (
-                  <div
-                    key={task.id}
-                    className={`text-sm py-0.5 ${task.done ? 'text-stone-400' : task.overdue ? 'text-amber-700' : 'text-stone-700'}`}
-                    style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      {task.done ? (
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: trackColor }} />
-                      ) : (
-                        <Icon className={`w-4 h-4 flex-shrink-0 ${task.overdue ? 'text-amber-600' : 'text-stone-400'}`} />
-                      )}
-                      <span className={`flex-1 ${task.done ? 'line-through' : ''}`}>{task.name}</span>
-                      {task.note && <MessageSquare className="w-3 h-3 text-amber-600 flex-shrink-0" />}
-                      <span className="text-[10px] text-stone-400">第-{task.weekBefore}週</span>
-                    </div>
-                    {task.note && (
-                      <div className="ml-6 mt-1 text-xs text-stone-600 px-2 py-1 rounded bg-amber-50 border-l-2 border-amber-300">
-                        💬 {task.note}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1281,6 +1155,21 @@ function ProgressManager({ data, saveData }) {
     saveData(next);
   };
 
+  // 編輯 slot 層級的欄位（主題、主力客群、引薦…）
+  const updateSlotField = (meetingId, slotKey, field, value) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        return {
+          ...m,
+          [slotKey]: { ...m[slotKey], [field]: value }
+        };
+      })
+    };
+    saveData(next);
+  };
+
   const toggleNoteExpand = (key) => {
     setExpandedNotes(prev => {
       const next = new Set(prev);
@@ -1339,6 +1228,16 @@ function ProgressManager({ data, saveData }) {
           const slot = selected[slotKey];
           const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
           const helper = slot.helperId ? memberById[slot.helperId] : null;
+
+          // 計算進度條
+          const contentTasks = data.taskTemplate.filter(t => (t.track || 'content') === 'content');
+          const contentDone = contentTasks.filter(t => slot.tasks?.[t.id]?.done).length;
+          const contentPct = contentTasks.length ? Math.round(contentDone / contentTasks.length * 100) : 0;
+          const mySelfCoffees = (data.coffeeMeetings || []).filter(cm => cm.inviterId === slot.speakerId);
+          const coffeeDone = mySelfCoffees.filter(cm => cm.meetingStatus === 'done').length;
+          const coffeeTarget = data.coffeeTargetPerSpeech || 5;
+          const coffeePct = Math.min(100, Math.round(coffeeDone / coffeeTarget * 100));
+
           return (
             <div key={slotKey} className="bg-white rounded-lg border border-stone-200 p-4">
               <div className="text-xs font-semibold text-stone-600 mb-2">
@@ -1346,22 +1245,94 @@ function ProgressManager({ data, saveData }) {
               </div>
               {speaker ? (
                 <>
-                  <div className="mb-4 flex flex-wrap gap-3">
-                    <div>
-                      <div className="text-[10px] text-stone-400">演講人</div>
-                      <div className="font-bold text-base" style={{ color: '#1A1414' }}>{speaker.name}</div>
+                  {/* 演講人儀表板頭部 */}
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <div className="font-bold text-lg" style={{ color: '#1A1414' }}>{speaker.name}</div>
+                      <div className="text-xs text-stone-500">{speaker.industry || ''}</div>
                     </div>
-                    {helper && (
+
+                    {/* 進度條 */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
                       <div>
-                        <div className="text-[10px] text-stone-400">小幫手</div>
-                        <div className="font-semibold text-sm" style={{ color: '#1A1414' }}>{helper.name}</div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-500 mb-0.5">
+                          <span className="flex items-center gap-1"><Presentation className="w-3 h-3" style={{ color: '#A01E2E' }} />簡報準備</span>
+                          <span>{contentDone}/{contentTasks.length} · {contentPct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+                          <div className="h-full transition-all" style={{ width: contentPct + '%', background: '#A01E2E' }} />
+                        </div>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] text-stone-400">主題</div>
-                      <div className="text-sm truncate">{slot.topic || <span className="text-stone-400">未定</span>}</div>
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-500 mb-0.5">
+                          <span className="flex items-center gap-1"><Coffee className="w-3 h-3" style={{ color: '#8B6F47' }} />咖啡會議</span>
+                          <span>{coffeeDone}/{coffeeTarget} · {coffeePct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+                          <div className="h-full transition-all" style={{ width: coffeePct + '%', background: '#8B6F47' }} />
+                        </div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* 演講人詳細資料編輯 */}
+                  <div className="mb-4 space-y-2 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">演講主題</label>
+                      <input type="text" value={slot.topic || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'topic', e.target.value)}
+                        placeholder="例：商標異議實戰案例"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">主力客群</label>
+                      <input type="text" value={slot.targetAudience || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'targetAudience', e.target.value)}
+                        placeholder="例：中小企業主、品牌持有人"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">想要合作的對象</label>
+                      <input type="text" value={slot.desiredPartners || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'desiredPartners', e.target.value)}
+                        placeholder="例：數位行銷顧問、商標事務所"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div className="pt-1 border-t border-stone-200/60">
+                      <div className="text-[10px] text-amber-700 tracking-wider mb-1 flex items-center gap-1">
+                        <Lightbulb className="w-3 h-3" /> 引薦金字塔
+                      </div>
+                      <div className="space-y-1.5">
+                        <div>
+                          <label className="text-[10px] text-stone-500">一般引薦</label>
+                          <input type="text" value={slot.generalReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'generalReferral', e.target.value)}
+                            placeholder="門檻低、容易遇到的引薦類型"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-stone-500">理想引薦</label>
+                          <input type="text" value={slot.idealReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'idealReferral', e.target.value)}
+                            placeholder="有難度但可行的引薦"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-stone-500">夢幻引薦</label>
+                          <input type="text" value={slot.dreamReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'dreamReferral', e.target.value)}
+                            placeholder="夢想中的大客戶類型"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                      </div>
+                    </div>
+                    {helper && (
+                      <div className="text-xs text-stone-500 pt-1 border-t border-stone-200/60">
+                        小幫手：<span className="font-semibold text-stone-700">{helper.name}</span>
+                      </div>
+                    )}
+                  </div>
+
                   {['content', 'coffee'].map(trackKey => {
                     const trackTasks = data.taskTemplate.filter(t => (t.track || 'content') === trackKey);
                     if (trackTasks.length === 0) return null;
