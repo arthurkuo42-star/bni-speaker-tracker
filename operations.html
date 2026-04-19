@@ -133,6 +133,30 @@ const STORAGE_KEYS = {
   CURRENT_USER: null,                        // 身份用 localStorage 本地保存
 };
 
+// ============ 主站咖啡會議同步（安全寫入 bni_speaker_tracker_v5）============
+// 只動 coffeeMeetings 欄位，其他主檔資料原封不動
+// updateFn: (currentCoffeeMeetings) => newCoffeeMeetings
+async function syncMainCoffeeMeetings(updateFn) {
+  // 1. 先讀最新主站資料
+  const res = await apiClient.get("bni_speaker_tracker_v5");
+  if (!res || !res.value) {
+    throw new Error("無法讀取主站資料");
+  }
+  let mainData;
+  try { mainData = JSON.parse(res.value); }
+  catch (e) { throw new Error("主站資料解析失敗"); }
+  if (!mainData || typeof mainData !== "object") throw new Error("主站資料格式錯誤");
+
+  // 2. 套用更新（僅 coffeeMeetings 欄位）
+  const current = Array.isArray(mainData.coffeeMeetings) ? mainData.coffeeMeetings : [];
+  const updated = updateFn(current);
+  if (!Array.isArray(updated)) throw new Error("updateFn 必須回傳陣列");
+
+  // 3. 寫回（其他欄位保持原樣）
+  const newMain = { ...mainData, coffeeMeetings: updated, updatedAt: new Date().toISOString() };
+  await apiClient.set("bni_speaker_tracker_v5", JSON.stringify(newMain));
+}
+
 // ============ 小組顏色 palette ============
 const GROUP_COLORS = ["#B8860B", "#8B1A1A", "#2D5A27", "#6B4C8A", "#8B6F47", "#1E5A8A", "#A0522D", "#556B2F"];
 
@@ -1352,9 +1376,39 @@ function MenteeCard({ mentee, members, onOpen }) {
   );
 }
 
-function OneOnOneMatrix({ mentee, members, currentUserId, onToggle, readOnly, isAdmin, editMode }) {
+function OneOnOneMatrix({ mentee, members, currentUserId, onUpdate, readOnly, isAdmin, editMode }) {
   const targets = getMenteeAllTargets(mentee);
   const getM = (id) => members.find(m => m.id === id);
+  const [local, setLocal] = useState(mentee.oneOnOnes);
+  useEffect(() => { setLocal(mentee.oneOnOnes); }, [mentee.id, mentee.oneOnOnes]);
+  const dirty = JSON.stringify(local) !== JSON.stringify(mentee.oneOnOnes);
+
+  // 計算本地變更數
+  const dirtyCount = useMemo(() => {
+    let cnt = 0;
+    const all = new Set([...Object.keys(local), ...Object.keys(mentee.oneOnOnes)]);
+    all.forEach(tid => {
+      ONE_ON_ONE_TYPES.forEach(t => {
+        const a = local[tid]?.[t.key]?.done || false;
+        const b = mentee.oneOnOnes[tid]?.[t.key]?.done || false;
+        if (a !== b) cnt++;
+      });
+    });
+    return cnt;
+  }, [local, mentee.oneOnOnes]);
+
+  const toggle = (targetId, typeKey) => {
+    const cur = local[targetId]?.[typeKey];
+    const newVal = cur?.done ? { done: false }
+      : { done: true, doneBy: currentUserId, doneAt: new Date().toISOString() };
+    setLocal(p => ({
+      ...p,
+      [targetId]: { ...(p[targetId] || {}), [typeKey]: newVal },
+    }));
+  };
+  const submit = () => onUpdate({ ...mentee, oneOnOnes: local });
+  const reset = () => setLocal(mentee.oneOnOnes);
+
   const grouped = [
     { label: "核心團隊", items: targets.filter(t => t.group === "core") },
     { label: "導師團隊", items: targets.filter(t => t.group === "mentor") },
@@ -1368,7 +1422,8 @@ function OneOnOneMatrix({ mentee, members, currentUserId, onToggle, readOnly, is
             {sec.items.length === 0 && <div className="text-sm text-stone-400 italic text-center py-3">尚未設定</div>}
             {sec.items.map((tgt, i) => {
               const m = getM(tgt.memberId);
-              const rec = mentee.oneOnOnes[tgt.memberId] || {};
+              const rec = local[tgt.memberId] || {};
+              const origRec = mentee.oneOnOnes[tgt.memberId] || {};
               const canCheck = !readOnly && editMode && canCheckOneOnOne(mentee, currentUserId, tgt.memberId, isAdmin);
               const isMe = currentUserId === tgt.memberId;
               return (
@@ -1381,14 +1436,17 @@ function OneOnOneMatrix({ mentee, members, currentUserId, onToggle, readOnly, is
                   <div className="grid grid-cols-5 gap-1">
                     {ONE_ON_ONE_TYPES.map(t => {
                       const cell = rec[t.key] || { done: false };
+                      const origDone = origRec[t.key]?.done || false;
+                      const pendingChange = cell.done !== origDone;
                       const byM = getM(cell.doneBy);
                       return (
                         <button key={t.key} type="button"
                           disabled={!canCheck}
-                          onClick={() => onToggle(mentee.id, tgt.memberId, t.key)}
+                          onClick={() => toggle(tgt.memberId, t.key)}
                           title={cell.done && byM ? `${byM.name} 簽 ${cell.doneAt ? fmtDate(cell.doneAt) : ""}` : (canCheck ? "點擊打勾" : "無權限")}
-                          className={`py-1.5 rounded-md border text-[10px] font-medium transition flex flex-col items-center gap-0.5
+                          className={`py-1.5 rounded-md border text-[10px] font-medium transition flex flex-col items-center gap-0.5 relative
                             ${cell.done ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-white border-stone-200 text-stone-400"}
+                            ${pendingChange ? "ring-2 ring-amber-400 ring-offset-1" : ""}
                             ${canCheck ? "hover:border-emerald-400" : "opacity-70 cursor-not-allowed"}`}>
                           {cell.done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
                           <span className="leading-none">{t.short}</span>
@@ -1402,6 +1460,7 @@ function OneOnOneMatrix({ mentee, members, currentUserId, onToggle, readOnly, is
           </div>
         </div>
       ))}
+      {dirty && editMode && !readOnly && <SubmitBar onSubmit={submit} onReset={reset} label={`一對一矩陣有 ${dirtyCount} 項變更待儲存`} />}
     </div>
   );
 }
@@ -1502,16 +1561,90 @@ function TrainingSection({ mentee, onUpdate, readOnly, editMode }) {
 
 function GuestSection({ mentee, onUpdate, readOnly, editMode, kind = "guests" }) {
   const [local, setLocal] = useState(mentee[kind]);
+  const [syncing, setSyncing] = useState(false);
   useEffect(() => { setLocal(mentee[kind]); }, [mentee.id, kind, mentee[kind]]);
   const dirty = JSON.stringify(local) !== JSON.stringify(mentee[kind]);
   const add = () => setLocal([...local, { id: uid("g"), date: new Date().toISOString().slice(0, 10), guestName: "", industry: "" }]);
   const upd = (idx, k, v) => { const nl = [...local]; nl[idx] = { ...nl[idx], [k]: v }; setLocal(nl); };
   const rm = (idx) => setLocal(local.filter((_, i) => i !== idx));
-  const submit = () => onUpdate({ ...mentee, [kind]: local });
   const reset = () => setLocal(mentee[kind]);
   const canEditNow = !readOnly && editMode;
+
+  // 單向同步到主站 coffeeMeetings
+  // kind === "guests"：已出席例會（done + confirmed + attendedAsGuest=true）
+  // kind === "coffeeMeetings"：邀約中（pending + unknown）
+  const buildSyncPayload = (item) => {
+    if (kind === "guests") {
+      return {
+        meetingStatus: "done",
+        attendanceWillingness: "confirmed",
+        attendedAsGuest: true,
+        meetingTime: item.date || "",
+      };
+    }
+    return {
+      meetingStatus: "pending",
+      attendanceWillingness: "unknown",
+      attendedAsGuest: false,
+      meetingTime: item.date || "",
+    };
+  };
+
+  const submit = async () => {
+    // 先寫新生端（永遠要成功）
+    onUpdate({ ...mentee, [kind]: local });
+
+    // 嘗試同步到主站
+    setSyncing(true);
+    try {
+      await syncMainCoffeeMeetings((currentMain) => {
+        // 找出本區塊相關的既有記錄（用 sourceMenteeId + sourceKind + sourceItemId 追溯）
+        const relevantKey = (cm) => cm.sourceMenteeId === mentee.id && cm.sourceKind === kind;
+        const otherCms = currentMain.filter(cm => !relevantKey(cm));
+        // 重建：以 local 為準
+        const syncedCms = local.map(item => {
+          const payload = buildSyncPayload(item);
+          // 若主站已有對應記錄 → 保留它的狀態更新欄位（轉換狀態、備註），只更新基本欄位
+          const existing = currentMain.find(cm => cm.sourceItemId === item.id && relevantKey(cm));
+          if (existing) {
+            return {
+              ...existing,
+              guestName: item.guestName || "",
+              guestIndustry: item.industry || "",
+              meetingTime: item.date || existing.meetingTime,
+            };
+          }
+          // 新建
+          return {
+            id: "cm_sync_" + item.id,
+            guestName: item.guestName || "",
+            guestIndustry: item.industry || "",
+            inviterId: mentee.memberId,
+            ...payload,
+            conversionStatus: "none",
+            notes: kind === "guests" ? "[導生來賓] " + (mentee.representativeIndustry || "") : "[導生主邀咖啡] " + (mentee.representativeIndustry || ""),
+            sourceMenteeId: mentee.id,
+            sourceKind: kind,
+            sourceItemId: item.id,
+            createdAt: new Date().toISOString(),
+          };
+        });
+        return [...otherCms, ...syncedCms];
+      });
+    } catch (e) {
+      console.error("[sync main coffee meetings]", e);
+      alert("已儲存至導生資料，但同步到主站咖啡會議失敗：\n" + e.message + "\n可稍後手動重試。");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const title = kind === "guests" ? "新增一筆即自動標記「已出席例會」並同步主站" : "新增即同步主站咖啡會議為「邀約中」";
   return (
     <div>
+      <div className="text-[11px] text-stone-500 mb-1.5 flex items-center gap-1">
+        <AlertCircle className="w-3 h-3" />{title}
+      </div>
       <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
         {local.length === 0 && <div className="text-sm text-stone-400 italic text-center py-6">尚無紀錄</div>}
         {local.map((g, i) => (
@@ -1531,7 +1664,8 @@ function GuestSection({ mentee, onUpdate, readOnly, editMode, kind = "guests" })
         ))}
       </div>
       {canEditNow && <div className="mt-2"><Btn variant="outline" size="sm" onClick={add}><Plus className="w-3.5 h-3.5" />新增</Btn></div>}
-      {dirty && canEditNow && <SubmitBar onSubmit={submit} onReset={reset} />}
+      {dirty && canEditNow && <SubmitBar onSubmit={submit} onReset={reset}
+        label={syncing ? "儲存並同步中..." : "此區有未儲存變更（儲存後會同步主站咖啡會議）"} />}
     </div>
   );
 }
@@ -1712,24 +1846,6 @@ function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, onUp
   const menteeMember = getM(mentee.memberId);
   const toggleSec = (k) => setSectionOpen(p => ({ ...p, [k]: !p[k] }));
 
-  const toggleOneOnOne = (mId, targetId, typeKey) => {
-    const cur = mentee.oneOnOnes[targetId]?.[typeKey];
-    const targetName = getM(targetId)?.name || "?";
-    const typeLabel = ONE_ON_ONE_TYPES.find(t => t.key === typeKey)?.label || typeKey;
-    // 打勾/取消前的 confirm
-    const msg = cur?.done
-      ? `確定要「取消」勾選「${targetName} · ${typeLabel}」嗎？`
-      : `確定「${targetName} · ${typeLabel}」已完成嗎？\n(此動作會立即寫入，並記錄簽名)`;
-    if (!confirm(msg)) return;
-    const newVal = cur?.done ? { done: false }
-      : { done: true, doneBy: currentUserId, doneAt: new Date().toISOString() };
-    const newOnes = {
-      ...mentee.oneOnOnes,
-      [targetId]: { ...(mentee.oneOnOnes[targetId] || {}), [typeKey]: newVal },
-    };
-    onUpdate({ ...mentee, oneOnOnes: newOnes });
-  };
-
   const markGraduated = () => {
     if (mentee.graduationDate) {
       if (!confirm("取消畢業狀態？")) return;
@@ -1818,7 +1934,7 @@ function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, onUp
 
       <Section k="oneOnOne" title="核心一對一矩陣" icon={<Users className="w-4 h-4 text-[#db2777]" />}
         right={<Tag color="#db2777">{s.oneOnOneDone}/{s.oneOnOneTotal}</Tag>}>
-        <OneOnOneMatrix mentee={mentee} members={members} currentUserId={currentUserId} onToggle={toggleOneOnOne} readOnly={readOnly} isAdmin={isAdmin} editMode={editMode} />
+        <OneOnOneMatrix mentee={mentee} members={members} currentUserId={currentUserId} onUpdate={onUpdate} readOnly={readOnly} isAdmin={isAdmin} editMode={editMode} />
       </Section>
 
       <Section k="passport" title="會員護照 W0–W8" icon={<Target className="w-4 h-4 text-[#B8860B]" />}
