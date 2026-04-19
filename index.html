@@ -1733,12 +1733,56 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
   const [filter, setFilter] = useState({ inviterId: '', status: '', conversion: '', search: '' });
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({});
+  const [groupMeetings, setGroupMeetings] = useState([]);       // 從運營台讀組聚
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
+  const [selectedOffers, setSelectedOffers] = useState(new Set());
 
   const memberById = useMemo(() => {
     const map = {};
     data.members.forEach(m => { map[m.id] = m; });
     return map;
   }, [data.members]);
+
+  // 首次載入：讀運營台組聚資料，抓所有 pending 的引薦意向
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get('bni_group_meetings_v1', true);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          if (Array.isArray(parsed)) setGroupMeetings(parsed);
+        }
+      } catch (e) { console.error('[load group meetings]', e); }
+    })();
+  }, []);
+
+  // 從 groupMeetings 計算所有可匯入的 offer
+  const importableOffers = useMemo(() => {
+    const results = [];
+    (groupMeetings || []).forEach(gm => {
+      const speakerId = gm.speaker?.memberId;
+      if (!speakerId) return;              // 沒主講人的組聚跳過
+      (gm.neededConnections || []).forEach(nc => {
+        (nc.offers || []).forEach(of => {
+          if (of.status === 'imported') return;  // 已匯入跳過
+          if (!of.contactName?.trim()) return;    // 沒填姓名跳過
+          results.push({
+            compositeId: gm.id + ':' + nc.id + ':' + of.id,  // 用於 checkbox
+            meetingId: gm.id,
+            ncId: nc.id,
+            offerId: of.id,
+            meetingDate: gm.date,
+            speakerId,                       // 咖啡會議的 inviterId
+            introducerId: of.introducerId,
+            contactName: of.contactName,
+            contactProfession: of.contactProfession || '',
+            profileWanted: nc.profileWanted || '',
+          });
+        });
+      });
+    });
+    return results;
+  }, [groupMeetings]);
 
   const allMeetings = data.coffeeMeetings || [];
 
@@ -1827,14 +1871,86 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
     showToast('已刪除');
   };
 
+  // 將勾選的組聚 offer 匯入成 coffee meeting
+  const doImport = async () => {
+    const selected = importableOffers.filter(o => selectedOffers.has(o.compositeId));
+    if (selected.length === 0) { showToast('請先勾選要匯入的項目', 'error'); return; }
+
+    // 1. 新增 coffee meetings
+    const now = new Date().toISOString();
+    const newCms = selected.map(o => {
+      const introducer = o.introducerId ? memberById[o.introducerId] : null;
+      const note = `由 ${introducer?.name || '組員'} 引薦（${formatDate(o.meetingDate)} 組聚）`
+        + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
+      return {
+        id: `cm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        guestName: o.contactName,
+        guestIndustry: o.contactProfession || '',
+        inviterId: o.speakerId,
+        meetingTime: '',
+        meetingStatus: 'pending',               // 邀約中
+        attendanceWillingness: 'unknown',
+        conversionStatus: 'none',
+        notes: note,
+        sourceGroupMeetingId: o.meetingId,      // 追溯來源
+        sourceOfferId: o.offerId,
+        createdAt: now,
+      };
+    });
+
+    // 2. 更新主站 coffeeMeetings
+    saveData({ ...data, coffeeMeetings: [...allMeetings, ...newCms] });
+
+    // 3. 回寫組聚：把對應的 offer 標為 imported
+    const selectedKeys = new Set(selected.map(o => o.meetingId + ':' + o.ncId + ':' + o.offerId));
+    const updatedGroupMeetings = groupMeetings.map(gm => ({
+      ...gm,
+      neededConnections: (gm.neededConnections || []).map(nc => ({
+        ...nc,
+        offers: (nc.offers || []).map(of => {
+          const key = gm.id + ':' + nc.id + ':' + of.id;
+          if (!selectedKeys.has(key)) return of;
+          return { ...of, status: 'imported', importedAt: now };
+        })
+      }))
+    }));
+    try {
+      await apiClient.set('bni_group_meetings_v1', JSON.stringify(updatedGroupMeetings), true);
+      setGroupMeetings(updatedGroupMeetings);
+      showToast(`已匯入 ${selected.length} 筆引薦為咖啡會議`);
+    } catch (e) {
+      showToast('匯入成功但回寫組聚失敗，下次可能會重複顯示：' + e.message, 'error');
+    }
+
+    // 4. 關閉 modal
+    setImportPanelOpen(false);
+    setSelectedOffers(new Set());
+  };
+
   return (
     <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
-      <div className="mb-6">
-        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">COFFEE MEETING TRACKER</div>
-        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
-          咖啡會議 <span style={{ color: '#8B6F47' }}>追蹤</span>
-        </h2>
-        <div className="text-sm text-stone-500">記錄每場 121，邀約嘉賓來聽主題演講、開啟簽單機會</div>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">COFFEE MEETING TRACKER</div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+            咖啡會議 <span style={{ color: '#8B6F47' }}>追蹤</span>
+          </h2>
+          <div className="text-sm text-stone-500">記錄每場 121，邀約嘉賓來聽主題演講、開啟簽單機會</div>
+        </div>
+        {importableOffers.length > 0 && (
+          <button
+            onClick={() => { setImportPanelOpen(true); setSelectedOffers(new Set(importableOffers.map(o => o.compositeId))); }}
+            className="relative px-4 py-2.5 text-sm font-semibold text-white rounded-md shadow-sm hover:shadow-md transition-all flex items-center gap-2"
+            style={{ background: '#B8860B' }}
+            title="將組聚中的引薦意向轉為咖啡會議"
+          >
+            <Megaphone className="w-4 h-4" />
+            從組聚匯入引薦
+            <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+              {importableOffers.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* 統計 */}
@@ -1945,6 +2061,81 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
           onSave={saveMeeting}
           onClose={() => setEditingId(null)}
         />
+      )}
+
+      {/* 從組聚匯入引薦 Modal */}
+      {importPanelOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50"
+          onClick={() => setImportPanelOpen(false)}>
+          <div className="bg-white w-full max-w-3xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sm:rounded-t-2xl flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: '#1A1414' }}>從組聚匯入引薦意向</h3>
+                <div className="text-xs text-stone-500 mt-0.5">勾選要正式轉為咖啡會議的引薦（狀態會設為「邀約中」）</div>
+              </div>
+              <button onClick={() => setImportPanelOpen(false)} className="p-1.5 hover:bg-stone-100 rounded-lg">
+                <X className="w-5 h-5 text-stone-500" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-stone-100">
+                <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox"
+                    checked={selectedOffers.size === importableOffers.length && importableOffers.length > 0}
+                    onChange={e => setSelectedOffers(e.target.checked ? new Set(importableOffers.map(o => o.compositeId)) : new Set())} />
+                  <span>全選</span>
+                </label>
+                <div className="text-xs text-stone-500">已勾選 {selectedOffers.size} / {importableOffers.length}</div>
+              </div>
+
+              <div className="space-y-2">
+                {importableOffers.map(o => {
+                  const speaker = memberById[o.speakerId];
+                  const introducer = o.introducerId ? memberById[o.introducerId] : null;
+                  const checked = selectedOffers.has(o.compositeId);
+                  return (
+                    <label key={o.compositeId}
+                      className={`flex gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checked ? 'border-amber-400 bg-amber-50/40' : 'border-stone-200 hover:bg-stone-50'}`}>
+                      <input type="checkbox" checked={checked} className="mt-1"
+                        onChange={e => setSelectedOffers(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(o.compositeId); else next.delete(o.compositeId);
+                          return next;
+                        })} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-semibold text-stone-800">{o.contactName}</span>
+                          {o.contactProfession && <span className="text-xs text-stone-500">· {o.contactProfession}</span>}
+                        </div>
+                        <div className="text-xs text-stone-600 space-y-0.5">
+                          <div>
+                            主講人 <b>{speaker?.name || '未知'}</b> 將邀約
+                            {introducer && <span> · 由 <b>{introducer.name}</b> 引薦</span>}
+                          </div>
+                          {o.profileWanted && <div className="text-stone-500">原需求：{o.profileWanted}</div>}
+                          <div className="text-[10px] text-stone-400">組聚日期：{formatDate(o.meetingDate)}</div>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {importableOffers.length === 0 && (
+                  <div className="text-sm text-stone-400 text-center py-8">目前沒有待匯入的引薦意向</div>
+                )}
+              </div>
+            </div>
+            <div className="border-t border-stone-200 bg-stone-50 px-5 py-3 flex justify-end gap-2 flex-shrink-0 sm:rounded-b-2xl">
+              <button onClick={() => setImportPanelOpen(false)}
+                className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white">取消</button>
+              <button onClick={doImport} disabled={selectedOffers.size === 0}
+                className="px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40"
+                style={{ background: '#B8860B' }}>
+                匯入 {selectedOffers.size} 筆
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
