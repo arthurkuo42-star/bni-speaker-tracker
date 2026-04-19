@@ -70,6 +70,7 @@ const Award = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx
 const Target = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' });
 const Eye = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' });
 const Coffee = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' });
+const RefreshCw = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>' });
 const Camera = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' });
 const CheckSquare = (p) => React.createElement(IconWrap, { ...p, children: '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' });
 const Square = (p) => React.createElement(IconWrap, { ...p, children: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>' });
@@ -137,24 +138,35 @@ const STORAGE_KEYS = {
 // 只動 coffeeMeetings 欄位，其他主檔資料原封不動
 // updateFn: (currentCoffeeMeetings) => newCoffeeMeetings
 async function syncMainCoffeeMeetings(updateFn) {
+  console.log("[syncMainCoffeeMeetings] 開始，讀取主站資料...");
   // 1. 先讀最新主站資料
   const res = await apiClient.get("bni_speaker_tracker_v5");
+  console.log("[syncMainCoffeeMeetings] 讀到 res:", res ? `有（value 長度 ${res.value?.length ?? 'N/A'}）` : "null");
   if (!res || !res.value) {
-    throw new Error("無法讀取主站資料");
+    throw new Error("無法讀取主站資料（回傳空）");
   }
   let mainData;
-  try { mainData = JSON.parse(res.value); }
-  catch (e) { throw new Error("主站資料解析失敗"); }
-  if (!mainData || typeof mainData !== "object") throw new Error("主站資料格式錯誤");
+  try {
+    // 相容兩種：value 是字串（已 stringify）或已是物件
+    mainData = typeof res.value === "string" ? JSON.parse(res.value) : res.value;
+  } catch (e) {
+    console.error("[syncMainCoffeeMeetings] 解析失敗:", e, "前 200 字元:", String(res.value).slice(0, 200));
+    throw new Error("主站資料解析失敗: " + e.message);
+  }
+  if (!mainData || typeof mainData !== "object") throw new Error("主站資料格式錯誤（非物件）");
 
   // 2. 套用更新（僅 coffeeMeetings 欄位）
   const current = Array.isArray(mainData.coffeeMeetings) ? mainData.coffeeMeetings : [];
+  console.log("[syncMainCoffeeMeetings] 主站原有 coffeeMeetings 筆數:", current.length);
   const updated = updateFn(current);
   if (!Array.isArray(updated)) throw new Error("updateFn 必須回傳陣列");
+  console.log("[syncMainCoffeeMeetings] 更新後 coffeeMeetings 筆數:", updated.length);
 
   // 3. 寫回（其他欄位保持原樣）
   const newMain = { ...mainData, coffeeMeetings: updated, updatedAt: new Date().toISOString() };
+  console.log("[syncMainCoffeeMeetings] 寫回 bni_speaker_tracker_v5...");
   await apiClient.set("bni_speaker_tracker_v5", JSON.stringify(newMain));
+  console.log("[syncMainCoffeeMeetings] ✓ 寫回完成");
 }
 
 // ============ 小組顏色 palette ============
@@ -437,7 +449,7 @@ function getMenteeAllTargets(mentee) {
   const mentors = mentee.mentorTeam.map(m => ({ ...m, group: "mentor" }));
   return [...core, ...mentors];
 }
-function getMenteeStats(mentee) {
+function getMenteeStats(mentee, mainCoffeeMeetings) {
   const passportDone = mentee.passport.filter(p => p.completedDate).length;
   const trainingDone = mentee.trainings.filter(t => t.completedDate).length;
   const earlyAttend = mentee.earlyAttendances.length;
@@ -448,13 +460,25 @@ function getMenteeStats(mentee) {
     const rec = mentee.oneOnOnes[t.memberId] || {};
     ONE_ON_ONE_TYPES.forEach(tp => { if (rec[tp.key]?.done) doneCells++; });
   });
+  // 咖啡與來賓從主站資料計算（若無則退回舊 mentee.guests/coffeeMeetings 做相容）
+  let coffeeCount, guestCount;
+  if (Array.isArray(mainCoffeeMeetings)) {
+    const myCms = mainCoffeeMeetings.filter(cm => cm.inviterId === mentee.memberId);
+    coffeeCount = myCms.length;
+    guestCount = myCms.filter(cm =>
+      cm.meetingStatus === "done" && cm.attendanceWillingness === "confirmed"
+    ).length;
+  } else {
+    coffeeCount = (mentee.coffeeMeetings || []).length;
+    guestCount = (mentee.guests || []).length;
+  }
   const overallPct = Math.round(
     ((passportDone / GRAD_REQS.passport) * 0.25 +
       (trainingDone / GRAD_REQS.trainings) * 0.2 +
       (Math.min(earlyAttend, GRAD_REQS.earlyAttend) / GRAD_REQS.earlyAttend) * 0.15 +
       (totalCells ? doneCells / totalCells : 0) * 0.3 +
-      (mentee.guests.length >= 2 ? 1 : mentee.guests.length / 2) * 0.05 +
-      (mentee.coffeeMeetings.length >= 2 ? 1 : mentee.coffeeMeetings.length / 2) * 0.05
+      (guestCount >= 2 ? 1 : guestCount / 2) * 0.05 +
+      (coffeeCount >= 2 ? 1 : coffeeCount / 2) * 0.05
     ) * 100
   );
   return {
@@ -462,7 +486,7 @@ function getMenteeStats(mentee) {
     trainingDone, trainingTotal: GRAD_REQS.trainings,
     earlyAttend, earlyAttendTotal: GRAD_REQS.earlyAttend,
     oneOnOneDone: doneCells, oneOnOneTotal: totalCells,
-    guestCount: mentee.guests.length, coffeeCount: mentee.coffeeMeetings.length,
+    guestCount, coffeeCount,
     overallPct, isGraduated: !!mentee.graduationDate,
   };
 }
@@ -1332,12 +1356,12 @@ function StatPill({ label, done, total, color }) {
   );
 }
 
-function MenteeCard({ mentee, members, onOpen }) {
+function MenteeCard({ mentee, members, onOpen, mainCoffeeMeetings }) {
   const getM = (id) => members.find(m => m.id === id);
   const menteeMember = getM(mentee.memberId);
   const primary = getM(mentee.mentorPrimaryId);
   const secondary = getM(mentee.mentorSecondaryId);
-  const s = getMenteeStats(mentee);
+  const s = getMenteeStats(mentee, mainCoffeeMeetings);
   const color = s.isGraduated ? "#059669" : "#B8860B";
 
   return (
@@ -1559,113 +1583,102 @@ function TrainingSection({ mentee, onUpdate, readOnly, editMode }) {
   );
 }
 
-function GuestSection({ mentee, onUpdate, readOnly, editMode, kind = "guests" }) {
-  const [local, setLocal] = useState(mentee[kind]);
-  const [syncing, setSyncing] = useState(false);
-  useEffect(() => { setLocal(mentee[kind]); }, [mentee.id, kind, mentee[kind]]);
-  const dirty = JSON.stringify(local) !== JSON.stringify(mentee[kind]);
-  const add = () => setLocal([...local, { id: uid("g"), date: new Date().toISOString().slice(0, 10), guestName: "", industry: "" }]);
-  const upd = (idx, k, v) => { const nl = [...local]; nl[idx] = { ...nl[idx], [k]: v }; setLocal(nl); };
-  const rm = (idx) => setLocal(local.filter((_, i) => i !== idx));
-  const reset = () => setLocal(mentee[kind]);
-  const canEditNow = !readOnly && editMode;
-
-  // 單向同步到主站 coffeeMeetings
-  // kind === "guests"：已出席例會（done + confirmed + attendedAsGuest=true）
-  // kind === "coffeeMeetings"：邀約中（pending + unknown）
-  const buildSyncPayload = (item) => {
+// GuestSection 現在改為**唯讀**，資料來源是主站咖啡會議
+// kind === "coffeeMeetings"：顯示所有 inviterId = mentee.memberId 的咖啡會議
+// kind === "guests"：只顯示「已出席例會」（meetingStatus=done 且 attendanceWillingness=confirmed）的那些
+function GuestSection({ mentee, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt, kind = "guests" }) {
+  const allMyMeetings = useMemo(() =>
+    mainCoffeeMeetings.filter(cm => cm.inviterId === mentee.memberId),
+    [mainCoffeeMeetings, mentee.memberId]
+  );
+  const list = useMemo(() => {
     if (kind === "guests") {
-      return {
-        meetingStatus: "done",
-        attendanceWillingness: "confirmed",
-        attendedAsGuest: true,
-        meetingTime: item.date || "",
-      };
+      return allMyMeetings.filter(cm =>
+        cm.meetingStatus === "done" && cm.attendanceWillingness === "confirmed"
+      );
     }
-    return {
-      meetingStatus: "pending",
-      attendanceWillingness: "unknown",
-      attendedAsGuest: false,
-      meetingTime: item.date || "",
-    };
-  };
+    return allMyMeetings;
+  }, [allMyMeetings, kind]);
 
-  const submit = async () => {
-    // 先寫新生端（永遠要成功）
-    onUpdate({ ...mentee, [kind]: local });
+  // 排序：最新在前
+  const sorted = useMemo(() => [...list].sort((a, b) => {
+    const da = a.meetingTime || a.createdAt || "";
+    const db = b.meetingTime || b.createdAt || "";
+    return db.localeCompare(da);
+  }), [list]);
 
-    // 嘗試同步到主站
-    setSyncing(true);
-    try {
-      await syncMainCoffeeMeetings((currentMain) => {
-        // 找出本區塊相關的既有記錄（用 sourceMenteeId + sourceKind + sourceItemId 追溯）
-        const relevantKey = (cm) => cm.sourceMenteeId === mentee.id && cm.sourceKind === kind;
-        const otherCms = currentMain.filter(cm => !relevantKey(cm));
-        // 重建：以 local 為準
-        const syncedCms = local.map(item => {
-          const payload = buildSyncPayload(item);
-          // 若主站已有對應記錄 → 保留它的狀態更新欄位（轉換狀態、備註），只更新基本欄位
-          const existing = currentMain.find(cm => cm.sourceItemId === item.id && relevantKey(cm));
-          if (existing) {
-            return {
-              ...existing,
-              guestName: item.guestName || "",
-              guestIndustry: item.industry || "",
-              meetingTime: item.date || existing.meetingTime,
-            };
-          }
-          // 新建
-          return {
-            id: "cm_sync_" + item.id,
-            guestName: item.guestName || "",
-            guestIndustry: item.industry || "",
-            inviterId: mentee.memberId,
-            ...payload,
-            conversionStatus: "none",
-            notes: kind === "guests" ? "[導生來賓] " + (mentee.representativeIndustry || "") : "[導生主邀咖啡] " + (mentee.representativeIndustry || ""),
-            sourceMenteeId: mentee.id,
-            sourceKind: kind,
-            sourceItemId: item.id,
-            createdAt: new Date().toISOString(),
-          };
-        });
-        return [...otherCms, ...syncedCms];
-      });
-    } catch (e) {
-      console.error("[sync main coffee meetings]", e);
-      alert("已儲存至導生資料，但同步到主站咖啡會議失敗：\n" + e.message + "\n可稍後手動重試。");
-    } finally {
-      setSyncing(false);
-    }
-  };
+  const hintText = kind === "guests"
+    ? "此區資料來自「主站咖啡會議」中已出席例會的記錄（meetingStatus=已完成 且 出席意願=確認出席）"
+    : "此區資料來自「主站咖啡會議」中該新生為邀約人的全部記錄";
+  // 預填邀約人的主站連結
+  const newLink = `index.html?view=coffee&inviter=${encodeURIComponent(mentee.memberId)}`;
 
-  const title = kind === "guests" ? "新增一筆即自動標記「已出席例會」並同步主站" : "新增即同步主站咖啡會議為「邀約中」";
+  const fmtSyncAt = coffeeSyncingAt ? `${String(coffeeSyncingAt.getHours()).padStart(2, "0")}:${String(coffeeSyncingAt.getMinutes()).padStart(2, "0")}` : "";
+
   return (
     <div>
-      <div className="text-[11px] text-stone-500 mb-1.5 flex items-center gap-1">
-        <AlertCircle className="w-3 h-3" />{title}
+      <div className="text-[11px] text-stone-500 mb-2 flex items-start gap-1.5">
+        <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+        <span className="flex-1">{hintText}</span>
+      </div>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <a href={newLink} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-md hover:opacity-90"
+          style={{ background: "#8B6F47" }}>
+          <Coffee className="w-3.5 h-3.5" />去主站新增咖啡會議 ↗
+        </a>
+        {onRefreshCoffee && (
+          <button onClick={onRefreshCoffee}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-stone-600 border border-stone-300 rounded-md hover:bg-stone-50">
+            <RefreshCw className="w-3 h-3" />重新整理
+          </button>
+        )}
+        {fmtSyncAt && <span className="text-[10px] text-stone-400">同步於 {fmtSyncAt}</span>}
       </div>
       <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-        {local.length === 0 && <div className="text-sm text-stone-400 italic text-center py-6">尚無紀錄</div>}
-        {local.map((g, i) => (
-          <div key={g.id} className={`grid grid-cols-12 items-center px-3 py-2 gap-1 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
-            <input type="date" value={g.date} disabled={!canEditNow} onChange={e => upd(i, "date", e.target.value)}
-              className="col-span-4 text-xs border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
-            <input value={g.guestName} disabled={!canEditNow} onChange={e => upd(i, "guestName", e.target.value)}
-              placeholder="姓名" className="col-span-3 text-sm border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
-            <input value={g.industry} disabled={!canEditNow} onChange={e => upd(i, "industry", e.target.value)}
-              placeholder="行業" className="col-span-4 text-sm border border-stone-200 rounded px-1.5 py-1 disabled:bg-stone-50" />
-            {canEditNow && (
-              <button onClick={() => rm(i)} className="col-span-1 text-stone-400 hover:text-red-500 flex justify-center">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        ))}
+        {sorted.length === 0 && <div className="text-sm text-stone-400 italic text-center py-6">
+          尚無紀錄{kind === "guests" ? "（還沒有成功帶來賓出席）" : ""}
+        </div>}
+        {sorted.map((cm, i) => {
+          const statusColor =
+            cm.meetingStatus === "done" ? "#4A6741" :
+            cm.meetingStatus === "cancelled" ? "#888" : "#A01E2E";
+          const statusText =
+            cm.meetingStatus === "done" ? "已完成" :
+            cm.meetingStatus === "cancelled" ? "已取消" : "邀約中";
+          const willColor =
+            cm.attendanceWillingness === "confirmed" ? "#059669" :
+            cm.attendanceWillingness === "declined" ? "#6b7280" :
+            cm.attendanceWillingness === "pending" ? "#B8860B" : "#888";
+          const willText =
+            cm.attendanceWillingness === "confirmed" ? "已出席" :
+            cm.attendanceWillingness === "declined" ? "未出席" :
+            cm.attendanceWillingness === "pending" ? "邀約中" : "未確認";
+          const convColor =
+            cm.conversionStatus === "signed" || cm.conversionStatus === "paid" ? "#A01E2E" :
+            cm.conversionStatus === "sworn" ? "#1A6B1A" :
+            cm.conversionStatus === "following" ? "#8B6F47" : null;
+          const convText =
+            cm.conversionStatus === "signed" ? "已簽單" :
+            cm.conversionStatus === "paid" ? "已繳費" :
+            cm.conversionStatus === "sworn" ? "已宣誓🎉" :
+            cm.conversionStatus === "following" ? "跟進中" : null;
+          return (
+            <div key={cm.id} className={`px-3 py-2.5 ${i !== 0 ? "border-t border-stone-100" : ""}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-stone-500 font-mono">{(cm.meetingTime || "").slice(0, 10) || "—"}</span>
+                <span className="text-sm font-semibold text-stone-800">{cm.guestName || "—"}</span>
+                <span className="text-xs text-stone-500">{cm.guestIndustry || ""}</span>
+              </div>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <Tag color={statusColor}>{statusText}</Tag>
+                <Tag color={willColor}>{willText}</Tag>
+                {convText && <Tag color={convColor}>{convText}</Tag>}
+              </div>
+            </div>
+          );
+        })}
       </div>
-      {canEditNow && <div className="mt-2"><Btn variant="outline" size="sm" onClick={add}><Plus className="w-3.5 h-3.5" />新增</Btn></div>}
-      {dirty && canEditNow && <SubmitBar onSubmit={submit} onReset={reset}
-        label={syncing ? "儲存並同步中..." : "此區有未儲存變更（儲存後會同步主站咖啡會議）"} />}
     </div>
   );
 }
@@ -1828,7 +1841,7 @@ function MenteeForm({ mentee, members, mentees, onSave, onCancel, onDelete }) {
   );
 }
 
-function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, onUpdate, onBack, onEdit }) {
+function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt, onUpdate, onBack, onEdit }) {
   const mentee = mentees.find(m => m.id === menteeId);
   const [sectionOpen, setSectionOpen] = useState({
     oneOnOne: true, passport: true, training: true,
@@ -1840,7 +1853,7 @@ function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, onUp
   const getM = (id) => members.find(m => m.id === id);
   const canEdit = canEditMentee(mentee, currentUserId, isAdmin);
   const readOnly = !canEdit;
-  const s = getMenteeStats(mentee);
+  const s = getMenteeStats(mentee, mainCoffeeMeetings);
   const primary = getM(mentee.mentorPrimaryId);
   const secondary = getM(mentee.mentorSecondaryId);
   const menteeMember = getM(mentee.memberId);
@@ -1954,18 +1967,18 @@ function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, onUp
 
       <Section k="guests" title="來賓邀約" icon={<UserCheck className="w-4 h-4 text-[#059669]" />}
         right={<Tag color="#059669">{s.guestCount}</Tag>}>
-        <GuestSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} editMode={editMode} kind="guests" />
+        <GuestSection mentee={mentee} mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={onRefreshCoffee} coffeeSyncingAt={coffeeSyncingAt} kind="guests" />
       </Section>
 
       <Section k="coffee" title="主邀咖啡會議" icon={<Coffee className="w-4 h-4 text-[#c2410c]" />}
         right={<Tag color="#c2410c">{s.coffeeCount}</Tag>}>
-        <GuestSection mentee={mentee} onUpdate={onUpdate} readOnly={readOnly} editMode={editMode} kind="coffeeMeetings" />
+        <GuestSection mentee={mentee} mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={onRefreshCoffee} coffeeSyncingAt={coffeeSyncingAt} kind="coffeeMeetings" />
       </Section>
     </div>
   );
 }
 
-function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout, isAdmin = true }) {
+function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout, isAdmin = true, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt }) {
   const [detailId, setDetailId] = useState(null);
   const [editingId, setEditingId] = useState(null); // "new" | mentee.id | null
   const [filter, setFilter] = useState({ mode: "all", search: "" });
@@ -2013,6 +2026,7 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
       <div>
         <MenteeDetail menteeId={detailId} mentees={mentees} members={members} currentUserId={currentUserId}
           isAdmin={isAdmin}
+          mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={onRefreshCoffee} coffeeSyncingAt={coffeeSyncingAt}
           onUpdate={saveMentee} onBack={() => setDetailId(null)} onEdit={(id) => setEditingId(id)} />
         {formModal}
       </div>
@@ -2056,7 +2070,7 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map(m => <MenteeCard key={m.id} mentee={m} members={members} onOpen={setDetailId} />)}
+          {filtered.map(m => <MenteeCard key={m.id} mentee={m} members={members} mainCoffeeMeetings={mainCoffeeMeetings} onOpen={setDetailId} />)}
         </div>
       )}
       {formModal}
@@ -2118,7 +2132,7 @@ function Dashboard({ meetings, groups, members, mentees = [], currentUserId }) {
     const inProgress = mentees.filter(m => !m.graduationDate);
     const graduated = mentees.filter(m => m.graduationDate);
     const avgProgress = inProgress.length
-      ? Math.round(inProgress.reduce((s, m) => s + getMenteeStats(m).overallPct, 0) / inProgress.length)
+      ? Math.round(inProgress.reduce((s, m) => s + getMenteeStats(m, []).overallPct, 0) / inProgress.length)
       : 0;
     const myMentees = currentUserId
       ? mentees.filter(m => m.mentorPrimaryId === currentUserId || m.mentorSecondaryId === currentUserId)
@@ -2268,7 +2282,7 @@ function Dashboard({ meetings, groups, members, mentees = [], currentUserId }) {
           </h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {mentorStats.myMentees.map(m => {
-              const s = getMenteeStats(m);
+              const s = getMenteeStats(m, []);
               const member = members.find(x => x.id === m.memberId);
               const color = s.isGraduated ? "#059669" : "#B8860B";
               return (
@@ -2432,6 +2446,8 @@ function App() {
   const [meetings, setMeetings] = useState([]);
   const [members, setMembers] = useState([]);
   const [mentees, setMentees] = useState([]);
+  const [mainCoffeeMeetings, setMainCoffeeMeetings] = useState([]);  // 從主站讀（只讀）
+  const [coffeeSyncingAt, setCoffeeSyncingAt] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
 
   const [editingMeeting, setEditingMeeting] = useState(null);
@@ -2455,11 +2471,31 @@ function App() {
       setMeetings(meetingsData || []);
       setMembers(liveMembers.length ? liveMembers : SEED_MEMBERS);
       setMentees(menteesData || SEED_MENTEES);
+      // 主站咖啡會議（只讀，用於導生頁統計）
+      const mainCms = (mainData && Array.isArray(mainData.coffeeMeetings)) ? mainData.coffeeMeetings : [];
+      setMainCoffeeMeetings(mainCms);
+      setCoffeeSyncingAt(new Date());
       const savedUid = (typeof localStorage !== 'undefined') ? localStorage.getItem('bni_operations_user') : null;
       setCurrentUserId(savedUid || (liveMembers[0]?.id || null));
       setLoaded(true);
     })();
   }, []);
+
+  // 手動重新整理主站咖啡會議（導生頁用）
+  const refreshMainCoffee = async () => {
+    try {
+      const res = await apiClient.get("bni_speaker_tracker_v5");
+      if (res && res.value) {
+        const parsed = typeof res.value === "string" ? JSON.parse(res.value) : res.value;
+        const cms = Array.isArray(parsed?.coffeeMeetings) ? parsed.coffeeMeetings : [];
+        setMainCoffeeMeetings(cms);
+        setCoffeeSyncingAt(new Date());
+      }
+    } catch (e) {
+      console.error("[refreshMainCoffee]", e);
+      alert("重新整理失敗：" + e.message);
+    }
+  };
 
   // 自動儲存
   // groups 本體來自主站 KPI，只把 metadata (leaderId/color) 另存
@@ -2603,7 +2639,9 @@ function App() {
 
         {tab === "mentorship" && (
           adminVerified
-            ? <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} isAdmin={true} onLogout={() => { setAdminVerified(false); try { localStorage.removeItem('bni_admin_key'); } catch {} }} />
+            ? <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} isAdmin={true}
+                mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={refreshMainCoffee} coffeeSyncingAt={coffeeSyncingAt}
+                onLogout={() => { setAdminVerified(false); try { localStorage.removeItem('bni_admin_key'); } catch {} }} />
             : <MentorshipAdminGate onPass={() => setAdminVerified(true)} />
         )}
         {tab === "groups" && <GroupsView groups={groups} setGroups={setGroups} members={members} meetings={meetings} />}
