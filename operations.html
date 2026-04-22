@@ -137,6 +137,7 @@ const STORAGE_KEYS = {
   MEETINGS: "bni_group_meetings_v1",
   MEMBERS: "bni_speaker_tracker_v5",         // 讀主檔的 members 欄位，不單獨寫
   MENTEES: "bni_mentees_v1",
+  MENTORSHIP_DEFAULTS: "bni_mentorship_defaults_v1",  // 分會預設核心團隊 + 導師團隊 + 培訓日期
   CURRENT_USER: null,                        // 身份用 localStorage 本地保存
 };
 
@@ -2265,25 +2266,65 @@ function AttendanceSection({ mentee, onUpdate, readOnly, editMode }) {
   );
 }
 
-function MenteeForm({ mentee, members, mentees, onSave, onCancel, onDelete }) {
+function MenteeForm({ mentee, members, mentees, mentorshipDefaults, onSave, onCancel, onDelete }) {
+  // 初始化優先級：編輯現有新生 > 分會預設 > 最新一位新生 > 全空
   const [form, setForm] = useState(() => {
     if (mentee) return mentee;
     const latest = mentees[0];
+    const d = mentorshipDefaults;
+
+    // 核心團隊優先級
+    let coreTeam;
+    if (d && Array.isArray(d.coreTeam) && d.coreTeam.length) {
+      coreTeam = CORE_ROLES.map(r => {
+        const found = d.coreTeam.find(c => c.role === r);
+        return { role: r, memberId: found?.memberId || "" };
+      });
+    } else if (latest) {
+      coreTeam = latest.coreTeam.map(c => ({ ...c }));
+    } else {
+      coreTeam = CORE_ROLES.map(r => ({ role: r, memberId: "" }));
+    }
+
+    // 導師團隊優先級
+    let mentorTeam;
+    if (d && Array.isArray(d.mentorTeam) && d.mentorTeam.length) {
+      mentorTeam = d.mentorTeam.map(m => ({ ...m }));
+    } else if (latest) {
+      mentorTeam = latest.mentorTeam.map(m => ({ ...m }));
+    } else {
+      mentorTeam = [];
+    }
+
+    // 培訓預定日期：只從分會預設套用
+    const schedule = (d && d.trainingSchedule) || {};
+    const trainings = TRAININGS.map(t => ({
+      id: t.id,
+      scheduledDate: schedule[t.id] || null,
+      completedDate: null,
+    }));
+
     return {
       id: uid("mte"),
       memberId: "", representativeIndustry: "",
       oathDate: new Date().toISOString().slice(0, 10),
       graduationDate: null, graduatedTeam: "",
       mentorPrimaryId: "", mentorSecondaryId: "",
-      coreTeam: latest ? latest.coreTeam.map(c => ({ ...c })) : CORE_ROLES.map(r => ({ role: r, memberId: "" })),
-      mentorTeam: latest ? latest.mentorTeam.map(m => ({ ...m })) : [],
+      coreTeam, mentorTeam,
       oneOnOnes: {},
       passport: W_MILESTONES.map(w => ({ key: w.key, completedDate: null })),
-      trainings: TRAININGS.map(t => ({ id: t.id, scheduledDate: null, completedDate: null })),
+      trainings,
       guests: [], coffeeMeetings: [], earlyAttendances: [], supplementReports: [],
       createdAt: new Date().toISOString(),
     };
   });
+  // 判斷是否「新增模式且成功套用了預設」
+  const isNew = !mentee;
+  const hasAppliedDefaults = isNew && !!(mentorshipDefaults &&
+    ((mentorshipDefaults.coreTeam?.length || 0) + (mentorshipDefaults.mentorTeam?.length || 0) > 0));
+  // 團隊快照摺疊狀態：套用預設時預設摺疊，否則展開
+  const [teamExpanded, setTeamExpanded] = useState(!hasAppliedDefaults);
+
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const updCore = (idx, memberId) => {
     const nc = [...form.coreTeam]; nc[idx] = { ...nc[idx], memberId }; set("coreTeam", nc);
@@ -2301,8 +2342,30 @@ function MenteeForm({ mentee, members, mentees, onSave, onCancel, onDelete }) {
   };
   const mentorOptions = members.filter(m => m.id !== form.memberId);
 
+  // 套用預設的摘要（用於提示條）
+  const appliedSummary = hasAppliedDefaults ? (() => {
+    const chairRoleCount = form.coreTeam.filter(c => c.memberId).length;
+    const mentorCount = form.mentorTeam.length;
+    const scheduledCount = form.trainings.filter(t => t.scheduledDate).length;
+    const parts = [];
+    if (chairRoleCount) parts.push(`核心 ${chairRoleCount} 職`);
+    if (mentorCount) parts.push(`導師 ${mentorCount} 人`);
+    if (scheduledCount) parts.push(`培訓 ${scheduledCount} 場日期`);
+    return parts.join("、");
+  })() : "";
+
   return (
     <div>
+      {hasAppliedDefaults && (
+        <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-900 flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <b>已套用分會預設</b>（{appliedSummary}）
+            {!teamExpanded && <button onClick={() => setTeamExpanded(true)} className="ml-2 underline">調整此新生的團隊快照</button>}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <Field label="新生" required>
           <MemberSelect members={members} value={form.memberId} onChange={v => set("memberId", v)} placeholder="選擇會員..." />
@@ -2329,37 +2392,54 @@ function MenteeForm({ mentee, members, mentees, onSave, onCancel, onDelete }) {
         </Field>
       </div>
 
-      <Field label="核心團隊快照（宣誓當下）" hint="名單建立後釘死，不隨換屆變動">
-        <div className="grid grid-cols-2 gap-2">
-          {form.coreTeam.map((c, i) => (
-            <div key={c.role} className="flex items-center gap-2">
-              <span className="text-xs text-stone-500 w-10 flex-shrink-0">{c.role}</span>
-              <div className="flex-1"><MemberSelect members={members} value={c.memberId} onChange={v => updCore(i, v)} placeholder="—" /></div>
-            </div>
-          ))}
-        </div>
-      </Field>
-
-      <Field label={`導師團隊快照（${form.mentorTeam.length} 人）`} hint="預設為導師，可個別調整為副導師">
-        <MemberMultiSelect members={mentorOptions} selectedIds={form.mentorTeam.map(m => m.memberId)} onChange={updMentorTeam} />
-        {form.mentorTeam.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {form.mentorTeam.map(m => {
-              const mem = members.find(x => x.id === m.memberId);
-              return (
-                <div key={m.memberId} className="inline-flex items-center gap-1 bg-stone-100 rounded-md px-2 py-1 text-xs">
-                  <span>{mem?.name}</span>
-                  <select value={m.role} onChange={e => setMentorRole(m.memberId, e.target.value)}
-                    className="bg-transparent text-xs border-l border-stone-300 pl-1">
-                    <option value="導師">導師</option>
-                    <option value="副導師">副導師</option>
-                  </select>
+      {/* 團隊快照：若已套用預設且未展開則摺疊 */}
+      {teamExpanded ? (
+        <>
+          <Field label="核心團隊快照（宣誓當下）" hint="名單建立後釘死，不隨換屆變動">
+            <div className="grid grid-cols-2 gap-2">
+              {form.coreTeam.map((c, i) => (
+                <div key={c.role} className="flex items-center gap-2">
+                  <span className="text-xs text-stone-500 w-10 flex-shrink-0">{c.role}</span>
+                  <div className="flex-1"><MemberSelect members={members} value={c.memberId} onChange={v => updCore(i, v)} placeholder="—" /></div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </Field>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={`導師團隊快照（${form.mentorTeam.length} 人）`} hint="預設為導師，可個別調整為副導師">
+            <MemberMultiSelect members={mentorOptions} selectedIds={form.mentorTeam.map(m => m.memberId)} onChange={updMentorTeam} />
+            {form.mentorTeam.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {form.mentorTeam.map(m => {
+                  const mem = members.find(x => x.id === m.memberId);
+                  return (
+                    <div key={m.memberId} className="inline-flex items-center gap-1 bg-stone-100 rounded-md px-2 py-1 text-xs">
+                      <span>{mem?.name}</span>
+                      <select value={m.role} onChange={e => setMentorRole(m.memberId, e.target.value)}
+                        className="bg-transparent text-xs border-l border-stone-300 pl-1">
+                        <option value="導師">導師</option>
+                        <option value="副導師">副導師</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Field>
+
+          {hasAppliedDefaults && (
+            <div className="mb-3 -mt-2">
+              <button onClick={() => setTeamExpanded(false)} className="text-xs text-stone-500 hover:text-stone-700 underline">
+                ↑ 收合團隊快照
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="mb-4 p-3 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-600">
+          核心團隊 {form.coreTeam.filter(c => c.memberId).length} 職 · 導師團隊 {form.mentorTeam.length} 人 已套用預設，可按上方「調整此新生的團隊快照」展開編輯。
+        </div>
+      )}
 
       <div className="flex items-center justify-between pt-3 border-t border-stone-200">
         <div>
@@ -2515,10 +2595,168 @@ function MenteeDetail({ menteeId, mentees, members, currentUserId, isAdmin, main
   );
 }
 
-function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout, isAdmin = true, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt }) {
+// ============ 分會預設團隊設定 Modal ============
+function MentorshipDefaultsModal({ open, onClose, members, defaults, onSave }) {
+  // 初始化 local state：用傳入的 defaults 或空白
+  const [coreTeam, setCoreTeam] = useState([]);
+  const [mentorTeam, setMentorTeam] = useState([]);
+  const [trainingSchedule, setTrainingSchedule] = useState({});  // { t1: "2026-05-12", ... }
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    // Modal 開啟時重置 local state
+    if (defaults) {
+      setCoreTeam(defaults.coreTeam?.length
+        ? CORE_ROLES.map(r => {
+            const found = defaults.coreTeam.find(c => c.role === r);
+            return { role: r, memberId: found?.memberId || "" };
+          })
+        : CORE_ROLES.map(r => ({ role: r, memberId: "" })));
+      setMentorTeam((defaults.mentorTeam || []).map(m => ({ ...m })));
+      setTrainingSchedule({ ...(defaults.trainingSchedule || {}) });
+    } else {
+      setCoreTeam(CORE_ROLES.map(r => ({ role: r, memberId: "" })));
+      setMentorTeam([]);
+      setTrainingSchedule({});
+    }
+  }, [open, defaults]);
+
+  if (!open) return null;
+
+  const updCore = (idx, memberId) => {
+    const nc = [...coreTeam];
+    nc[idx] = { ...nc[idx], memberId };
+    setCoreTeam(nc);
+  };
+  const updMentorTeam = (ids) => {
+    setMentorTeam(ids.map(id => mentorTeam.find(x => x.memberId === id) || { memberId: id, role: "導師" }));
+  };
+  const setMentorRole = (id, role) =>
+    setMentorTeam(mentorTeam.map(m => m.memberId === id ? { ...m, role } : m));
+  const setTrainingDate = (trainingId, date) =>
+    setTrainingSchedule(p => ({ ...p, [trainingId]: date || null }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        coreTeam: coreTeam.filter(c => c.memberId),
+        mentorTeam: mentorTeam.filter(m => m.memberId),
+        trainingSchedule,
+      });
+      onClose();
+    } catch (e) {
+      alert("儲存失敗：" + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const coreFilled = coreTeam.filter(c => c.memberId).length;
+
+  return (
+    <Modal open={open} onClose={onClose} title="分會預設團隊" maxWidth="max-w-2xl"
+      footer={
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-stone-500">
+            {defaults?.updatedAt ? `上次更新：${fmtDate(defaults.updatedAt)}` : "尚未設定過"}
+          </span>
+          <div className="flex gap-2">
+            <Btn variant="ghost" size="sm" onClick={onClose} disabled={saving}>取消</Btn>
+            <Btn variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+              <Save className="w-3.5 h-3.5" />
+              {saving ? "儲存中⋯" : "儲存預設"}
+            </Btn>
+          </div>
+        </div>
+      }>
+      <div className="space-y-5">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+          💡 這裡設定的內容會套用到<b>每次新增新生</b>。既有新生的快照不會被影響。
+        </div>
+
+        {/* 核心團隊 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-stone-800 flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#B8860B]" />
+              核心團隊（8 職）
+            </div>
+            <span className="text-xs text-stone-500">已填 {coreFilled}/8</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {coreTeam.map((c, i) => (
+              <div key={c.role} className="flex items-center gap-2">
+                <span className="text-xs text-stone-600 w-14 flex-shrink-0">{c.role}</span>
+                <div className="flex-1 min-w-0">
+                  <MemberSelect members={members} value={c.memberId}
+                    onChange={id => updCore(i, id)} placeholder="—" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 導師團隊 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-stone-800 flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-[#8B1A1A]" />
+              導師團隊（{mentorTeam.length} 人）
+            </div>
+          </div>
+          <MemberMultiSelect members={members} selectedIds={mentorTeam.map(m => m.memberId)} onChange={updMentorTeam} />
+          {mentorTeam.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {mentorTeam.map(m => {
+                const mem = members.find(x => x.id === m.memberId);
+                return (
+                  <div key={m.memberId} className="inline-flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-md px-2 py-1 text-xs">
+                    <span>{mem?.name || m.memberId}</span>
+                    <select value={m.role} onChange={e => setMentorRole(m.memberId, e.target.value)}
+                      className="text-[10px] bg-white border border-stone-200 rounded px-1 py-0.5">
+                      <option value="導師">導師</option>
+                      <option value="副導師">副導師</option>
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 培訓預定日期 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-stone-800 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#0369a1]" />
+              本期培訓預定日期
+            </div>
+            <span className="text-xs text-stone-500">選填，新增新生時會套用</span>
+          </div>
+          <div className="space-y-1.5">
+            {TRAININGS.map(t => (
+              <div key={t.id} className="flex items-center gap-2">
+                <span className="text-[10px] text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded flex-shrink-0">{t.label}</span>
+                <span className="text-sm text-stone-700 flex-1 min-w-0 truncate">{t.title}</span>
+                <input type="date" value={trainingSchedule[t.id] || ""}
+                  onChange={e => setTrainingDate(t.id, e.target.value)}
+                  className="text-xs border border-stone-200 rounded px-1.5 py-1 bg-white" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout, isAdmin = true, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt, mentorshipDefaults, onSaveDefaults }) {
   const [detailId, setDetailId] = useState(null);
   const [editingId, setEditingId] = useState(null); // "new" | mentee.id | null
   const [filter, setFilter] = useState({ mode: "all", search: "" });
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
 
   const saveMentee = (m) => {
     const updated = { ...m, updatedAt: new Date().toISOString() };
@@ -2553,6 +2791,7 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
       title={editingMentee ? "編輯新生基本資料" : "新增新生"} maxWidth="max-w-2xl">
       {editingId && (
         <MenteeForm mentee={editingMentee} members={members} mentees={mentees}
+          mentorshipDefaults={mentorshipDefaults}
           onSave={saveMentee} onCancel={() => setEditingId(null)} onDelete={deleteMentee} />
       )}
     </Modal>
@@ -2585,9 +2824,21 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
               登出管理員
             </button>
           )}
+          <Btn variant="outline" onClick={() => setDefaultsOpen(true)} title="設定新增新生時的預設團隊">
+            <Settings className="w-4 h-4" />預設團隊
+          </Btn>
           <Btn variant="primary" onClick={() => setEditingId("new")}><Plus className="w-4 h-4" />新增新生</Btn>
         </div>
       </div>
+      {!mentorshipDefaults && (
+        <div className="mb-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <b>尚未設定分會預設團隊</b> · 建議先設定核心 8 職與導師團隊，新增新生時會自動套用，節省時間。
+            <button onClick={() => setDefaultsOpen(true)} className="ml-2 underline font-semibold">立即設定</button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <select value={filter.mode} onChange={e => setFilter({ ...filter, mode: e.target.value })}
           className="border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white">
@@ -2611,6 +2862,8 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
         </div>
       )}
       {formModal}
+      <MentorshipDefaultsModal open={defaultsOpen} onClose={() => setDefaultsOpen(false)}
+        members={members} defaults={mentorshipDefaults} onSave={onSaveDefaults} />
     </div>
   );
 }
@@ -2986,6 +3239,7 @@ function App() {
   const [mainCoffeeMeetings, setMainCoffeeMeetings] = useState([]);  // 從主站讀（只讀）
   const [coffeeSyncingAt, setCoffeeSyncingAt] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [mentorshipDefaults, setMentorshipDefaults] = useState(null);  // 分會預設團隊
 
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [filter, setFilter] = useState({ groupId: "", onlyMine: false });
@@ -3003,13 +3257,14 @@ function App() {
   // 初始載入
   useEffect(() => {
     (async () => {
-      // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組
-      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes] = await Promise.all([
+      // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組 + 導生預設
+      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes, defaultsData] = await Promise.all([
         loadState(STORAGE_KEYS.MEETINGS, null),
         loadState(STORAGE_KEYS.MEMBERS, null),
         loadState(STORAGE_KEYS.MENTEES, null),
         loadState(STORAGE_KEYS.GROUP_EXTRAS, {}),
         fetch(PROXY_URL + '/api/groups').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+        loadState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, null),
       ]);
       const liveMembers = (mainData && Array.isArray(mainData.members)) ? mainData.members : [];
       const builtGroups = buildGroupsFromKpi(kpiGroupsRes, liveMembers, extrasData);
@@ -3017,6 +3272,7 @@ function App() {
       setMeetings(meetingsData || []);
       setMembers(liveMembers.length ? liveMembers : SEED_MEMBERS);
       setMentees(menteesData || SEED_MENTEES);
+      setMentorshipDefaults(defaultsData);  // null 表示尚未設定
       // 主站咖啡會議（只讀，用於導生頁統計）
       const mainCms = (mainData && Array.isArray(mainData.coffeeMeetings)) ? mainData.coffeeMeetings : [];
       setMainCoffeeMeetings(mainCms);
@@ -3026,6 +3282,13 @@ function App() {
       setLoaded(true);
     })();
   }, []);
+
+  // 儲存分會預設（供 MentorshipView 呼叫）
+  const saveMentorshipDefaults = async (newDefaults) => {
+    const withTime = { ...newDefaults, updatedAt: new Date().toISOString() };
+    setMentorshipDefaults(withTime);
+    await saveState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, withTime);
+  };
 
   // 手動重新整理主站咖啡會議（導生頁用）
   const refreshMainCoffee = async () => {
@@ -3206,6 +3469,7 @@ function App() {
           adminVerified
             ? <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} isAdmin={true}
                 mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={refreshMainCoffee} coffeeSyncingAt={coffeeSyncingAt}
+                mentorshipDefaults={mentorshipDefaults} onSaveDefaults={saveMentorshipDefaults}
                 onLogout={() => { setAdminVerified(false); try { localStorage.removeItem('bni_admin_key'); } catch {} }} />
             : <MentorshipAdminGate onPass={() => setAdminVerified(true)} />
         )}
