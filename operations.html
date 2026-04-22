@@ -138,6 +138,7 @@ const STORAGE_KEYS = {
   MEMBERS: "bni_speaker_tracker_v5",         // 讀主檔的 members 欄位，不單獨寫
   MENTEES: "bni_mentees_v1",
   MENTORSHIP_DEFAULTS: "bni_mentorship_defaults_v1",  // 分會預設核心團隊 + 導師團隊 + 培訓日期
+  DASHBOARD_CONFIG: "bni_dashboard_config_v1",        // 組聚表板時間範圍設定
   CURRENT_USER: null,                        // 身份用 localStorage 本地保存
 };
 
@@ -244,12 +245,6 @@ function buildMeetingContent(meeting, group, members) {
     })),
     referralTotal: (meeting.referrals || []).reduce((s, r) => s + (Number(r.amount) || 0), 0),
     nextMeeting: meeting.nextMeeting || {},
-    actionItems: (meeting.actionItems || []).map(a => ({
-      content: a.content || "",
-      assignee: a.assignee ? memberName(a.assignee) : "",
-      dueDate: a.dueDate || "",
-      status: a.status || "pending",
-    })),
   };
 }
 
@@ -404,19 +399,6 @@ function exportMeetingDocx(meeting, group, members) {
     if (c.nextMeeting.location) children.push(kv("地點", c.nextMeeting.location));
   }
 
-  // 其他行動項目
-  if (c.actionItems.length) {
-    children.push(h2("行動項目", "✅"));
-    c.actionItems.forEach((a, i) => {
-      const statusTxt = a.status === "done" ? "[已完成]" : "[待處理]";
-      const parts = [`${i + 1}. `, a.content];
-      if (a.assignee) parts.push(` · ${a.assignee}`);
-      if (a.dueDate) parts.push(` · 到期 ${a.dueDate}`);
-      parts.push(` ${statusTxt}`);
-      children.push(bullet(parts.join("")));
-    });
-  }
-
   // 頁尾
   const doc = new d.Document({
     styles: {
@@ -547,16 +529,6 @@ function buildMeetingHtml(meeting, group, members) {
       + (c.nextMeeting.location ? kv("地點", c.nextMeeting.location) : "");
   }
 
-  let actionsBlock = "";
-  if (c.actionItems.length) {
-    actionsBlock = c.actionItems.map((a, i) => {
-      const st = a.status === "done"
-        ? `<span style="${S.statusDone}">[已完成]</span>`
-        : `<span style="${S.statusPending}">[待處理]</span>`;
-      return `<div style="${S.item}">${i + 1}. ${esc(a.content)}${a.assignee ? ` · ${esc(a.assignee)}` : ""}${a.dueDate ? ` · 到期 ${esc(a.dueDate)}` : ""} ${st}</div>`;
-    }).join("");
-  }
-
   return `<div style="${S.root}">
 <div style="${S.h1}">BNI 富鼎分會 組聚記錄</div>
 <div style="${S.subtitle}">${esc(c.meta.groupName)} · ${esc(c.meta.date)}${c.meta.time ? " " + esc(c.meta.time) : ""}</div>
@@ -578,7 +550,6 @@ ${section("對主講人的建議", "💡", feedbackBlock)}
 ${section("主講人需要的合作人脈", "🤝", ncBlock)}
 ${section("小組內引薦", "🎯", referralsBlock)}
 ${section("下次組聚", "📅", nextBlock)}
-${section("行動項目", "✅", actionsBlock)}
 </div>`;
 }
 
@@ -1003,7 +974,6 @@ const uid = (p = "id") => `${p}-${Date.now().toString(36)}-${Math.random().toStr
 const fmtDate = (d) => new Date(d).toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
 const fmtShort = (d) => d ? new Date(d).toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit" }) : "";
 const fmtDateTime = (d) => new Date(d).toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-const isOverdue = (a) => a.status === "pending" && a.dueDate && new Date(a.dueDate) < new Date(new Date().toDateString());
 const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
 
 // ============ 共用 UI ============
@@ -1113,7 +1083,7 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
     neededConnections: [],    // 4. 主講人需要的人脈
     referrals: [],            // 5. 小組內引薦記錄
     nextMeeting: { date: "", time: "", location: "" },  // 6. 下次組聚
-    discussion: "", actionItems: [],        // 保留相容欄位
+    discussion: "", actionItems: [],        // actionItems 保留欄位但 UI 已移除（舊資料相容）
     createdAt: new Date().toISOString(),
   });
 
@@ -1190,14 +1160,6 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
   }]);
   const updReferral = (id, k, v) => set("referrals", upd(form.referrals, id, k, v));
   const rmReferral = (id) => set("referrals", rm(form.referrals, id));
-
-  // 行動項（保留舊有）
-  const addAction = () => set("actionItems", [...(form.actionItems || []), {
-    id: uid("a"), title: "", assignee: "", dueDate: "",
-    status: "pending", notes: "", completedAt: null,
-  }]);
-  const updAction = (id, k, v) => set("actionItems", (form.actionItems || []).map(a => a.id === id ? { ...a, [k]: v } : a));
-  const rmAction = (id) => set("actionItems", (form.actionItems || []).filter(a => a.id !== id));
 
   const submit = () => {
     if (!form.groupId) return alert("請選擇小組");
@@ -1436,39 +1398,15 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
         </div>
       </FormSection>
 
-      {/* ============ 附加：其他討論與行動項（預設收起） ============ */}
-      <FormSection title="其他討論與行動項" defaultOpen={false}
-        badge={summary("", (form.actionItems?.length || 0) + (form.discussion ? 1 : 0))}
+      {/* ============ 附加：其他討論（預設收起） ============ */}
+      <FormSection title="其他討論" defaultOpen={false}
+        badge={form.discussion ? <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">已填</span> : summary("", 0)}
         icon={<FileText className="w-4 h-4 text-stone-500" />}>
         <Field label="其他討論">
           <textarea value={form.discussion || ""} onChange={e => set("discussion", e.target.value)}
             rows={3} placeholder="若有其他議題..."
             className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
         </Field>
-        <div className="mb-2">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-stone-700">行動項目（{(form.actionItems || []).length}）</label>
-            <Btn variant="outline" size="sm" onClick={addAction}><Plus className="w-3.5 h-3.5" />新增</Btn>
-          </div>
-          <div className="space-y-2">
-            {(form.actionItems || []).length === 0 && <div className="text-xs text-stone-400 italic text-center py-2 border border-dashed border-stone-200 rounded-lg">尚無行動項目</div>}
-            {(form.actionItems || []).map((a, i) => (
-              <div key={a.id} className="border border-stone-200 rounded-lg p-2.5 bg-stone-50">
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className="text-xs font-semibold text-stone-400 mt-1.5">#{i + 1}</span>
-                  <input value={a.title} onChange={e => updAction(a.id, "title", e.target.value)}
-                    placeholder="待辦事項..." className="flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
-                  <button onClick={() => rmAction(a.id)} className="p-1.5 text-stone-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <MemberSelect members={groupMembers} value={a.assignee} onChange={v => updAction(a.id, "assignee", v)} placeholder="（未指派）" />
-                  <input type="date" value={a.dueDate || ""} onChange={e => updAction(a.id, "dueDate", e.target.value)}
-                    className="w-full border border-stone-300 rounded-md px-2.5 py-1.5 text-sm" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </FormSection>
 
       <div className="flex items-center justify-between pt-3 border-t border-stone-200 mt-4">
@@ -1508,17 +1446,13 @@ function FormSection({ title, icon, badge, defaultOpen = true, children }) {
 }
 
 // ============ 會議卡片 ============
-function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
+function MeetingCard({ meeting, group, members, onEdit }) {
   const [expanded, setExpanded] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
   const getMember = (id) => members.find(m => m.id === id);
   const totalInGroup = group?.memberIds.length || 0;
   const attendRate = totalInGroup ? (meeting.attendees.length / totalInGroup * 100).toFixed(0) : 0;
-  const actionItems = meeting.actionItems || [];
-  const pending = actionItems.filter(a => a.status === "pending");
-  const done = actionItems.filter(a => a.status === "done");
-  const overdue = pending.filter(isOverdue);
 
   // 6 大欄位統計
   const sharings = meeting.sharings || [];
@@ -1598,18 +1532,10 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2 my-2 text-center">
-          <div className="bg-emerald-50 rounded-lg py-1.5">
+        <div className="my-2">
+          <div className="bg-emerald-50 rounded-lg py-1.5 text-center">
             <div className="text-lg font-bold text-emerald-700">{meeting.attendees.length}<span className="text-xs font-normal text-emerald-600">/{totalInGroup}</span></div>
             <div className="text-[10px] text-emerald-600">出席（{attendRate}%）</div>
-          </div>
-          <div className="bg-amber-50 rounded-lg py-1.5">
-            <div className="text-lg font-bold text-amber-700">{pending.length}</div>
-            <div className="text-[10px] text-amber-600">待辦</div>
-          </div>
-          <div className={`${overdue.length ? "bg-red-50" : "bg-stone-50"} rounded-lg py-1.5`}>
-            <div className={`text-lg font-bold ${overdue.length ? "text-red-700" : "text-stone-500"}`}>{overdue.length}</div>
-            <div className={`text-[10px] ${overdue.length ? "text-red-600" : "text-stone-500"}`}>逾期</div>
           </div>
         </div>
 
@@ -1728,31 +1654,6 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
               </div>
             )}
 
-            {actionItems.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-stone-700 mb-1.5">行動項目</div>
-                <div className="space-y-1">
-                  {actionItems.map(a => {
-                    const over = isOverdue(a);
-                    return (
-                      <div key={a.id} className="flex items-start gap-2 text-sm">
-                        <button onClick={() => onToggleAction(meeting.id, a.id)} className="mt-0.5">
-                          {a.status === "done" ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-stone-300 hover:text-stone-500" />}
-                        </button>
-                        <div className="flex-1">
-                          <span className={a.status === "done" ? "line-through text-stone-400" : ""}>{a.title}</span>
-                          <div className="flex items-center gap-2 text-xs mt-0.5">
-                            {a.assignee && <span className="text-stone-500">👤 {getMember(a.assignee)?.name || "—"}</span>}
-                            {a.dueDate && <span className={over ? "text-red-600 font-semibold" : "text-stone-500"}>📅 {fmtDate(a.dueDate)}{over && " 逾期"}</span>}
-                            {a.notes && <span className="text-stone-400 italic">💬 {a.notes}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -2868,292 +2769,136 @@ function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout,
   );
 }
 
-// ============ 儀表板（目前未啟用，保留程式碼供未來組聚 tab 使用） ============
-function Dashboard({ meetings, groups, members, mentees = [], currentUserId }) {
-  const stats = useMemo(() => {
-    const now = new Date();
-    const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
-
-    const recentMeetings = meetings.filter(m => new Date(m.date) >= monthAgo);
-    const allActions = meetings.flatMap(m => m.actionItems.map(a => ({ ...a, meetingId: m.id, groupId: m.groupId })));
-    const pending = allActions.filter(a => a.status === "pending");
-    const done = allActions.filter(a => a.status === "done");
-    const overdue = pending.filter(isOverdue);
-    const completionRate = allActions.length ? (done.length / allActions.length * 100).toFixed(0) : 0;
-
-    const byGroup = groups.map(g => {
-      const gMeetings = meetings.filter(m => m.groupId === g.id);
-      const totalAttend = gMeetings.reduce((s, m) => s + m.attendees.length, 0);
-      const totalSlots = gMeetings.length * g.memberIds.length;
-      const attendRate = totalSlots ? (totalAttend / totalSlots * 100).toFixed(0) : 0;
-
-      const gActions = gMeetings.flatMap(m => m.actionItems);
-      const gDone = gActions.filter(a => a.status === "done").length;
-      const gCompletion = gActions.length ? (gDone / gActions.length * 100).toFixed(0) : 0;
-
-      return {
-        group: g, meetings: gMeetings.length,
-        attendRate: Number(attendRate), completionRate: Number(gCompletion),
-        pendingCount: gActions.filter(a => a.status === "pending").length,
-        overdueCount: gActions.filter(a => isOverdue(a)).length,
-      };
-    });
-
-    // 個人
-    let personal = null;
-    if (currentUserId) {
-      const my = meetings.filter(m => m.attendees.includes(currentUserId) || m.absentees.includes(currentUserId));
-      const attended = my.filter(m => m.attendees.includes(currentUserId));
-      const myActions = allActions.filter(a => a.assignee === currentUserId);
-      personal = {
-        totalMeetings: my.length,
-        attended: attended.length,
-        attendRate: my.length ? (attended.length / my.length * 100).toFixed(0) : 0,
-        myActions, myPending: myActions.filter(a => a.status === "pending"),
-        myOverdue: myActions.filter(a => isOverdue(a)),
-        myDone: myActions.filter(a => a.status === "done"),
-      };
-    }
-
-    return { recentCount: recentMeetings.length, pending, done, overdue, allActions, completionRate, byGroup, personal };
-  }, [meetings, groups, currentUserId]);
-
-  const mentorStats = useMemo(() => {
-    const inProgress = mentees.filter(m => !m.graduationDate);
-    const graduated = mentees.filter(m => m.graduationDate);
-    const avgProgress = inProgress.length
-      ? Math.round(inProgress.reduce((s, m) => s + getMenteeStats(m, []).overallPct, 0) / inProgress.length)
-      : 0;
-    const myMentees = currentUserId
-      ? mentees.filter(m => m.mentorPrimaryId === currentUserId || m.mentorSecondaryId === currentUserId)
-      : [];
-    const needsOneOnOne = currentUserId
-      ? mentees.filter(m => !m.graduationDate).flatMap(m => {
-          const targets = getMenteeAllTargets(m);
-          if (!targets.find(t => t.memberId === currentUserId)) return [];
-          const rec = m.oneOnOnes[currentUserId] || {};
-          const incomplete = ONE_ON_ONE_TYPES.filter(t => !rec[t.key]?.done);
-          return incomplete.length ? [{ mentee: m, types: incomplete }] : [];
-        })
-      : [];
+// ============ 組聚小表板（各組組聚次數 / 引薦單數 / 引薦金額） ============
+// 時間範圍由 dashboardConfig 控制（可在小齒輪選單設定，存 JSONBin）
+function computeDashboardRange(config) {
+  const now = new Date();
+  const mode = config?.rangeMode || "thisMonth";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (mode === "thisMonth") {
+    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: null };
+  }
+  if (mode === "thisQuarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    return { start: new Date(now.getFullYear(), q * 3, 1), end: null };
+  }
+  if (mode === "thisYear") {
+    return { start: new Date(now.getFullYear(), 0, 1), end: null };
+  }
+  if (mode === "last90") {
+    const s = new Date(today); s.setDate(s.getDate() - 90);
+    return { start: s, end: null };
+  }
+  if (mode === "custom") {
     return {
-      total: mentees.length,
-      inProgress: inProgress.length,
-      graduated: graduated.length,
-      avgProgress, myMentees, needsOneOnOne,
+      start: config.customStart ? new Date(config.customStart) : null,
+      end: config.customEnd ? new Date(config.customEnd + "T23:59:59") : null,
     };
-  }, [mentees, currentUserId]);
+  }
+  // all
+  return { start: null, end: null };
+}
+
+function dashboardRangeLabel(config) {
+  const map = {
+    thisMonth: "本月", thisQuarter: "本季", thisYear: "本年",
+    last90: "近 90 天", all: "全部", custom: "自訂",
+  };
+  const base = map[config?.rangeMode || "thisMonth"] || "本月";
+  if (config?.rangeMode === "custom") {
+    return `自訂：${config.customStart || "—"} ~ ${config.customEnd || "—"}`;
+  }
+  return base;
+}
+
+function GroupStatsBar({ meetings, groups, config, onConfigChange }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(config || { rangeMode: "thisMonth" });
+  useEffect(() => { setDraft(config || { rangeMode: "thisMonth" }); }, [config, open]);
+
+  const stats = useMemo(() => {
+    const { start, end } = computeDashboardRange(config);
+    const inRange = meetings.filter(m => {
+      const d = new Date(m.date);
+      if (start && d < start) return false;
+      if (end && d > end) return false;
+      return true;
+    });
+    return groups.map(g => {
+      const gMeetings = inRange.filter(m => m.groupId === g.id);
+      const refs = gMeetings.flatMap(m => m.referrals || []);
+      const refTotal = refs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      return { group: g, meetings: gMeetings.length, refCount: refs.length, refTotal };
+    });
+  }, [meetings, groups, config]);
+
+  const totalMeetings = stats.reduce((s, x) => s + x.meetings, 0);
+  const totalRefCount = stats.reduce((s, x) => s + x.refCount, 0);
+  const totalRefAmount = stats.reduce((s, x) => s + x.refTotal, 0);
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-stone-800">統計儀表板</h2>
-
-      {/* 全分會 KPI */}
-      <div>
-        <h3 className="text-sm font-semibold text-stone-600 mb-2">全分會概況</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="bg-white border border-stone-200 rounded-xl p-3">
-            <div className="flex items-center justify-between text-stone-400 mb-1">
-              <span className="text-xs">近 30 天會議</span><Calendar className="w-4 h-4" />
-            </div>
-            <div className="text-2xl font-bold text-stone-800">{stats.recentCount}</div>
-          </div>
-          <div className="bg-white border border-stone-200 rounded-xl p-3">
-            <div className="flex items-center justify-between text-stone-400 mb-1">
-              <span className="text-xs">待辦總數</span><Target className="w-4 h-4" />
-            </div>
-            <div className="text-2xl font-bold text-amber-700">{stats.pending.length}</div>
-          </div>
-          <div className="bg-white border border-stone-200 rounded-xl p-3">
-            <div className="flex items-center justify-between text-stone-400 mb-1">
-              <span className="text-xs">已逾期</span><AlertCircle className="w-4 h-4" />
-            </div>
-            <div className={`text-2xl font-bold ${stats.overdue.length ? "text-red-600" : "text-stone-800"}`}>{stats.overdue.length}</div>
-          </div>
-          <div className="bg-white border border-stone-200 rounded-xl p-3">
-            <div className="flex items-center justify-between text-stone-400 mb-1">
-              <span className="text-xs">完成率</span><TrendingUp className="w-4 h-4" />
-            </div>
-            <div className="text-2xl font-bold text-emerald-700">{stats.completionRate}%</div>
-          </div>
-        </div>
+    <div className="bg-white border border-stone-200 rounded-xl px-3 py-2 mb-3 relative">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-xs font-semibold text-stone-700">各組表現</span>
+        <span className="text-[10px] text-stone-500 bg-stone-100 rounded px-1.5 py-0.5">{dashboardRangeLabel(config)}</span>
+        <span className="text-[10px] text-stone-400 ml-auto whitespace-nowrap">
+          合計：組聚 {totalMeetings}　引薦 {totalRefCount} 單　NT${totalRefAmount.toLocaleString()}
+        </span>
+        <button onClick={() => setOpen(v => !v)}
+          className="p-1 text-stone-400 hover:text-[#B8860B] rounded" title="時間範圍設定">
+          <Settings className="w-3.5 h-3.5" />
+        </button>
       </div>
-
-      {/* 個人視角 */}
-      {stats.personal && (
-        <div>
-          <h3 className="text-sm font-semibold text-stone-600 mb-2 flex items-center gap-1">
-            <User className="w-4 h-4" />我的進度（{members.find(m => m.id === currentUserId)?.name}）
-          </h3>
-          <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-4">
-            <div className="grid grid-cols-4 gap-3 mb-4 text-center">
-              <div>
-                <div className="text-xs text-stone-500">出席率</div>
-                <div className="text-xl font-bold text-emerald-700">{stats.personal.attendRate}%</div>
-                <div className="text-[10px] text-stone-400">{stats.personal.attended}/{stats.personal.totalMeetings}</div>
-              </div>
-              <div>
-                <div className="text-xs text-stone-500">待辦</div>
-                <div className="text-xl font-bold text-amber-700">{stats.personal.myPending.length}</div>
-              </div>
-              <div>
-                <div className="text-xs text-stone-500">逾期</div>
-                <div className={`text-xl font-bold ${stats.personal.myOverdue.length ? "text-red-600" : "text-stone-500"}`}>{stats.personal.myOverdue.length}</div>
-              </div>
-              <div>
-                <div className="text-xs text-stone-500">已完成</div>
-                <div className="text-xl font-bold text-emerald-700">{stats.personal.myDone.length}</div>
-              </div>
-            </div>
-            {stats.personal.myPending.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-stone-600 mb-1.5">我的待辦清單</div>
-                <div className="space-y-1">
-                  {stats.personal.myPending.slice(0, 5).map(a => (
-                    <div key={a.id} className="flex items-center justify-between text-sm bg-white rounded-md px-2.5 py-1.5">
-                      <span className="flex-1 truncate">{a.title}</span>
-                      {a.dueDate && <span className={`text-xs ml-2 ${isOverdue(a) ? "text-red-600 font-semibold" : "text-stone-500"}`}>{fmtDate(a.dueDate)}</span>}
-                    </div>
-                  ))}
-                  {stats.personal.myPending.length > 5 && <div className="text-xs text-stone-400 text-center">還有 {stats.personal.myPending.length - 5} 項...</div>}
-                </div>
-              </div>
-            )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-0.5 text-xs">
+        {stats.map(s => (
+          <div key={s.group.id} className="flex items-center gap-1.5 py-0.5">
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.group.color }} />
+            <span className="font-medium text-stone-700 truncate">{s.group.name}</span>
+            <span className="ml-auto text-stone-500 whitespace-nowrap tabular-nums">
+              {s.meetings} 次 · {s.refCount} 單 · <b className="text-emerald-700">NT${s.refTotal.toLocaleString()}</b>
+            </span>
           </div>
-        </div>
-      )}
-
-      {/* 各組統計 */}
-      <div>
-        <h3 className="text-sm font-semibold text-stone-600 mb-2">各小組表現</h3>
-        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-12 text-xs font-semibold text-stone-500 px-4 py-2 bg-stone-50 border-b border-stone-200">
-            <div className="col-span-3">小組</div>
-            <div className="col-span-2 text-center">組聚</div>
-            <div className="col-span-3">出席率</div>
-            <div className="col-span-3">完成率</div>
-            <div className="col-span-1 text-right">逾期</div>
-          </div>
-          {stats.byGroup.map(s => (
-            <div key={s.group.id} className="grid grid-cols-12 items-center px-4 py-3 border-b border-stone-100 last:border-0 text-sm">
-              <div className="col-span-3 flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.group.color }} />
-                <span className="font-medium">{s.group.name}</span>
-              </div>
-              <div className="col-span-2 text-center">{s.meetings}</div>
-              <div className="col-span-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${s.attendRate}%` }} />
-                  </div>
-                  <span className="text-xs font-semibold text-stone-600 w-8 text-right">{s.attendRate}%</span>
-                </div>
-              </div>
-              <div className="col-span-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#B8860B] rounded-full transition-all" style={{ width: `${s.completionRate}%` }} />
-                  </div>
-                  <span className="text-xs font-semibold text-stone-600 w-8 text-right">{s.completionRate}%</span>
-                </div>
-              </div>
-              <div className={`col-span-1 text-right font-semibold ${s.overdueCount ? "text-red-600" : "text-stone-400"}`}>{s.overdueCount}</div>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
-
-      {/* 導師視角：我是導師的新生 */}
-      {mentorStats.myMentees.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
-            <GraduationCap className="w-4 h-4 text-[#B8860B]" />
-            我是導師的新生（{mentorStats.myMentees.length}）
-          </h3>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {mentorStats.myMentees.map(m => {
-              const s = getMenteeStats(m, []);
-              const member = members.find(x => x.id === m.memberId);
-              const color = s.isGraduated ? "#059669" : "#B8860B";
-              return (
-                <div key={m.id} className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
-                  <div className="relative flex-shrink-0">
-                    <ProgressDonut pct={s.overallPct} size={44} stroke={4} color={color} />
-                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ color }}>{s.overallPct}%</div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-stone-800 truncate">
-                      {member?.name} {s.isGraduated && <span className="text-xs text-emerald-600">🎓</span>}
-                    </div>
-                    <div className="text-[11px] text-stone-500 truncate">{m.representativeIndustry}</div>
-                    <div className="text-[11px] text-stone-400 mt-0.5">
-                      護照 {s.passportDone}/{s.passportTotal} · 培訓 {s.trainingDone}/{s.trainingTotal} · 6:15 {Math.min(s.earlyAttend, s.earlyAttendTotal)}/{s.earlyAttendTotal}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 我的一對一待跑 */}
-      {mentorStats.needsOneOnOne.length > 0 && (
-        <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-pink-800 mb-2 flex items-center gap-1.5">
-            <Users className="w-4 h-4" />
-            我的一對一待跑（{mentorStats.needsOneOnOne.reduce((s, x) => s + x.types.length, 0)} 項）
-          </h3>
-          <div className="space-y-2">
-            {mentorStats.needsOneOnOne.map(({ mentee, types }) => {
-              const member = members.find(x => x.id === mentee.memberId);
-              return (
-                <div key={mentee.id} className="bg-white rounded-lg px-3 py-2 flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-stone-800">{member?.name}</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {types.map(t => (
-                        <span key={t.key} className="text-[10px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">{t.short}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 分會導生概況 */}
-      {mentees.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-stone-700 mb-2 flex items-center gap-1.5">
-            <Award className="w-4 h-4 text-[#B8860B]" />
-            分會導生概況
-          </h3>
-          <div className="grid grid-cols-4 gap-2">
-            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
-              <div className="text-xs text-stone-500">總新生</div>
-              <div className="text-xl font-bold text-stone-800 mt-1">{mentorStats.total}</div>
+      {open && (
+        <div className="absolute right-2 top-10 z-30 bg-white border border-stone-200 rounded-lg shadow-lg p-3 w-72">
+          <div className="text-xs font-semibold text-stone-700 mb-2">表板時間範圍</div>
+          <select value={draft.rangeMode || "thisMonth"}
+            onChange={e => setDraft({ ...draft, rangeMode: e.target.value })}
+            className="w-full border border-stone-300 rounded-md px-2 py-1.5 text-sm mb-2">
+            <option value="thisMonth">本月</option>
+            <option value="thisQuarter">本季</option>
+            <option value="thisYear">本年</option>
+            <option value="last90">近 90 天</option>
+            <option value="all">全部</option>
+            <option value="custom">自訂區間</option>
+          </select>
+          {draft.rangeMode === "custom" && (
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-[10px] text-stone-500">起</label>
+                <input type="date" value={draft.customStart || ""}
+                  onChange={e => setDraft({ ...draft, customStart: e.target.value })}
+                  className="w-full border border-stone-300 rounded-md px-2 py-1 text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] text-stone-500">迄</label>
+                <input type="date" value={draft.customEnd || ""}
+                  onChange={e => setDraft({ ...draft, customEnd: e.target.value })}
+                  className="w-full border border-stone-300 rounded-md px-2 py-1 text-sm" />
+              </div>
             </div>
-            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
-              <div className="text-xs text-stone-500">進行中</div>
-              <div className="text-xl font-bold text-[#B8860B] mt-1">{mentorStats.inProgress}</div>
-            </div>
-            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
-              <div className="text-xs text-stone-500">已畢業</div>
-              <div className="text-xl font-bold text-emerald-600 mt-1">{mentorStats.graduated}</div>
-            </div>
-            <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
-              <div className="text-xs text-stone-500">平均進度</div>
-              <div className="text-xl font-bold text-[#8B1A1A] mt-1">{mentorStats.avgProgress}%</div>
-            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 mt-2">
+            <Btn variant="outline" size="sm" onClick={() => setOpen(false)}>取消</Btn>
+            <Btn variant="primary" size="sm" onClick={() => { onConfigChange(draft); setOpen(false); }}>套用</Btn>
           </div>
         </div>
       )}
     </div>
   );
 }
+
 
 // ============ 導生管理員驗證 ============
 function MentorshipAdminGate({ onPass }) {
@@ -3240,6 +2985,7 @@ function App() {
   const [coffeeSyncingAt, setCoffeeSyncingAt] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [mentorshipDefaults, setMentorshipDefaults] = useState(null);  // 分會預設團隊
+  const [dashboardConfig, setDashboardConfig] = useState({ rangeMode: "thisMonth" });  // 組聚表板時間範圍
 
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [filter, setFilter] = useState({ groupId: "", onlyMine: false });
@@ -3257,14 +3003,15 @@ function App() {
   // 初始載入
   useEffect(() => {
     (async () => {
-      // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組 + 導生預設
-      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes, defaultsData] = await Promise.all([
+      // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組 + 導生預設 + 表板設定
+      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes, defaultsData, dashCfg] = await Promise.all([
         loadState(STORAGE_KEYS.MEETINGS, null),
         loadState(STORAGE_KEYS.MEMBERS, null),
         loadState(STORAGE_KEYS.MENTEES, null),
         loadState(STORAGE_KEYS.GROUP_EXTRAS, {}),
         fetch(PROXY_URL + '/api/groups').then(r => r.ok ? r.json() : {}).catch(() => ({})),
         loadState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, null),
+        loadState(STORAGE_KEYS.DASHBOARD_CONFIG, { rangeMode: "thisMonth" }),
       ]);
       const liveMembers = (mainData && Array.isArray(mainData.members)) ? mainData.members : [];
       const builtGroups = buildGroupsFromKpi(kpiGroupsRes, liveMembers, extrasData);
@@ -3273,6 +3020,7 @@ function App() {
       setMembers(liveMembers.length ? liveMembers : SEED_MEMBERS);
       setMentees(menteesData || SEED_MENTEES);
       setMentorshipDefaults(defaultsData);  // null 表示尚未設定
+      if (dashCfg && typeof dashCfg === "object") setDashboardConfig(dashCfg);
       // 主站咖啡會議（只讀，用於導生頁統計）
       const mainCms = (mainData && Array.isArray(mainData.coffeeMeetings)) ? mainData.coffeeMeetings : [];
       setMainCoffeeMeetings(mainCms);
@@ -3288,6 +3036,12 @@ function App() {
     const withTime = { ...newDefaults, updatedAt: new Date().toISOString() };
     setMentorshipDefaults(withTime);
     await saveState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, withTime);
+  };
+
+  // 儲存組聚表板時間範圍設定
+  const saveDashboardConfig = async (cfg) => {
+    setDashboardConfig(cfg);
+    try { await saveState(STORAGE_KEYS.DASHBOARD_CONFIG, cfg); } catch (e) { console.error(e); }
   };
 
   // 手動重新整理主站咖啡會議（導生頁用）
@@ -3336,24 +3090,13 @@ function App() {
     showToast("已儲存");
   };
   const deleteMeeting = (id) => { setMeetings(meetings.filter(m => m.id !== id)); setEditingMeeting(null); };
-  const toggleAction = (meetingId, actionId) => {
-    setMeetings(meetings.map(m => m.id !== meetingId ? m : {
-      ...m,
-      actionItems: m.actionItems.map(a => a.id !== actionId ? a : {
-        ...a,
-        status: a.status === "done" ? "pending" : "done",
-        completedAt: a.status === "done" ? null : new Date().toISOString(),
-      }),
-    }));
-  };
 
   // 篩選會議
   const filteredMeetings = useMemo(() => {
     return meetings
       .filter(m => !filter.groupId || m.groupId === filter.groupId)
       .filter(m => !filter.onlyMine || !currentUserId ||
-        m.attendees.includes(currentUserId) || m.absentees.includes(currentUserId) ||
-        m.actionItems.some(a => a.assignee === currentUserId))
+        m.attendees.includes(currentUserId) || m.absentees.includes(currentUserId))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [meetings, filter, currentUserId]);
 
@@ -3422,6 +3165,10 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-5">
         {tab === "meetings" && (
           <div>
+            {groups.length > 0 && (
+              <GroupStatsBar meetings={meetings} groups={groups}
+                config={dashboardConfig} onConfigChange={saveDashboardConfig} />
+            )}
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <select value={filter.groupId} onChange={e => setFilter({ ...filter, groupId: e.target.value })}
@@ -3458,7 +3205,7 @@ function App() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {filteredMeetings.map(m => (
                   <MeetingCard key={m.id} meeting={m} group={groups.find(g => g.id === m.groupId)}
-                    members={members} onEdit={setEditingMeeting} onToggleAction={toggleAction} />
+                    members={members} onEdit={setEditingMeeting} />
                 ))}
               </div>
             )}
