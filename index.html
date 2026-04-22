@@ -2065,10 +2065,8 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
 
       {/* 從組聚匯入引薦 Modal */}
       {importPanelOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50"
-          onClick={() => setImportPanelOpen(false)}>
-          <div className="bg-white w-full max-w-3xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]"
-            onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
+          <div className="bg-white w-full max-w-3xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sm:rounded-t-2xl flex-shrink-0">
               <div>
                 <h3 className="text-lg font-bold" style={{ color: '#1A1414' }}>從組聚匯入引薦意向</h3>
@@ -2225,10 +2223,9 @@ function CoffeeMeetingModal({ isNew, formData, setFormData, members, onSave, onC
   return (
     <div
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
       style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
     >
-      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-4 flex justify-between items-center z-10">
           <div className="text-lg font-bold" style={{ color: '#1A1414' }}>
             {isNew ? '新增咖啡會議' : '編輯咖啡會議'}
