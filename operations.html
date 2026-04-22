@@ -454,21 +454,45 @@ function exportMeetingDocx(meeting, group, members) {
   return d.Packer.toBlob(doc);
 }
 
-// 產出會議記錄 HTML，供 PDF 列印使用
+// 產出會議記錄 HTML 片段（body 內容），供 PDF 列印使用
+// 樣式 inline，避免離屏 div 拿不到外部 style
 function buildMeetingHtml(meeting, group, members) {
   const c = buildMeetingContent(meeting, group, members);
   const esc = (s) => String(s || "").replace(/[&<>"']/g, ch =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 
+  // inline style helpers
+  const S = {
+    root: 'font-family:"標楷體","DFKai-SB","BiauKai",serif;color:#1A1414;font-size:12pt;line-height:1.6;padding:20px;background:white;width:100%;',
+    h1: 'color:#8B1A1A;text-align:center;font-size:20pt;margin:0 0 5px;font-weight:bold;',
+    subtitle: 'color:#B8860B;text-align:center;font-size:13pt;margin:0 0 20px;',
+    h2: 'color:#8B1A1A;font-size:14pt;border-bottom:2px solid #8B1A1A;padding-bottom:3px;margin:18px 0 8px;font-weight:bold;',
+    section: 'margin-bottom:10px;page-break-inside:avoid;',
+    kv: 'margin:3px 0;',
+    item: 'margin:5px 0;',
+    sub: 'padding-left:2em;color:#555;font-size:11pt;margin-top:2px;',
+    fromto: 'color:#8B1A1A;font-weight:bold;',
+    amount: 'color:#8B1A1A;font-weight:600;',
+    ncBlock: 'margin:8px 0;',
+    ncTitle: 'color:#B8860B;font-weight:bold;margin-bottom:3px;',
+    ncList: 'margin:4px 0 4px 1.5em;padding:0;',
+    ncLi: 'margin:2px 0;',
+    ncLiEmpty: 'color:#888;list-style:none;margin:2px 0;',
+    imported: 'color:#4A6741;font-size:10pt;',
+    total: 'text-align:right;color:#8B1A1A;font-weight:bold;font-size:13pt;margin-top:10px;border-top:1px solid #B8860B;padding-top:5px;',
+    statusDone: 'color:#4A6741;',
+    statusPending: 'color:#B8860B;',
+  };
+
   const section = (title, emoji, body) => body
-    ? `<section><h2>${emoji} ${title}</h2>${body}</section>`
+    ? `<div style="${S.section}"><div style="${S.h2}">${emoji} ${title}</div>${body}</div>`
     : "";
-  const kv = (k, v) => `<div class="kv"><b>${esc(k)}：</b>${esc(v || "—")}</div>`;
+  const kv = (k, v) => `<div style="${S.kv}"><b>${esc(k)}：</b>${esc(v || "—")}</div>`;
 
   let sharingsBlock = "";
   if (c.sharings.length) {
     sharingsBlock = c.sharings.map(s =>
-      `<div class="item"><b>${esc(s.name)}：</b>${esc(s.content)}</div>`).join("");
+      `<div style="${S.item}"><b>${esc(s.name)}：</b>${esc(s.content)}</div>`).join("");
   }
 
   let speakerBlock = "";
@@ -480,7 +504,7 @@ function buildMeetingHtml(meeting, group, members) {
   let feedbackBlock = "";
   if (c.feedback.length) {
     feedbackBlock = c.feedback.map((f, i) =>
-      `<div class="item">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`).join("");
+      `<div style="${S.item}">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`).join("");
   }
 
   let ncBlock = "";
@@ -491,12 +515,12 @@ function buildMeetingHtml(meeting, group, members) {
         if (of.introducer) parts.push(`${esc(of.introducer)} 有人脈`);
         if (of.contactName) parts.push(esc(of.contactName));
         if (of.contactProfession) parts.push(`（${esc(of.contactProfession)}）`);
-        if (of.status === "imported") parts.push(`<span class="imported">[已匯入咖啡會議]</span>`);
-        return `<li>${parts.join(" ")}</li>`;
-      }).join("") : `<li class="empty">（尚無引薦）</li>`;
-      return `<div class="nc-block">
-        <div class="nc-title">需求 ${i + 1}：${esc(nc.profileWanted)}</div>
-        <ul>${offersHtml}</ul>
+        if (of.status === "imported") parts.push(`<span style="${S.imported}">[已匯入咖啡會議]</span>`);
+        return `<li style="${S.ncLi}">${parts.join(" ")}</li>`;
+      }).join("") : `<li style="${S.ncLiEmpty}">（尚無引薦）</li>`;
+      return `<div style="${S.ncBlock}">
+        <div style="${S.ncTitle}">需求 ${i + 1}：${esc(nc.profileWanted)}</div>
+        <ul style="${S.ncList}">${offersHtml}</ul>
       </div>`;
     }).join("");
   }
@@ -504,14 +528,14 @@ function buildMeetingHtml(meeting, group, members) {
   let referralsBlock = "";
   if (c.referrals.length) {
     const rows = c.referrals.map((r, i) => {
-      const amt = r.amount > 0 ? `<span class="amount">成交 NT$ ${r.amount.toLocaleString()}</span>` : "";
-      return `<div class="item">
-        ${i + 1}. <b class="fromto">${esc(r.from)} → ${esc(r.to)}</b>：${esc(r.referralName || "—")} ${amt}
-        ${r.content ? `<div class="sub">${esc(r.content)}</div>` : ""}
+      const amt = r.amount > 0 ? `<span style="${S.amount}">成交 NT$ ${r.amount.toLocaleString()}</span>` : "";
+      return `<div style="${S.item}">
+        ${i + 1}. <span style="${S.fromto}">${esc(r.from)} → ${esc(r.to)}</span>：${esc(r.referralName || "—")} ${amt}
+        ${r.content ? `<div style="${S.sub}">${esc(r.content)}</div>` : ""}
       </div>`;
     }).join("");
     const total = c.referralTotal > 0
-      ? `<div class="total">本次引薦總額：NT$ ${c.referralTotal.toLocaleString()}</div>` : "";
+      ? `<div style="${S.total}">本次引薦總額：NT$ ${c.referralTotal.toLocaleString()}</div>` : "";
     referralsBlock = rows + total;
   }
 
@@ -525,42 +549,19 @@ function buildMeetingHtml(meeting, group, members) {
   let actionsBlock = "";
   if (c.actionItems.length) {
     actionsBlock = c.actionItems.map((a, i) => {
-      const status = a.status === "done" ? `<span class="status done">[已完成]</span>` : `<span class="status pending">[待處理]</span>`;
-      return `<div class="item">${i + 1}. ${esc(a.content)}${a.assignee ? ` · ${esc(a.assignee)}` : ""}${a.dueDate ? ` · 到期 ${esc(a.dueDate)}` : ""} ${status}</div>`;
+      const st = a.status === "done"
+        ? `<span style="${S.statusDone}">[已完成]</span>`
+        : `<span style="${S.statusPending}">[待處理]</span>`;
+      return `<div style="${S.item}">${i + 1}. ${esc(a.content)}${a.assignee ? ` · ${esc(a.assignee)}` : ""}${a.dueDate ? ` · 到期 ${esc(a.dueDate)}` : ""} ${st}</div>`;
     }).join("");
   }
 
-  return `<!DOCTYPE html><html lang="zh-TW"><head>
-<meta charset="UTF-8"><title>組聚記錄</title>
-<style>
-  @page { size: A4; margin: 15mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "標楷體", "DFKai-SB", serif; color: #1A1414; font-size: 12pt; line-height: 1.6; margin: 0; padding: 20px; background: white; }
-  h1 { color: #8B1A1A; text-align: center; font-size: 20pt; margin: 0 0 5px; }
-  .subtitle { color: #B8860B; text-align: center; font-size: 13pt; margin: 0 0 25px; }
-  h2 { color: #8B1A1A; font-size: 14pt; border-bottom: 2px solid #8B1A1A; padding-bottom: 3px; margin: 20px 0 10px; }
-  section { margin-bottom: 12px; page-break-inside: avoid; }
-  .kv { margin: 3px 0; }
-  .kv b { color: #1A1414; }
-  .item { margin: 5px 0; }
-  .item .sub { padding-left: 2em; color: #555; font-size: 11pt; }
-  .fromto { color: #8B1A1A; }
-  .amount { color: #8B1A1A; font-weight: 600; }
-  .nc-block { margin: 8px 0; }
-  .nc-title { color: #B8860B; font-weight: bold; margin-bottom: 3px; }
-  .nc-block ul { margin: 4px 0 4px 1.5em; padding: 0; }
-  .nc-block li { margin: 2px 0; }
-  .nc-block li.empty { color: #888; list-style: none; }
-  .imported { color: #4A6741; font-size: 10pt; }
-  .total { text-align: right; color: #8B1A1A; font-weight: bold; font-size: 13pt; margin-top: 10px; border-top: 1px solid #B8860B; padding-top: 5px; }
-  .status.done { color: #4A6741; }
-  .status.pending { color: #B8860B; }
-</style>
-</head><body>
-<h1>BNI 富鼎分會 組聚記錄</h1>
-<div class="subtitle">${esc(c.meta.groupName)} · ${esc(c.meta.date)}${c.meta.time ? " " + esc(c.meta.time) : ""}</div>
+  return `<div style="${S.root}">
+<div style="${S.h1}">BNI 富鼎分會 組聚記錄</div>
+<div style="${S.subtitle}">${esc(c.meta.groupName)} · ${esc(c.meta.date)}${c.meta.time ? " " + esc(c.meta.time) : ""}</div>
 
-<section><h2>📋 基本資訊</h2>
+<div style="${S.section}">
+  <div style="${S.h2}">📋 基本資訊</div>
   ${kv("小組", c.meta.groupName)}
   ${kv("日期", c.meta.date)}
   ${c.meta.time ? kv("時間", c.meta.time) : ""}
@@ -568,7 +569,7 @@ function buildMeetingHtml(meeting, group, members) {
   ${c.meta.scribeName ? kv("記錄", c.meta.scribeName) : ""}
   ${kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`)}
   ${c.meta.absenteeCount > 0 ? kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`) : ""}
-</section>
+</div>
 
 ${section("成長/喜悅分享", "💬", sharingsBlock)}
 ${section("主講人專業簡報", "🎤", speakerBlock)}
@@ -577,30 +578,49 @@ ${section("主講人需要的合作人脈", "🤝", ncBlock)}
 ${section("小組內引薦", "🎯", referralsBlock)}
 ${section("下次組聚", "📅", nextBlock)}
 ${section("行動項目", "✅", actionsBlock)}
-
-</body></html>`;
+</div>`;
 }
 
 // 產出 PDF Blob（用 html2pdf 動態 export）
 async function exportMeetingPdf(meeting, group, members) {
   if (!window.html2pdf) { alert("PDF 匯出功能未就緒（html2pdf 未載入）"); return null; }
-  const html = buildMeetingHtml(meeting, group, members);
-  // 建一個離屏 div 讓 html2pdf render
+  const htmlFragment = buildMeetingHtml(meeting, group, members);
+  // 建一個螢幕內可見但透明的容器讓 html2canvas 能正常截圖
   const container = document.createElement("div");
-  container.innerHTML = html;
-  container.style.position = "fixed";
-  container.style.left = "-9999px";
+  container.innerHTML = htmlFragment;
+  container.style.position = "absolute";
+  container.style.left = "0";
   container.style.top = "0";
-  container.style.width = "210mm";
+  container.style.width = "794px";       // 210mm @ 96dpi ≈ 794px
+  container.style.background = "white";
+  container.style.zIndex = "-1";         // 藏在所有東西後面
+  container.style.opacity = "0";         // 視覺上看不到
+  container.style.pointerEvents = "none";
   document.body.appendChild(container);
+
+  // 等一個 frame 讓瀏覽器 layout + 字型載入
+  await new Promise(r => requestAnimationFrame(() => r()));
   try {
-    const blob = await window.html2pdf().set({
-      margin: 10,
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  } catch {}
+
+  try {
+    const worker = window.html2pdf().set({
+      margin: [10, 10, 10, 10],
       filename: "meeting.pdf",
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-    }).from(container).outputPdf("blob");
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        // 重要：讓 html2canvas 用容器本身大小而不是 window
+        windowWidth: 794,
+      },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait", compress: true },
+      pagebreak: { mode: ["css", "legacy"] },
+    }).from(container);
+    const blob = await worker.outputPdf("blob");
     return blob;
   } finally {
     document.body.removeChild(container);
