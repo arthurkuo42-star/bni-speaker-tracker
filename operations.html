@@ -15,6 +15,10 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   body {
     font-family: 'Noto Sans TC', sans-serif;
@@ -64,6 +68,8 @@ const Filter = (p) => React.createElement(IconWrap, { ...p, children: '<polygon 
 const Settings = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' });
 const Sparkles = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M12 3l1.9 5.7L20 10l-5 3.6 1.4 6.4L12 17l-4.4 3 1.4-6.4L4 10l6.1-1.3L12 3z"/>' });
 const FileText = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' });
+const Download = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' });
+const Package = (p) => React.createElement(IconWrap, { ...p, children: '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>' });
 const BookOpen = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' });
 const GraduationCap = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>' });
 const Award = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>' });
@@ -171,6 +177,486 @@ async function syncMainCoffeeMeetings(updateFn) {
 
 // ============ 小組顏色 palette ============
 const GROUP_COLORS = ["#B8860B", "#8B1A1A", "#2D5A27", "#6B4C8A", "#8B6F47", "#1E5A8A", "#A0522D", "#556B2F"];
+
+// ============ 組聚匯出工具 ============
+// 檔名安全化
+function safeFilename(s) {
+  return String(s || "").replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "").slice(0, 80);
+}
+
+// 建立組聚的文字內容結構，Word 與 PDF 共用這個資料
+function buildMeetingContent(meeting, group, members) {
+  const getMember = (id) => members.find(m => m.id === id);
+  const memberName = (id) => getMember(id)?.name || "（未知成員）";
+  const memberLabel = (id) => {
+    const m = getMember(id);
+    return m ? (m.industry ? `${m.name}（${m.industry}）` : m.name) : "（未知成員）";
+  };
+
+  const dateStr = meeting.date ? new Date(meeting.date).toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+  const timeStr = meeting.time || "";
+  const attendeesNames = (meeting.attendees || []).map(memberName).join("、");
+  const absenteesNames = (meeting.absentees || []).map(memberName).join("、");
+  const speakerName = meeting.speaker?.memberId ? memberLabel(meeting.speaker.memberId) : "";
+  const speakerTopic = meeting.speaker?.topic || "";
+  const scribeName = meeting.scribe ? memberName(meeting.scribe) : "";
+
+  return {
+    meta: {
+      groupName: group?.name || "未知小組",
+      date: dateStr,
+      time: timeStr,
+      location: meeting.location || "",
+      scribeName,
+      attendeesNames,
+      absenteesNames,
+      attendeeCount: (meeting.attendees || []).length,
+      absenteeCount: (meeting.absentees || []).length,
+    },
+    sharings: (meeting.sharings || []).map(s => ({
+      name: memberName(s.memberId),
+      content: s.content || "",
+    })),
+    speaker: {
+      name: speakerName,
+      topic: speakerTopic,
+    },
+    feedback: (meeting.feedback || []).map(f => ({
+      from: memberName(f.fromMemberId),
+      content: f.content || "",
+    })),
+    neededConnections: (meeting.neededConnections || []).map(nc => ({
+      profileWanted: nc.profileWanted || "",
+      offers: (nc.offers || []).map(of => ({
+        introducer: of.introducerId ? memberName(of.introducerId) : "",
+        contactName: of.contactName || "",
+        contactProfession: of.contactProfession || "",
+        status: of.status || "pending",
+      })),
+    })),
+    referrals: (meeting.referrals || []).map(r => ({
+      from: memberName(r.fromMemberId),
+      to: memberName(r.toMemberId),
+      referralName: r.referralName || "",
+      content: r.content || "",
+      amount: Number(r.amount) || 0,
+    })),
+    referralTotal: (meeting.referrals || []).reduce((s, r) => s + (Number(r.amount) || 0), 0),
+    nextMeeting: meeting.nextMeeting || {},
+    actionItems: (meeting.actionItems || []).map(a => ({
+      content: a.content || "",
+      assignee: a.assignee ? memberName(a.assignee) : "",
+      dueDate: a.dueDate || "",
+      status: a.status || "pending",
+    })),
+  };
+}
+
+// 產出 Word .docx（使用 docx.js UMD 全域 window.docx）
+function exportMeetingDocx(meeting, group, members) {
+  if (!window.docx) { alert("Word 匯出功能未就緒（docx 庫未載入）"); return null; }
+  const d = window.docx;
+  const c = buildMeetingContent(meeting, group, members);
+
+  // 常用樣式
+  const RED = "8B1A1A";
+  const GOLD = "B8860B";
+  const DARK = "1A1414";
+  const FONT = "標楷體";
+
+  const txt = (text, opts = {}) => new d.TextRun({ text: String(text || ""), font: FONT, size: 22, ...opts });
+  const p = (children, opts = {}) => new d.Paragraph({ children: Array.isArray(children) ? children : [children], spacing: { after: 80 }, ...opts });
+  const hr = () => new d.Paragraph({ border: { bottom: { color: "CCCCCC", size: 6, style: "single" } }, spacing: { before: 60, after: 120 } });
+  const h1 = (text, color = RED) => new d.Paragraph({
+    children: [new d.TextRun({ text, font: FONT, size: 36, bold: true, color })],
+    spacing: { before: 120, after: 120 },
+    alignment: d.AlignmentType.CENTER,
+  });
+  const h2 = (text, emoji = "") => new d.Paragraph({
+    children: [new d.TextRun({ text: (emoji ? emoji + " " : "") + text, font: FONT, size: 26, bold: true, color: RED })],
+    spacing: { before: 200, after: 100 },
+    border: { bottom: { color: RED, size: 10, style: "single" } },
+  });
+  const bullet = (text) => new d.Paragraph({
+    children: [txt(text)],
+    bullet: { level: 0 },
+    spacing: { after: 40 },
+  });
+  const kv = (k, v) => new d.Paragraph({
+    children: [
+      new d.TextRun({ text: (k || "") + "：", font: FONT, size: 22, bold: true, color: DARK }),
+      new d.TextRun({ text: String(v || "—"), font: FONT, size: 22, color: DARK }),
+    ],
+    spacing: { after: 40 },
+  });
+
+  const children = [];
+  children.push(h1("BNI 富鼎分會 組聚記錄"));
+  children.push(new d.Paragraph({
+    children: [new d.TextRun({ text: `${c.meta.groupName} · ${c.meta.date}${c.meta.time ? " " + c.meta.time : ""}`, font: FONT, size: 24, color: GOLD })],
+    alignment: d.AlignmentType.CENTER,
+    spacing: { after: 200 },
+  }));
+
+  // 基本資訊
+  children.push(h2("基本資訊", "📋"));
+  children.push(kv("小組", c.meta.groupName));
+  children.push(kv("日期", c.meta.date));
+  if (c.meta.time) children.push(kv("時間", c.meta.time));
+  if (c.meta.location) children.push(kv("地點", c.meta.location));
+  if (c.meta.scribeName) children.push(kv("記錄", c.meta.scribeName));
+  children.push(kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`));
+  if (c.meta.absenteeCount > 0) children.push(kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`));
+
+  // 成長/喜悅分享
+  if (c.sharings.length) {
+    children.push(h2("成長/喜悅分享", "💬"));
+    c.sharings.forEach(s => {
+      children.push(new d.Paragraph({
+        children: [
+          new d.TextRun({ text: s.name + "：", font: FONT, size: 22, bold: true }),
+          txt(s.content),
+        ],
+        spacing: { after: 80 },
+      }));
+    });
+  }
+
+  // 主講人專業簡報
+  if (c.speaker.name || c.speaker.topic) {
+    children.push(h2("主講人專業簡報", "🎤"));
+    if (c.speaker.name) children.push(kv("主講人", c.speaker.name));
+    if (c.speaker.topic) children.push(kv("主題", c.speaker.topic));
+  }
+
+  // 對主講人的建議
+  if (c.feedback.length) {
+    children.push(h2("對主講人的建議", "💡"));
+    c.feedback.forEach((f, i) => {
+      children.push(new d.Paragraph({
+        children: [
+          new d.TextRun({ text: `${i + 1}. ${f.from}：`, font: FONT, size: 22, bold: true }),
+          txt(f.content),
+        ],
+        spacing: { after: 60 },
+      }));
+    });
+  }
+
+  // 主講人需要的合作人脈
+  if (c.neededConnections.length) {
+    children.push(h2("主講人需要的合作人脈", "🤝"));
+    c.neededConnections.forEach((nc, i) => {
+      children.push(new d.Paragraph({
+        children: [new d.TextRun({ text: `需求 ${i + 1}：${nc.profileWanted}`, font: FONT, size: 22, bold: true, color: GOLD })],
+        spacing: { before: 80, after: 40 },
+      }));
+      if (nc.offers.length === 0) {
+        children.push(bullet("（尚無引薦）"));
+      } else {
+        nc.offers.forEach(of => {
+          const parts = [];
+          if (of.introducer) parts.push(`${of.introducer} 有人脈`);
+          if (of.contactName) parts.push(`${of.contactName}`);
+          if (of.contactProfession) parts.push(`（${of.contactProfession}）`);
+          if (of.status === "imported") parts.push("[已匯入咖啡會議]");
+          children.push(bullet(parts.join(" ") || "—"));
+        });
+      }
+    });
+  }
+
+  // 小組內引薦
+  if (c.referrals.length) {
+    children.push(h2("小組內引薦", "🎯"));
+    c.referrals.forEach((r, i) => {
+      const amount = r.amount > 0 ? ` · 成交 NT$ ${r.amount.toLocaleString()}` : "";
+      children.push(new d.Paragraph({
+        children: [
+          new d.TextRun({ text: `${i + 1}. `, font: FONT, size: 22, bold: true }),
+          new d.TextRun({ text: `${r.from} → ${r.to}`, font: FONT, size: 22, bold: true, color: RED }),
+          txt(`：${r.referralName || "—"}${amount}`),
+        ],
+        spacing: { after: 30 },
+      }));
+      if (r.content) {
+        children.push(new d.Paragraph({
+          children: [txt("　　" + r.content, { color: "555555" })],
+          spacing: { after: 60 },
+        }));
+      }
+    });
+    if (c.referralTotal > 0) {
+      children.push(new d.Paragraph({
+        children: [new d.TextRun({ text: `本次引薦總額：NT$ ${c.referralTotal.toLocaleString()}`, font: FONT, size: 24, bold: true, color: RED })],
+        alignment: d.AlignmentType.RIGHT,
+        spacing: { before: 80, after: 100 },
+      }));
+    }
+  }
+
+  // 下次組聚
+  if (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location) {
+    children.push(h2("下次組聚", "📅"));
+    if (c.nextMeeting.date) children.push(kv("日期", c.nextMeeting.date));
+    if (c.nextMeeting.time) children.push(kv("時間", c.nextMeeting.time));
+    if (c.nextMeeting.location) children.push(kv("地點", c.nextMeeting.location));
+  }
+
+  // 其他行動項目
+  if (c.actionItems.length) {
+    children.push(h2("行動項目", "✅"));
+    c.actionItems.forEach((a, i) => {
+      const statusTxt = a.status === "done" ? "[已完成]" : "[待處理]";
+      const parts = [`${i + 1}. `, a.content];
+      if (a.assignee) parts.push(` · ${a.assignee}`);
+      if (a.dueDate) parts.push(` · 到期 ${a.dueDate}`);
+      parts.push(` ${statusTxt}`);
+      children.push(bullet(parts.join("")));
+    });
+  }
+
+  // 頁尾
+  const doc = new d.Document({
+    styles: {
+      default: {
+        document: { run: { font: FONT, size: 22 } },
+      },
+    },
+    sections: [{
+      properties: { page: { margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 } } },
+      headers: {
+        default: new d.Header({
+          children: [new d.Paragraph({
+            alignment: d.AlignmentType.RIGHT,
+            children: [new d.TextRun({ text: "BNI 富鼎分會 · 組聚記錄", font: FONT, size: 18, color: "888888" })],
+          })],
+        }),
+      },
+      footers: {
+        default: new d.Footer({
+          children: [new d.Paragraph({
+            alignment: d.AlignmentType.CENTER,
+            children: [
+              new d.TextRun({ text: "第 ", font: FONT, size: 20 }),
+              new d.TextRun({ children: [d.PageNumber.CURRENT], font: FONT, size: 20 }),
+              new d.TextRun({ text: " 頁／共 ", font: FONT, size: 20 }),
+              new d.TextRun({ children: [d.PageNumber.TOTAL_PAGES], font: FONT, size: 20 }),
+              new d.TextRun({ text: " 頁", font: FONT, size: 20 }),
+            ],
+          })],
+        }),
+      },
+      children,
+    }],
+  });
+
+  return d.Packer.toBlob(doc);
+}
+
+// 產出會議記錄 HTML，供 PDF 列印使用
+function buildMeetingHtml(meeting, group, members) {
+  const c = buildMeetingContent(meeting, group, members);
+  const esc = (s) => String(s || "").replace(/[&<>"']/g, ch =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+  const section = (title, emoji, body) => body
+    ? `<section><h2>${emoji} ${title}</h2>${body}</section>`
+    : "";
+  const kv = (k, v) => `<div class="kv"><b>${esc(k)}：</b>${esc(v || "—")}</div>`;
+
+  let sharingsBlock = "";
+  if (c.sharings.length) {
+    sharingsBlock = c.sharings.map(s =>
+      `<div class="item"><b>${esc(s.name)}：</b>${esc(s.content)}</div>`).join("");
+  }
+
+  let speakerBlock = "";
+  if (c.speaker.name || c.speaker.topic) {
+    speakerBlock = (c.speaker.name ? kv("主講人", c.speaker.name) : "")
+      + (c.speaker.topic ? kv("主題", c.speaker.topic) : "");
+  }
+
+  let feedbackBlock = "";
+  if (c.feedback.length) {
+    feedbackBlock = c.feedback.map((f, i) =>
+      `<div class="item">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`).join("");
+  }
+
+  let ncBlock = "";
+  if (c.neededConnections.length) {
+    ncBlock = c.neededConnections.map((nc, i) => {
+      const offersHtml = nc.offers.length ? nc.offers.map(of => {
+        const parts = [];
+        if (of.introducer) parts.push(`${esc(of.introducer)} 有人脈`);
+        if (of.contactName) parts.push(esc(of.contactName));
+        if (of.contactProfession) parts.push(`（${esc(of.contactProfession)}）`);
+        if (of.status === "imported") parts.push(`<span class="imported">[已匯入咖啡會議]</span>`);
+        return `<li>${parts.join(" ")}</li>`;
+      }).join("") : `<li class="empty">（尚無引薦）</li>`;
+      return `<div class="nc-block">
+        <div class="nc-title">需求 ${i + 1}：${esc(nc.profileWanted)}</div>
+        <ul>${offersHtml}</ul>
+      </div>`;
+    }).join("");
+  }
+
+  let referralsBlock = "";
+  if (c.referrals.length) {
+    const rows = c.referrals.map((r, i) => {
+      const amt = r.amount > 0 ? `<span class="amount">成交 NT$ ${r.amount.toLocaleString()}</span>` : "";
+      return `<div class="item">
+        ${i + 1}. <b class="fromto">${esc(r.from)} → ${esc(r.to)}</b>：${esc(r.referralName || "—")} ${amt}
+        ${r.content ? `<div class="sub">${esc(r.content)}</div>` : ""}
+      </div>`;
+    }).join("");
+    const total = c.referralTotal > 0
+      ? `<div class="total">本次引薦總額：NT$ ${c.referralTotal.toLocaleString()}</div>` : "";
+    referralsBlock = rows + total;
+  }
+
+  let nextBlock = "";
+  if (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location) {
+    nextBlock = (c.nextMeeting.date ? kv("日期", c.nextMeeting.date) : "")
+      + (c.nextMeeting.time ? kv("時間", c.nextMeeting.time) : "")
+      + (c.nextMeeting.location ? kv("地點", c.nextMeeting.location) : "");
+  }
+
+  let actionsBlock = "";
+  if (c.actionItems.length) {
+    actionsBlock = c.actionItems.map((a, i) => {
+      const status = a.status === "done" ? `<span class="status done">[已完成]</span>` : `<span class="status pending">[待處理]</span>`;
+      return `<div class="item">${i + 1}. ${esc(a.content)}${a.assignee ? ` · ${esc(a.assignee)}` : ""}${a.dueDate ? ` · 到期 ${esc(a.dueDate)}` : ""} ${status}</div>`;
+    }).join("");
+  }
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head>
+<meta charset="UTF-8"><title>組聚記錄</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "標楷體", "DFKai-SB", serif; color: #1A1414; font-size: 12pt; line-height: 1.6; margin: 0; padding: 20px; background: white; }
+  h1 { color: #8B1A1A; text-align: center; font-size: 20pt; margin: 0 0 5px; }
+  .subtitle { color: #B8860B; text-align: center; font-size: 13pt; margin: 0 0 25px; }
+  h2 { color: #8B1A1A; font-size: 14pt; border-bottom: 2px solid #8B1A1A; padding-bottom: 3px; margin: 20px 0 10px; }
+  section { margin-bottom: 12px; page-break-inside: avoid; }
+  .kv { margin: 3px 0; }
+  .kv b { color: #1A1414; }
+  .item { margin: 5px 0; }
+  .item .sub { padding-left: 2em; color: #555; font-size: 11pt; }
+  .fromto { color: #8B1A1A; }
+  .amount { color: #8B1A1A; font-weight: 600; }
+  .nc-block { margin: 8px 0; }
+  .nc-title { color: #B8860B; font-weight: bold; margin-bottom: 3px; }
+  .nc-block ul { margin: 4px 0 4px 1.5em; padding: 0; }
+  .nc-block li { margin: 2px 0; }
+  .nc-block li.empty { color: #888; list-style: none; }
+  .imported { color: #4A6741; font-size: 10pt; }
+  .total { text-align: right; color: #8B1A1A; font-weight: bold; font-size: 13pt; margin-top: 10px; border-top: 1px solid #B8860B; padding-top: 5px; }
+  .status.done { color: #4A6741; }
+  .status.pending { color: #B8860B; }
+</style>
+</head><body>
+<h1>BNI 富鼎分會 組聚記錄</h1>
+<div class="subtitle">${esc(c.meta.groupName)} · ${esc(c.meta.date)}${c.meta.time ? " " + esc(c.meta.time) : ""}</div>
+
+<section><h2>📋 基本資訊</h2>
+  ${kv("小組", c.meta.groupName)}
+  ${kv("日期", c.meta.date)}
+  ${c.meta.time ? kv("時間", c.meta.time) : ""}
+  ${c.meta.location ? kv("地點", c.meta.location) : ""}
+  ${c.meta.scribeName ? kv("記錄", c.meta.scribeName) : ""}
+  ${kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`)}
+  ${c.meta.absenteeCount > 0 ? kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`) : ""}
+</section>
+
+${section("成長/喜悅分享", "💬", sharingsBlock)}
+${section("主講人專業簡報", "🎤", speakerBlock)}
+${section("對主講人的建議", "💡", feedbackBlock)}
+${section("主講人需要的合作人脈", "🤝", ncBlock)}
+${section("小組內引薦", "🎯", referralsBlock)}
+${section("下次組聚", "📅", nextBlock)}
+${section("行動項目", "✅", actionsBlock)}
+
+</body></html>`;
+}
+
+// 產出 PDF Blob（用 html2pdf 動態 export）
+async function exportMeetingPdf(meeting, group, members) {
+  if (!window.html2pdf) { alert("PDF 匯出功能未就緒（html2pdf 未載入）"); return null; }
+  const html = buildMeetingHtml(meeting, group, members);
+  // 建一個離屏 div 讓 html2pdf render
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  container.style.position = "fixed";
+  container.style.left = "-9999px";
+  container.style.top = "0";
+  container.style.width = "210mm";
+  document.body.appendChild(container);
+  try {
+    const blob = await window.html2pdf().set({
+      margin: 10,
+      filename: "meeting.pdf",
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+    }).from(container).outputPdf("blob");
+    return blob;
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+// 組聚檔名（不含副檔名）
+function meetingFilenameBase(meeting, group) {
+  const dateStr = meeting.date || "無日期";
+  const groupName = group?.name || "未知小組";
+  return safeFilename(`組聚記錄_${dateStr}_${groupName}`);
+}
+
+// 單筆下載（Word 或 PDF）
+async function downloadSingle(meeting, group, members, format) {
+  const base = meetingFilenameBase(meeting, group);
+  if (format === "docx") {
+    const blob = await exportMeetingDocx(meeting, group, members);
+    if (!blob) return;
+    window.saveAs(blob, base + ".docx");
+  } else if (format === "pdf") {
+    const blob = await exportMeetingPdf(meeting, group, members);
+    if (!blob) return;
+    window.saveAs(blob, base + ".pdf");
+  }
+}
+
+// 批次下載（打包 zip，全部扁平在根目錄）
+async function downloadBatchZip(meetings, groupsMap, members, format) {
+  if (!window.JSZip) { alert("批次匯出功能未就緒（JSZip 未載入）"); return; }
+  const zip = new window.JSZip();
+  const seen = {};  // 檔名重複防撞
+  for (const meeting of meetings) {
+    const group = groupsMap[meeting.groupId];
+    let base = meetingFilenameBase(meeting, group);
+    // 防止重複：加 -2 -3 etc
+    if (seen[base]) {
+      seen[base]++;
+      base = `${base}-${seen[base]}`;
+    } else {
+      seen[base] = 1;
+    }
+    let blob;
+    if (format === "docx") {
+      blob = await exportMeetingDocx(meeting, group, members);
+    } else if (format === "pdf") {
+      blob = await exportMeetingPdf(meeting, group, members);
+    }
+    if (blob) {
+      zip.file(base + "." + format, blob);
+    }
+  }
+  const zipBlob = await zip.generateAsync({ type: "blob" });
+  const today = new Date().toISOString().slice(0, 10);
+  window.saveAs(zipBlob, `組聚記錄批次匯出_${today}_${meetings.length}筆.zip`);
+}
 
 // 將主站 KPI 小組（{組名: [姓名...]}）與 members 合併成運營台 groups[] 格式
 function buildGroupsFromKpi(kpiGroups, members, extras) {
@@ -503,10 +989,9 @@ const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
 function Modal({ open, onClose, title, children, footer = null, maxWidth = "max-w-2xl" }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
       <div
         className={`bg-white w-full ${maxWidth} rounded-none sm:rounded-2xl shadow-2xl animate-in fade-in flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]`}
-        onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-white sm:rounded-t-2xl flex-shrink-0">
           <h3 className="text-lg font-semibold text-stone-800">{title}</h3>
@@ -1004,6 +1489,8 @@ function FormSection({ title, icon, badge, defaultOpen = true, children }) {
 // ============ 會議卡片 ============
 function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
   const [expanded, setExpanded] = useState(false);
+  const [exportMenu, setExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const getMember = (id) => members.find(m => m.id === id);
   const totalInGroup = group?.memberIds.length || 0;
   const attendRate = totalInGroup ? (meeting.attendees.length / totalInGroup * 100).toFixed(0) : 0;
@@ -1045,9 +1532,39 @@ function MeetingCard({ meeting, group, members, onEdit, onToggleAction }) {
               {meeting.scribe && <span className="flex items-center gap-0.5"><Edit2 className="w-3 h-3" />{getMember(meeting.scribe)?.name || "—"}</span>}
             </div>
           </div>
-          <button onClick={() => onEdit(meeting)} className="p-1.5 text-stone-400 hover:text-[#8B1A1A] hover:bg-stone-50 rounded-lg">
-            <Edit2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0 relative">
+            <button onClick={() => setExportMenu(v => !v)}
+              disabled={exporting}
+              className="p-1.5 text-stone-400 hover:text-[#B8860B] hover:bg-stone-50 rounded-lg disabled:opacity-50"
+              title="匯出記錄">
+              {exporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            </button>
+            {exportMenu && !exporting && (
+              <div className="absolute top-full right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg py-1 z-20 min-w-[140px]">
+                <button onClick={async () => {
+                    setExportMenu(false); setExporting(true);
+                    try { await downloadSingle(meeting, group, members, "docx"); }
+                    catch (e) { alert("匯出失敗：" + e.message); }
+                    finally { setExporting(false); }
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-stone-50 flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-[#2B5797]" /> Word (.docx)
+                </button>
+                <button onClick={async () => {
+                    setExportMenu(false); setExporting(true);
+                    try { await downloadSingle(meeting, group, members, "pdf"); }
+                    catch (e) { alert("匯出失敗：" + e.message); }
+                    finally { setExporting(false); }
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-stone-50 flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-[#C0392B]" /> PDF
+                </button>
+              </div>
+            )}
+            <button onClick={() => onEdit(meeting)} className="p-1.5 text-stone-400 hover:text-[#8B1A1A] hover:bg-stone-50 rounded-lg" title="編輯">
+              <Edit2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {speakerMember && (
@@ -2453,6 +2970,15 @@ function App() {
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [filter, setFilter] = useState({ groupId: "", onlyMine: false });
   const [adminVerified, setAdminVerified] = useState(false);   // 導生功能需要管理員驗證
+  const [batchExportOpen, setBatchExportOpen] = useState(false);
+  const [batchExporting, setBatchExporting] = useState(false);
+  const [batchSelection, setBatchSelection] = useState(new Set());
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = "ok") => {
+    setToast({ msg, type, id: Date.now() });
+    setTimeout(() => setToast(t => (t && t.msg === msg ? null : t)), 2000);
+  };
 
   // 初始載入
   useEffect(() => {
@@ -2520,8 +3046,11 @@ function App() {
 
   // 會議 CRUD
   const saveMeeting = (m) => {
-    setMeetings(meetings.some(x => x.id === m.id) ? meetings.map(x => x.id === m.id ? m : x) : [m, ...meetings]);
-    setEditingMeeting(null);
+    const updated = { ...m, updatedAt: new Date().toISOString() };
+    setMeetings(meetings.some(x => x.id === updated.id) ? meetings.map(x => x.id === updated.id ? updated : x) : [updated, ...meetings]);
+    // 讓編輯頁面持續開啟，只刷新 editingMeeting 內容以便繼續編輯
+    setEditingMeeting(updated);
+    showToast("已儲存");
   };
   const deleteMeeting = (id) => { setMeetings(meetings.filter(m => m.id !== id)); setEditingMeeting(null); };
   const toggleAction = (meetingId, actionId) => {
@@ -2550,6 +3079,12 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-50">
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg text-white text-sm font-medium animate-in fade-in"
+          style={{ background: toast.type === "error" ? "#A01E2E" : "#059669" }}>
+          {toast.type === "error" ? "⚠️ " : "✓ "}{toast.msg}
+        </div>
+      )}
       {/* 頂部 ─ 視覺與 index.html 一致 */}
       <header className="border-b-2" style={{ borderColor: '#A01E2E', background: 'white' }}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between gap-3">
@@ -2618,7 +3153,17 @@ function App() {
                   </label>
                 )}
               </div>
-              <Btn variant="primary" onClick={() => setEditingMeeting({})}><Plus className="w-4 h-4" />新增組聚</Btn>
+              <div className="flex items-center gap-2">
+                {filteredMeetings.length > 0 && (
+                  <Btn variant="outline" size="sm" onClick={() => {
+                    setBatchSelection(new Set(filteredMeetings.map(m => m.id)));
+                    setBatchExportOpen(true);
+                  }}>
+                    <Package className="w-4 h-4" />批次匯出 ({filteredMeetings.length})
+                  </Btn>
+                )}
+                <Btn variant="primary" onClick={() => setEditingMeeting({})}><Plus className="w-4 h-4" />新增組聚</Btn>
+              </div>
             </div>
 
             {filteredMeetings.length === 0 ? (
@@ -2654,6 +3199,96 @@ function App() {
             mentees={mentees} setMentees={setMentees}
             onSave={saveMeeting} onCancel={() => setEditingMeeting(null)} onDelete={deleteMeeting} />
         )}
+      </Modal>
+
+      <Modal open={batchExportOpen} onClose={() => !batchExporting && setBatchExportOpen(false)}
+        title="批次匯出組聚記錄" maxWidth="max-w-2xl">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox"
+                checked={batchSelection.size === filteredMeetings.length && filteredMeetings.length > 0}
+                onChange={e => setBatchSelection(e.target.checked
+                  ? new Set(filteredMeetings.map(m => m.id))
+                  : new Set())} />
+              <span className="font-semibold">全選</span>
+            </label>
+            <span className="text-stone-500">已勾選 {batchSelection.size} / {filteredMeetings.length}</span>
+          </div>
+
+          <div className="max-h-[40vh] overflow-y-auto border border-stone-200 rounded-lg divide-y divide-stone-100">
+            {filteredMeetings.map(m => {
+              const g = groups.find(x => x.id === m.groupId);
+              const sp = m.speaker?.memberId ? members.find(x => x.id === m.speaker.memberId) : null;
+              const checked = batchSelection.has(m.id);
+              return (
+                <label key={m.id}
+                  className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${checked ? "bg-amber-50/40" : "hover:bg-stone-50"}`}>
+                  <input type="checkbox" checked={checked}
+                    onChange={e => setBatchSelection(prev => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(m.id); else next.delete(m.id);
+                      return next;
+                    })} />
+                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                    <Tag color={g?.color || "#999"}>{g?.name || "未知小組"}</Tag>
+                    <span className="text-sm font-semibold">{fmtDate(m.date)}</span>
+                    {sp && <span className="text-xs text-stone-500">主講：{sp.name}</span>}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+            💡 匯出會打包成 zip 檔，每筆一個獨立檔案。批次超過 20 筆時速度會變慢，建議先用「篩選小組」減少筆數。
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-200">
+            <Btn variant="ghost" size="sm"
+              onClick={() => !batchExporting && setBatchExportOpen(false)}
+              disabled={batchExporting}>取消</Btn>
+            <Btn variant="outline" size="sm"
+              disabled={batchSelection.size === 0 || batchExporting}
+              onClick={async () => {
+                const selected = filteredMeetings.filter(m => batchSelection.has(m.id));
+                if (!selected.length) return;
+                setBatchExporting(true);
+                try {
+                  const gMap = {};
+                  groups.forEach(g => { gMap[g.id] = g; });
+                  await downloadBatchZip(selected, gMap, members, "docx");
+                  showToast("已匯出 " + selected.length + " 筆 Word");
+                  setBatchExportOpen(false);
+                } catch (e) { alert("匯出失敗：" + e.message); }
+                finally { setBatchExporting(false); }
+              }}>
+              <FileText className="w-3.5 h-3.5" />匯出 Word (zip)
+            </Btn>
+            <Btn variant="primary" size="sm"
+              disabled={batchSelection.size === 0 || batchExporting}
+              onClick={async () => {
+                const selected = filteredMeetings.filter(m => batchSelection.has(m.id));
+                if (!selected.length) return;
+                setBatchExporting(true);
+                try {
+                  const gMap = {};
+                  groups.forEach(g => { gMap[g.id] = g; });
+                  await downloadBatchZip(selected, gMap, members, "pdf");
+                  showToast("已匯出 " + selected.length + " 筆 PDF");
+                  setBatchExportOpen(false);
+                } catch (e) { alert("匯出失敗：" + e.message); }
+                finally { setBatchExporting(false); }
+              }}>
+              <FileText className="w-3.5 h-3.5" />匯出 PDF (zip)
+            </Btn>
+          </div>
+          {batchExporting && (
+            <div className="text-center text-sm text-stone-500 py-2">
+              <RefreshCw className="w-4 h-4 animate-spin inline-block mr-1" />匯出中，請稍候⋯
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
