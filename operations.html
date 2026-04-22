@@ -223,6 +223,16 @@ function buildMeetingContent(meeting, group, members) {
       name: speakerName,
       topic: speakerTopic,
     },
+    conversationOpeners: (meeting.conversationOpeners || [])
+      .filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim)
+      .map(o => ({
+        who: o.who || "",
+        yesno: o.yesno || "",
+        tagline: o.tagline || "",
+        painSolution: o.painSolution || "",
+        cta: o.cta || "",
+        verbatim: o.verbatim || "",
+      })),
     feedback: (meeting.feedback || []).map(f => ({
       from: memberName(f.fromMemberId),
       content: f.content || "",
@@ -323,6 +333,34 @@ function exportMeetingDocx(meeting, group, members) {
     children.push(h2("主講人專業簡報", "🎤"));
     if (c.speaker.name) children.push(kv("主講人", c.speaker.name));
     if (c.speaker.topic) children.push(kv("主題", c.speaker.topic));
+  }
+
+  // 2.5 開啟對話
+  if (c.conversationOpeners && c.conversationOpeners.length) {
+    children.push(h2("開啟對話", "🗣️"));
+    c.conversationOpeners.forEach((o, i) => {
+      children.push(new d.Paragraph({
+        children: [new d.TextRun({ text: `目標客群 ${i + 1}`, font: FONT, size: 24, bold: true, color: GOLD })],
+        spacing: { before: 80, after: 40 },
+      }));
+      if (o.who) children.push(kv("WHO｜我的客戶是", o.who));
+      if (o.yesno) children.push(kv("YES/NO 問題", o.yesno));
+      if (o.tagline) children.push(kv("介紹夥伴", o.tagline));
+      if (o.painSolution) children.push(kv("痛點解決", o.painSolution));
+      if (o.cta) children.push(kv("對接方式", o.cta));
+      if (o.verbatim) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({ text: "完整逐字稿：", font: FONT, size: 22, bold: true, color: DARK })],
+          spacing: { before: 40, after: 20 },
+        }));
+        String(o.verbatim).split(/\r?\n/).forEach(line => {
+          children.push(new d.Paragraph({
+            children: [txt(line)],
+            spacing: { after: 20 },
+          }));
+        });
+      }
+    });
   }
 
   // 對主講人的建議
@@ -484,6 +522,26 @@ function buildMeetingHtml(meeting, group, members) {
       + (c.speaker.topic ? kv("主題", c.speaker.topic) : "");
   }
 
+  let openersBlock = "";
+  if (c.conversationOpeners && c.conversationOpeners.length) {
+    openersBlock = c.conversationOpeners.map((o, i) => {
+      const rows = [];
+      if (o.who) rows.push(kv("WHO｜我的客戶是", o.who));
+      if (o.yesno) rows.push(kv("YES/NO 問題", o.yesno));
+      if (o.tagline) rows.push(kv("介紹夥伴", o.tagline));
+      if (o.painSolution) rows.push(kv("痛點解決", o.painSolution));
+      if (o.cta) rows.push(kv("對接方式", o.cta));
+      const verbatim = o.verbatim
+        ? `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #ccc;"><b>完整逐字稿：</b><div style="white-space:pre-wrap;color:#555;font-size:11pt;margin-top:2px;">${esc(o.verbatim)}</div></div>`
+        : "";
+      return `<div style="${S.ncBlock}">
+        <div style="${S.ncTitle}">目標客群 ${i + 1}</div>
+        ${rows.join("")}
+        ${verbatim}
+      </div>`;
+    }).join("");
+  }
+
   let feedbackBlock = "";
   if (c.feedback.length) {
     feedbackBlock = c.feedback.map((f, i) =>
@@ -546,6 +604,7 @@ function buildMeetingHtml(meeting, group, members) {
 
 ${section("成長/喜悅分享", "💬", sharingsBlock)}
 ${section("主講人專業簡報", "🎤", speakerBlock)}
+${section("開啟對話", "🗣️", openersBlock)}
 ${section("對主講人的建議", "💡", feedbackBlock)}
 ${section("主講人需要的合作人脈", "🤝", ncBlock)}
 ${section("小組內引薦", "🎯", referralsBlock)}
@@ -1079,6 +1138,10 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
     attendees: [], absentees: [],
     sharings: [],             // 1. 成長 / 喜悅分享
     speaker: { memberId: "", topic: "" },  // 2. 主講人
+    conversationOpeners: [{                 // 2.5 開啟對話（新建時預設一筆空白）
+      id: uid("co"), who: "", yesno: "", tagline: "",
+      painSolution: "", cta: "", verbatim: "",
+    }],
     feedback: [],             // 3. 對主講人建議
     neededConnections: [],    // 4. 主講人需要的人脈
     referrals: [],            // 5. 小組內引薦記錄
@@ -1092,6 +1155,7 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
     if (!meeting) return;
     setForm(p => ({
       sharings: [], speaker: { memberId: "", topic: "" },
+      conversationOpeners: [],
       feedback: [], neededConnections: [], referrals: [],
       nextMeeting: { date: "", time: "", location: "" },
       ...p,
@@ -1129,6 +1193,27 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
   const updSharing = (id, k, v) => set("sharings", upd(form.sharings, id, k, v));
   const rmSharing = (id) => set("sharings", rm(form.sharings, id));
 
+  // 2.5 開啟對話
+  const addOpener = () => set("conversationOpeners", [...(form.conversationOpeners || []), {
+    id: uid("co"), who: "", yesno: "", tagline: "", painSolution: "", cta: "", verbatim: "",
+  }]);
+  const updOpener = (id, k, v) => set("conversationOpeners", upd(form.conversationOpeners || [], id, k, v));
+  const rmOpener = (id) => set("conversationOpeners", rm(form.conversationOpeners || [], id));
+  const generateScript = (o, speakerName) => {
+    const who = (o.who || "").trim() || "（請填目標客群）";
+    const yesno = (o.yesno || "").trim() || "（請填 YES/NO 問題）";
+    const tagline = (o.tagline || "").trim() || "（請填 tagline）";
+    const pain = (o.painSolution || "").trim();
+    const cta = (o.cta || "").trim() || "（請填對接方式）";
+    const sp = speakerName || "主講人";
+    const painLine = pain ? pain + "。" : "";
+    return `各位夥伴早安，我是 ${sp}。
+我的客戶是——${who}。
+如果你身邊有這樣的朋友，請幫我問他：「${yesno}」
+如果他說想，請告訴他：「我認識 ${sp}，他是${tagline}。${painLine}${cta}」
+再說一次，我的客戶是——${who}。我是 ${sp}，${tagline}。`;
+  };
+
   // 3. 回饋
   const addFeedback = (fromMemberId) => set("feedback", [...form.feedback, { id: uid("fb"), fromMemberId, content: "" }]);
   const updFeedback = (id, k, v) => set("feedback", upd(form.feedback, id, k, v));
@@ -1164,6 +1249,14 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
   const submit = () => {
     if (!form.groupId) return alert("請選擇小組");
     if (!form.date) return alert("請輸入日期");
+    // 2.5 開啟對話：若主講人已選，但所有目標客群皆為空白 → 提醒
+    if (form.speaker?.memberId) {
+      const openers = form.conversationOpeners || [];
+      const anyFilled = openers.some(o => (o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim || "").trim());
+      if (!anyFilled) {
+        if (!confirm("「2.5 開啟對話」尚未填寫任何目標客群，確定要儲存嗎？\n（建議至少填 1 個，讓夥伴能把主講人帶出分會）")) return;
+      }
+    }
     onSave({ ...form, updatedAt: new Date().toISOString() });
   };
 
@@ -1257,6 +1350,84 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
             placeholder="簡報標題（本次主講的主題）"
             className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" />
         </div>
+      </FormSection>
+
+      {/* ============ 2.5 開啟對話 ============ */}
+      <FormSection title="2.5 開啟對話"
+        badge={summary("", (form.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta).length)}
+        icon={<MessageSquareQuote className="w-4 h-4 text-[#B8860B]" />}>
+        {!form.speaker?.memberId ? (
+          <div className="text-xs text-stone-400 italic py-2">請先選擇主講人</div>
+        ) : (
+          <>
+            <div className="text-xs text-stone-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+              💡 針對至少一個<b>目標客群</b>設計「開啟對話」——讓夥伴拿到分會外，幫你精準轉介。五步驟：WHO（誰）→ YES/NO 問題 → 介紹夥伴（tagline）→ 痛點解決 → 對接方式。
+            </div>
+            <div className="space-y-3">
+              {(form.conversationOpeners || []).map((o, idx) => {
+                const speakerName = members.find(x => x.id === form.speaker?.memberId)?.name || "主講人";
+                return (
+                  <div key={o.id} className="border border-stone-200 rounded-lg p-3 bg-stone-50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-[#B8860B]">目標客群 {idx + 1}</span>
+                      <button onClick={() => rmOpener(o.id)}
+                        className="ml-auto p-1 text-stone-400 hover:text-red-500" title="移除"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[11px] text-stone-500 block mb-0.5">① WHO｜我的客戶是</label>
+                        <input value={o.who || ""} onChange={e => updOpener(o.id, "who", e.target.value)}
+                          placeholder="例：遇到婚姻困擾、考慮離婚的夫妻"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-stone-500 block mb-0.5">② YES/NO 問題（夥伴拿去問準客戶）</label>
+                        <input value={o.yesno || ""} onChange={e => updOpener(o.id, "yesno", e.target.value)}
+                          placeholder="例：你想在離婚時，把該拿的財產一次拿清、避免後續纏訟嗎？"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-stone-500 block mb-0.5">③ 介紹夥伴（tagline，一句話）</label>
+                        <input value={o.tagline || ""} onChange={e => updOpener(o.id, "tagline", e.target.value)}
+                          placeholder="例：專辦離婚財產的律師，勝訴率 95%"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-stone-500 block mb-0.5">④ 痛點解決（案例＋效果，選填）</label>
+                        <textarea value={o.painSolution || ""} onChange={e => updOpener(o.id, "painSolution", e.target.value)}
+                          rows={2} placeholder="例：上個月幫一位陳太太談到應得的 1,800 萬，對方原本只願給 600 萬"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-stone-500 block mb-0.5">⑤ 對接方式（CTA）</label>
+                        <input value={o.cta || ""} onChange={e => updOpener(o.id, "cta", e.target.value)}
+                          placeholder="例：可以請他加我 LINE：xxx，第一次諮詢免費 30 分鐘"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[11px] text-stone-500">⑥ 完整逐字稿（選填）</label>
+                          <button type="button"
+                            onClick={() => updOpener(o.id, "verbatim", generateScript(o, speakerName))}
+                            className="text-[11px] text-[#B8860B] hover:text-[#8B1A1A] underline">
+                            🔄 自動組逐字稿
+                          </button>
+                        </div>
+                        <textarea value={o.verbatim || ""} onChange={e => updOpener(o.id, "verbatim", e.target.value)}
+                          rows={4} placeholder="按「自動組逐字稿」會用上面五欄套入範本；也可直接手寫完整版本"
+                          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm font-mono" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <button type="button" onClick={addOpener}
+                className="w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-500 hover:bg-stone-50 hover:text-[#B8860B]">
+                + 新增目標客群
+              </button>
+            </div>
+          </>
+        )}
       </FormSection>
 
       {/* ============ 3. 對主講人的建議 ============ */}
@@ -1584,6 +1755,25 @@ function MeetingCard({ meeting, group, members, onEdit }) {
                     <div key={s.id} className="text-xs bg-amber-50/50 rounded p-1.5">
                       <b className="text-[#B8860B]">{getMember(s.memberId)?.name || "?"}：</b>
                       <span className="text-stone-700">{s.content || "（未填）"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(meeting.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"><MessageSquareQuote className="w-3 h-3 text-[#B8860B]" />開啟對話</div>
+                <div className="space-y-1.5">
+                  {(meeting.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).map((o, i) => (
+                    <div key={o.id} className="text-xs bg-amber-50/50 border border-amber-100 rounded p-2">
+                      <div className="text-[11px] font-semibold text-[#B8860B] mb-0.5">目標客群 {i + 1}</div>
+                      {o.who && <div className="text-stone-700"><b className="text-stone-600">WHO：</b>{o.who}</div>}
+                      {o.yesno && <div className="text-stone-700"><b className="text-stone-600">問題：</b>{o.yesno}</div>}
+                      {o.tagline && <div className="text-stone-700"><b className="text-stone-600">Tagline：</b>{o.tagline}</div>}
+                      {o.painSolution && <div className="text-stone-700"><b className="text-stone-600">案例：</b>{o.painSolution}</div>}
+                      {o.cta && <div className="text-stone-700"><b className="text-stone-600">CTA：</b>{o.cta}</div>}
+                      {o.verbatim && <div className="mt-1 pt-1 border-t border-amber-100 text-stone-600 whitespace-pre-wrap text-[11px]">{o.verbatim}</div>}
                     </div>
                   ))}
                 </div>
