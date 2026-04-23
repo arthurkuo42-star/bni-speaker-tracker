@@ -582,7 +582,11 @@ function App() {
   }), /*#__PURE__*/React.createElement("main", {
     className: "max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10"
   }, view === 'kpi' && /*#__PURE__*/React.createElement(KpiDashboard, null), view === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
-    data: data
+    data: data,
+    onGoProgress: () => {
+      setAdminTab('progress');
+      setView('admin');
+    }
   }), view === 'coffee' && /*#__PURE__*/React.createElement(CoffeeMeetingPage, {
     data: data,
     saveData: saveData,
@@ -743,7 +747,8 @@ function Header({
 
 // ============ 前台 Dashboard ============
 function Dashboard({
-  data
+  data,
+  onGoProgress
 }) {
   const [viewMode, setViewMode] = useState('all'); // 'all' | 'personal'
   const [personalMemberId, setPersonalMemberId] = useState('');
@@ -803,8 +808,8 @@ function Dashboard({
     }, "\u8ACB\u7BA1\u7406\u54E1\u5230\u5F8C\u53F0\u5B89\u6392\u6F14\u8B1B\u4EBA"));
   }
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "mb-6"
-  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-6 flex items-start justify-between gap-3 flex-wrap"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-[10px] tracking-[0.3em] text-stone-400 mb-2",
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
@@ -823,7 +828,17 @@ function Dashboard({
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
     }
-  }, "\u6BCF\u4F4D\u6F14\u8B1B\u4EBA\u7531\u5C0F\u5E6B\u624B\u966A\u4F34\uFF0C\u63D0\u524D 6 \u9031\u555F\u52D5\u6E96\u5099\u6D41\u7A0B")), /*#__PURE__*/React.createElement("div", {
+  }, "\u6BCF\u4F4D\u6F14\u8B1B\u4EBA\u7531\u5C0F\u5E6B\u624B\u966A\u4F34\uFF0C\u63D0\u524D 6 \u9031\u555F\u52D5\u6E96\u5099\u6D41\u7A0B")), onGoProgress && /*#__PURE__*/React.createElement("button", {
+    onClick: onGoProgress,
+    className: "shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md text-white hover:opacity-90 transition-opacity",
+    style: {
+      fontFamily: "'Noto Sans TC', sans-serif",
+      background: '#A01E2E'
+    },
+    title: "\u76F4\u63A5\u9032\u5165\u5F8C\u53F0\u300C\u9032\u5EA6\u66F4\u65B0\u300D\u9801\uFF08\u9700\u7BA1\u7406\u54E1 PIN\uFF09"
+  }, /*#__PURE__*/React.createElement(ListChecks, {
+    className: "w-4 h-4"
+  }), "\u9032\u5EA6\u66F4\u65B0")), /*#__PURE__*/React.createElement("div", {
     className: "mb-6 bg-white rounded-lg border border-stone-200 p-3 flex flex-wrap items-center gap-3",
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
@@ -2178,6 +2193,11 @@ const COFFEE_STATUS = {
     color: '#A01E2E',
     bg: '#FCEFE3'
   },
+  scheduled: {
+    text: '待進行',
+    color: '#B8860B',
+    bg: '#FFF8E1'
+  },
   done: {
     text: '已完成',
     color: '#4A6741',
@@ -2190,10 +2210,11 @@ const COFFEE_STATUS = {
   }
 };
 const COFFEE_WILLINGNESS = {
+  // 舊資料相容：unknown 的舊紀錄會 fallback 到「邀約中」顯示
   unknown: {
-    text: '未確認',
-    color: '#888',
-    bg: '#F5F5F5'
+    text: '邀約中',
+    color: '#A01E2E',
+    bg: '#FCEFE3'
   },
   pending: {
     text: '邀約中',
@@ -2206,7 +2227,7 @@ const COFFEE_WILLINGNESS = {
     bg: '#EDF3E8'
   },
   declined: {
-    text: '無法出席',
+    text: '拒絕',
     color: '#6C6C6C',
     bg: '#F0F0F0'
   }
@@ -2347,7 +2368,7 @@ function CoffeeMeetingPage({
       inviterId: presetInviterId || '',
       meetingTime: '',
       meetingStatus: 'pending',
-      attendanceWillingness: 'unknown',
+      attendanceWillingness: 'pending',
       attendanceTime: '',
       conversionStatus: 'none',
       notes: ''
@@ -2419,7 +2440,7 @@ function CoffeeMeetingPage({
         meetingTime: '',
         meetingStatus: 'pending',
         // 邀約中
-        attendanceWillingness: 'unknown',
+        attendanceWillingness: 'pending',
         conversionStatus: 'none',
         notes: note,
         sourceGroupMeetingId: o.meetingId,
@@ -2724,13 +2745,20 @@ function CoffeeCard({
   onDelete
 }) {
   const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
-  const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.unknown;
+  const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.pending;
   const fmtTime = t => t ? new Date(t).toLocaleString('zh-TW', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
   }) : '—';
+  // 出席例會改為只存日期；顯示時切 "YYYY-MM-DD" 並轉成 "MM/DD"
+  const fmtDate = t => {
+    if (!t) return '—';
+    const ymd = String(t).slice(0, 10);
+    const parts = ymd.split('-');
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : ymd;
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "bg-white rounded-lg border border-stone-200 p-4 hover:border-stone-400 transition-colors"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2788,7 +2816,7 @@ function CoffeeCard({
     }
   }, willingnessInfo.text), cm.attendanceTime && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-500 mt-1"
-  }, fmtTime(cm.attendanceTime))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, fmtDate(cm.attendanceTime))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-stone-400 mb-1"
   }, "\u8F49\u5316\u8FFD\u8E64"), (() => {
     const ci = COFFEE_CONVERSION[cm.conversionStatus || 'none'] || COFFEE_CONVERSION.none;
@@ -2898,6 +2926,8 @@ function CoffeeMeetingModal({
   }, /*#__PURE__*/React.createElement("option", {
     value: "pending"
   }, "\u9080\u7D04\u4E2D"), /*#__PURE__*/React.createElement("option", {
+    value: "scheduled"
+  }, "\u5F85\u9032\u884C"), /*#__PURE__*/React.createElement("option", {
     value: "done"
   }, "\u5DF2\u5B8C\u6210"), /*#__PURE__*/React.createElement("option", {
     value: "cancelled"
@@ -2906,25 +2936,23 @@ function CoffeeMeetingModal({
   }, /*#__PURE__*/React.createElement(CFField, {
     label: "\u51FA\u5E2D\u4F8B\u6703\u610F\u9858"
   }, /*#__PURE__*/React.createElement("select", {
-    value: formData.attendanceWillingness || 'unknown',
+    value: formData.attendanceWillingness || 'pending',
     onChange: e => setFormData({
       ...formData,
       attendanceWillingness: e.target.value
     }),
     className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
   }, /*#__PURE__*/React.createElement("option", {
-    value: "unknown"
-  }, "\u672A\u78BA\u8A8D"), /*#__PURE__*/React.createElement("option", {
     value: "pending"
   }, "\u9080\u7D04\u4E2D"), /*#__PURE__*/React.createElement("option", {
     value: "confirmed"
   }, "\u78BA\u8A8D\u51FA\u5E2D"), /*#__PURE__*/React.createElement("option", {
     value: "declined"
-  }, "\u7121\u6CD5\u51FA\u5E2D"))), /*#__PURE__*/React.createElement(CFField, {
-    label: "\u51FA\u5E2D\u4F8B\u6703\u6642\u9593"
+  }, "\u62D2\u7D55"))), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u51FA\u5E2D\u4F8B\u6703\u65E5\u671F"
   }, /*#__PURE__*/React.createElement("input", {
-    type: "datetime-local",
-    value: toDatetimeLocal(formData.attendanceTime),
+    type: "date",
+    value: (formData.attendanceTime || '').slice(0, 10),
     onChange: e => setFormData({
       ...formData,
       attendanceTime: e.target.value
@@ -2941,7 +2969,7 @@ function CoffeeMeetingModal({
     className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
   }, /*#__PURE__*/React.createElement("option", {
     value: "none"
-  }, "\u2014 \u4E0D\u8FFD\u8E64"), /*#__PURE__*/React.createElement("option", {
+  }, "\u2014 \u4E0D\u518D\u8FFD\u8E64"), /*#__PURE__*/React.createElement("option", {
     value: "following"
   }, "\u6301\u7E8C\u8DDF\u9032\u4E2D"), /*#__PURE__*/React.createElement("option", {
     value: "signed"
