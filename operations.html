@@ -276,22 +276,93 @@ async function ensurePdfLibs() {
 
 // ===== Storage (Railway Proxy + JSONBin，與 Speaker Tracker 共用同一個 bin) =====
 const PROXY_URL = window.BNI_PROXY_URL || '';
-const apiClient = {
-  async get(key) {
+
+// SWR（Stale-While-Revalidate）快取（與 index.src.html 同一套，共用 localStorage）
+const SWR_PREFIX = 'swr_cache_v1:';
+function swrRead(key) {
+  try {
+    const raw = localStorage.getItem(SWR_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function swrWrite(key, value) {
+  try {
+    localStorage.setItem(SWR_PREFIX + key, JSON.stringify(value));
+  } catch {}
+}
+function swrDelete(key) {
+  try {
+    localStorage.removeItem(SWR_PREFIX + key);
+  } catch {}
+}
+// SWR 版的原始 fetch：給 /api/groups 這類不走 apiClient 的端點用
+async function swrFetchRaw(url, onFresh) {
+  const cacheKey = 'raw:' + url;
+  const cached = swrRead(cacheKey);
+  const fetchIt = async () => {
     try {
-      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(key));
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error('讀取失敗: ' + res.status);
-      const json = await res.json();
-      return json && json.value !== undefined ? {
-        value: json.value
-      } : null;
-    } catch (e) {
-      console.error('[apiClient.get]', key, e);
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const data = await r.json();
+      swrWrite(cacheKey, data);
+      return data;
+    } catch {
       return null;
     }
+  };
+  if (cached) {
+    (async () => {
+      const fresh = await fetchIt();
+      if (fresh && onFresh) {
+        try {
+          if (JSON.stringify(fresh) !== JSON.stringify(cached)) onFresh(fresh);
+        } catch {}
+      }
+    })();
+    return cached;
+  }
+  return (await fetchIt()) || {};
+}
+const apiClient = {
+  // 第二參數 onFresh：背景拿到新版時的 callback（可選）
+  async get(key, onFresh) {
+    const cached = swrRead(key);
+    const fetchFresh = async () => {
+      try {
+        const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(key));
+        if (res.status === 404) {
+          swrDelete(key);
+          return null;
+        }
+        if (!res.ok) throw new Error('讀取失敗: ' + res.status);
+        const json = await res.json();
+        const result = json && json.value !== undefined ? {
+          value: json.value
+        } : null;
+        if (result) swrWrite(key, result);
+        return result;
+      } catch (e) {
+        console.error('[apiClient.get]', key, e);
+        return null;
+      }
+    };
+    if (cached) {
+      (async () => {
+        const fresh = await fetchFresh();
+        if (fresh && onFresh) {
+          try {
+            if (JSON.stringify(fresh) !== JSON.stringify(cached)) onFresh(fresh);
+          } catch {}
+        }
+      })();
+      return cached;
+    }
+    return await fetchFresh();
   },
   async set(key, value) {
+    const payload = typeof value === 'string' ? value : JSON.stringify(value);
     const tryWrite = async pin => fetch(PROXY_URL + '/api/data', {
       method: 'PUT',
       headers: {
@@ -300,7 +371,7 @@ const apiClient = {
       },
       body: JSON.stringify({
         key,
-        value: typeof value === 'string' ? value : JSON.stringify(value)
+        value: payload
       })
     });
     let pin = localStorage.getItem('bni_write_pin') || '';
@@ -318,6 +389,10 @@ const apiClient = {
       }
     }
     if (!res.ok) throw new Error('寫入失敗: ' + res.status);
+    // 寫入成功後立刻更新 SWR 快取
+    swrWrite(key, {
+      value: payload
+    });
     return {
       value
     };
@@ -1104,10 +1179,18 @@ function buildGroupsFromKpi(kpiGroups, members, extras) {
     };
   });
 }
-async function loadState(key, fallback) {
+async function loadState(key, fallback, onFresh) {
   if (!key) return fallback;
   try {
-    const r = await apiClient.get(key);
+    const wrappedOnFresh = onFresh ? fresh => {
+      try {
+        const parsed = fresh && fresh.value ? JSON.parse(fresh.value) : fallback;
+        onFresh(parsed);
+      } catch (e) {
+        console.error("[loadState onFresh]", key, e);
+      }
+    } : undefined;
+    const r = await apiClient.get(key, wrappedOnFresh);
     return r && r.value ? JSON.parse(r.value) : fallback;
   } catch (e) {
     console.error("[loadState]", key, e);
@@ -4856,14 +4939,45 @@ function App() {
     setTimeout(() => setToast(t => t && t.msg === msg ? null : t), 2000);
   };
 
-  // 初始載入
+  // 初始載入（SWR：有快取就瞬間顯示，背景更新；沒快取就等網路）
   useEffect(() => {
+    // 共用的 ref：存所有三個與 groups 有關的最新資料，任何一方更新都重算 groups
+    const deps = {
+      kpiGroups: {},
+      members: [],
+      extras: {}
+    };
+    const rebuildGroups = () => {
+      const built = buildGroupsFromKpi(deps.kpiGroups, deps.members, deps.extras);
+      setGroups(built);
+    };
     (async () => {
       // 平行載入：運營台資料 + 主檔會員 + 主站 KPI 小組 + 導生預設 + 表板設定
-      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes, defaultsData, dashCfg] = await Promise.all([loadState(STORAGE_KEYS.MEETINGS, null), loadState(STORAGE_KEYS.MEMBERS, null), loadState(STORAGE_KEYS.MENTEES, null), loadState(STORAGE_KEYS.GROUP_EXTRAS, {}), fetch(PROXY_URL + '/api/groups').then(r => r.ok ? r.json() : {}).catch(() => ({})), loadState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, null), loadState(STORAGE_KEYS.DASHBOARD_CONFIG, {
+      const [meetingsData, mainData, menteesData, extrasData, kpiGroupsRes, defaultsData, dashCfg] = await Promise.all([loadState(STORAGE_KEYS.MEETINGS, null, fresh => setMeetings(fresh || [])), loadState(STORAGE_KEYS.MEMBERS, null, fresh => {
+        const mem = fresh && Array.isArray(fresh.members) ? fresh.members : [];
+        if (mem.length) {
+          setMembers(mem);
+          deps.members = mem;
+          rebuildGroups();
+        }
+        const cms = fresh && Array.isArray(fresh.coffeeMeetings) ? fresh.coffeeMeetings : [];
+        setMainCoffeeMeetings(cms);
+        setCoffeeSyncingAt(new Date());
+      }), loadState(STORAGE_KEYS.MENTEES, null, fresh => setMentees(fresh || SEED_MENTEES)), loadState(STORAGE_KEYS.GROUP_EXTRAS, {}, fresh => {
+        deps.extras = fresh || {};
+        rebuildGroups();
+      }), swrFetchRaw(PROXY_URL + '/api/groups', fresh => {
+        deps.kpiGroups = fresh || {};
+        rebuildGroups();
+      }), loadState(STORAGE_KEYS.MENTORSHIP_DEFAULTS, null, fresh => setMentorshipDefaults(fresh)), loadState(STORAGE_KEYS.DASHBOARD_CONFIG, {
         rangeMode: "thisMonth"
+      }, fresh => {
+        if (fresh && typeof fresh === "object") setDashboardConfig(fresh);
       })]);
       const liveMembers = mainData && Array.isArray(mainData.members) ? mainData.members : [];
+      deps.kpiGroups = kpiGroupsRes || {};
+      deps.members = liveMembers;
+      deps.extras = extrasData || {};
       const builtGroups = buildGroupsFromKpi(kpiGroupsRes, liveMembers, extrasData);
       setGroups(builtGroups);
       setMeetings(meetingsData || []);
