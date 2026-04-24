@@ -5563,7 +5563,7 @@ function App() {
     open: !!editingMeeting,
     onClose: () => setEditingMeeting(null),
     title: editingMeeting?.id ? "編輯會議記錄" : "新增會議記錄",
-    maxWidth: "max-w-3xl"
+    maxWidth: "max-w-5xl"
   }, editingMeeting && /*#__PURE__*/React.createElement(MeetingForm, {
     meeting: editingMeeting.id ? editingMeeting : null,
     groups: groups,
