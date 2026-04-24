@@ -2080,6 +2080,64 @@ function MemberMultiSelect({
   }, "\xB7 ", m.industry)))));
 }
 
+// 出席成員快選方格（組聚專用：小組成員數固定 7~10 人，平行點選最直覺）
+function AttendeesGrid({
+  members,
+  selectedIds,
+  onChange
+}) {
+  if (!members || members.length === 0) {
+    return /*#__PURE__*/React.createElement("div", {
+      className: "text-sm text-stone-400 italic"
+    }, "\u8ACB\u5148\u9078\u64C7\u5C0F\u7D44");
+  }
+  const allSelected = selectedIds.length === members.length;
+  const toggle = id => onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
+  const selectAll = () => onChange(members.map(m => m.id));
+  const clearAll = () => onChange([]);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "border border-stone-300 rounded-lg bg-white"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-stone-200 bg-stone-50"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-600"
+  }, "\u5DF2\u9078 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-[#B8860B]"
+  }, selectedIds.length), " / ", members.length, " \u4EBA"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: selectAll,
+    disabled: allSelected,
+    className: "text-[11px] px-2 py-0.5 rounded border border-stone-300 text-stone-600 hover:bg-amber-50 hover:text-[#B8860B] hover:border-[#B8860B] disabled:opacity-40 disabled:cursor-not-allowed"
+  }, "\u5168\u9078"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: clearAll,
+    disabled: selectedIds.length === 0,
+    className: "text-[11px] px-2 py-0.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed"
+  }, "\u6E05\u9664"))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 p-2"
+  }, members.map(m => {
+    const selected = selectedIds.includes(m.id);
+    return /*#__PURE__*/React.createElement("button", {
+      key: m.id,
+      type: "button",
+      onClick: () => toggle(m.id),
+      className: `flex items-start gap-1.5 px-2 py-1.5 rounded-md text-left text-sm transition border ${selected ? "bg-amber-50 border-[#B8860B] text-stone-800" : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300"}`
+    }, selected ? /*#__PURE__*/React.createElement(CheckSquare, {
+      className: "w-4 h-4 text-[#B8860B] flex-shrink-0 mt-0.5"
+    }) : /*#__PURE__*/React.createElement(Square, {
+      className: "w-4 h-4 text-stone-300 flex-shrink-0 mt-0.5"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "flex-1 min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-medium truncate"
+    }, m.name), m.industry && /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] text-stone-400 truncate"
+    }, m.industry)));
+  })));
+}
+
 // 單選（用於記錄人、負責人）
 function MemberSelect({
   members,
@@ -2380,13 +2438,11 @@ function MeetingForm({
     label: `出席成員（${form.attendees.length} / ${group?.memberIds.length || 0} 人）`,
     required: true,
     hint: group ? `未勾選者將自動列入缺席（${form.absentees.length} 人）` : "請先選擇小組"
-  }, group ? /*#__PURE__*/React.createElement(MemberMultiSelect, {
+  }, /*#__PURE__*/React.createElement(AttendeesGrid, {
     members: groupMembers,
     selectedIds: form.attendees,
     onChange: v => set("attendees", v)
-  }) : /*#__PURE__*/React.createElement("div", {
-    className: "text-sm text-stone-400 italic"
-  }, "\u8ACB\u5148\u9078\u64C7\u5C0F\u7D44")), /*#__PURE__*/React.createElement(FormSection, {
+  })), /*#__PURE__*/React.createElement(FormSection, {
     title: "\u4F86\u8CD3",
     badge: summary("", (form.guests || []).length),
     icon: /*#__PURE__*/React.createElement(UserCheck, {
