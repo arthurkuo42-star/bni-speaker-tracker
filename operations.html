@@ -5032,9 +5032,18 @@ function App() {
   };
 
   // 自動儲存
-  // groups 本體來自主站 KPI，只把 metadata (leaderId/color) 另存
+  // 2026-04-24 修：SWR 快取 race 導致舊版資料會被自動 save 覆寫回伺服器。
+  // 流程：loaded=true 後等 2 秒，讓 SWR 的 onFresh callback 有機會跑完再開放自動 save。
+  // 使用者在這 2 秒內編輯不會遺失 —— useEffect 依賴 hydrationDone，釋放後會再跑一次並存下最新 state。
+  const [hydrationDone, setHydrationDone] = useState(false);
   useEffect(() => {
     if (!loaded) return;
+    const t = setTimeout(() => setHydrationDone(true), 2000);
+    return () => clearTimeout(t);
+  }, [loaded]);
+  // groups 本體來自主站 KPI，只把 metadata (leaderId/color) 另存
+  useEffect(() => {
+    if (!loaded || !hydrationDone) return;
     const extras = {};
     groups.forEach(g => {
       if (g.leaderId || g.color) extras[g.id] = {
@@ -5043,14 +5052,14 @@ function App() {
       };
     });
     saveState(STORAGE_KEYS.GROUP_EXTRAS, extras);
-  }, [groups, loaded]);
+  }, [groups, loaded, hydrationDone]);
   useEffect(() => {
-    if (loaded) saveState(STORAGE_KEYS.MEETINGS, meetings);
-  }, [meetings, loaded]);
+    if (loaded && hydrationDone) saveState(STORAGE_KEYS.MEETINGS, meetings);
+  }, [meetings, loaded, hydrationDone]);
   // members 為唯讀，由 Speaker Tracker 主檔管理
   useEffect(() => {
-    if (loaded) saveState(STORAGE_KEYS.MENTEES, mentees);
-  }, [mentees, loaded]);
+    if (loaded && hydrationDone) saveState(STORAGE_KEYS.MENTEES, mentees);
+  }, [mentees, loaded, hydrationDone]);
   useEffect(() => {
     if (!loaded) return;
     try {
