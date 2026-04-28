@@ -2182,7 +2182,8 @@ function MeetingForm({
     id: uid("mt"),
     groupId: groups[0]?.id || "",
     date: new Date().toISOString().slice(0, 10),
-    time: "19:00",
+    time: new Date().toTimeString().slice(0, 5),
+    // 點選當下的本地時間 HH:MM
     location: "",
     scribe: "",
     attendees: [],
