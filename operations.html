@@ -400,6 +400,12 @@ const apiClient = {
 };
 
 // ===== 運營台主體 =====
+// ============ 全分會會議特殊識別（保留值，當 meeting.groupId 為此值時代表全分會會議）============
+const CHAPTER_GROUP_ID = "__chapter__";
+const CHAPTER_GROUP_NAME = "全分會";
+const CHAPTER_GROUP_COLOR = "#8B1A1A"; // 富鼎深紅
+const isChapterMeeting = m => m && m.groupId === CHAPTER_GROUP_ID;
+
 // ============ 儲存層（artifact 用 window.storage；整合 Speaker Tracker 時替換為 proxy fetch） ============
 const STORAGE_KEYS = {
   GROUP_EXTRAS: "bni_group_extras_v1",
@@ -482,9 +488,11 @@ function buildMeetingContent(meeting, group, members) {
   const speakerName = meeting.speaker?.memberId ? memberLabel(meeting.speaker.memberId) : "";
   const speakerTopic = meeting.speaker?.topic || "";
   const scribeName = meeting.scribe ? memberName(meeting.scribe) : "";
+  const isChapter = isChapterMeeting(meeting);
   return {
+    isChapter,
     meta: {
-      groupName: group?.name || "未知小組",
+      groupName: isChapter ? CHAPTER_GROUP_NAME : group?.name || "未知小組",
       date: dateStr,
       time: timeStr,
       location: meeting.location || "",
@@ -503,7 +511,7 @@ function buildMeetingContent(meeting, group, members) {
       const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
       const displayName = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
       const displayIndustry = kind === "member" ? linked?.industry || "" : g.industry || "";
-      const sourceLabel = kind === "member" ? "分會別組會員" : g.fromChapter ? `外部 · ${g.fromChapter}` : "外部來賓";
+      const sourceLabel = kind === "member" ? isChapterMeeting(meeting) ? "分會會員（非出席）" : "分會別組會員" : g.fromChapter ? `外部 · ${g.fromChapter}` : "外部來賓";
       const hasValidIdentity = kind === "member" ? !!linked : !!g.name;
       return {
         name: displayName,
@@ -655,7 +663,7 @@ async function exportMeetingDocx(meeting, group, members) {
     }
   });
   const children = [];
-  children.push(h1("BNI 富鼎分會 組聚記錄"));
+  children.push(h1(c.isChapter ? "BNI 富鼎分會 全分會會議記錄" : "BNI 富鼎分會 組聚記錄"));
   children.push(new d.Paragraph({
     children: [new d.TextRun({
       text: `${c.meta.groupName} · ${c.meta.date}${c.meta.time ? " " + c.meta.time : ""}`,
@@ -877,9 +885,9 @@ async function exportMeetingDocx(meeting, group, members) {
     });
   }
 
-  // 小組內引薦
+  // 引薦
   if (c.referrals.length) {
-    children.push(h2("小組內引薦", "🎯"));
+    children.push(h2(c.isChapter ? "分會內引薦" : "小組內引薦", "🎯"));
     c.referrals.forEach((r, i) => {
       const amount = r.amount > 0 ? ` · 成交 NT$ ${r.amount.toLocaleString()}` : "";
       children.push(new d.Paragraph({
@@ -964,7 +972,7 @@ async function exportMeetingDocx(meeting, group, members) {
           children: [new d.Paragraph({
             alignment: d.AlignmentType.RIGHT,
             children: [new d.TextRun({
-              text: "BNI 富鼎分會 · 組聚記錄",
+              text: c.isChapter ? "BNI 富鼎分會 · 全分會會議記錄" : "BNI 富鼎分會 · 組聚記錄",
               font: FONT,
               size: 18,
               color: "888888"
@@ -1116,7 +1124,7 @@ function buildMeetingHtml(meeting, group, members) {
     nextBlock = (c.nextMeeting.date ? kv("日期", c.nextMeeting.date) : "") + (c.nextMeeting.time ? kv("時間", c.nextMeeting.time) : "") + (c.nextMeeting.location ? kv("地點", c.nextMeeting.location) : "");
   }
   return `<div style="${S.root}">
-<div style="${S.h1}">BNI 富鼎分會 組聚記錄</div>
+<div style="${S.h1}">${c.isChapter ? "BNI 富鼎分會 全分會會議記錄" : "BNI 富鼎分會 組聚記錄"}</div>
 <div style="${S.subtitle}">${esc(c.meta.groupName)} · ${esc(c.meta.date)}${c.meta.time ? " " + esc(c.meta.time) : ""}</div>
 
 <div style="${S.section}">
@@ -1136,7 +1144,7 @@ ${section("主講人專業簡報", "🎤", speakerBlock)}
 ${section("開啟對話", "🗣️", openersBlock)}
 ${section("對主講人的建議", "💡", feedbackBlock)}
 ${section("主講人需要的合作人脈", "🤝", ncBlock)}
-${section("小組內引薦", "🎯", referralsBlock)}
+${section(c.isChapter ? "分會內引薦" : "小組內引薦", "🎯", referralsBlock)}
 ${section("下次組聚", "📅", nextBlock)}
 </div>`;
 }
@@ -1203,8 +1211,10 @@ async function exportMeetingPdf(meeting, group, members) {
 // 組聚檔名（不含副檔名）
 function meetingFilenameBase(meeting, group) {
   const dateStr = meeting.date || "無日期";
-  const groupName = group?.name || "未知小組";
-  return safeFilename(`組聚記錄_${dateStr}_${groupName}`);
+  const isChapter = isChapterMeeting(meeting);
+  const groupName = isChapter ? CHAPTER_GROUP_NAME : group?.name || "未知小組";
+  const prefix = isChapter ? "分會會議記錄" : "組聚記錄";
+  return safeFilename(`${prefix}_${dateStr}_${groupName}`);
 }
 
 // 單筆下載（Word 或 PDF）
@@ -2240,18 +2250,25 @@ function MeetingForm({
     ...p,
     [k]: v
   }));
+  const isChapter = form.groupId === CHAPTER_GROUP_ID;
   const group = groups.find(g => g.id === form.groupId);
-  const groupMembers = useMemo(() => members.filter(m => group?.memberIds?.includes(m.id)), [members, group]);
+  // 全分會：候選 = 全部成員；組聚：候選 = 該組成員
+  const groupMembers = useMemo(() => {
+    if (isChapter) return members;
+    return members.filter(m => group?.memberIds?.includes(m.id));
+  }, [members, group, isChapter]);
   const attendingMembers = useMemo(() => groupMembers.filter(m => form.attendees.includes(m.id)), [groupMembers, form.attendees]);
 
-  // 選了某組，沒出席的自動算缺席；若記錄人空白，自動預填小組長
+  // 選了某組/全分會，沒出席的自動算缺席；若記錄人空白，自動預填小組長
   useEffect(() => {
-    if (!group) return;
-    const absent = group.memberIds.filter(id => !form.attendees.includes(id));
+    if (!isChapter && !group) return;
+    const pool = isChapter ? members.map(m => m.id) : group?.memberIds || [];
+    const absent = pool.filter(id => !form.attendees.includes(id));
     setForm(p => ({
       ...p,
       absentees: absent,
-      scribe: p.scribe || group.leaderId || ""
+      // 全分會沒有小組長預填；組聚維持原本邏輯
+      scribe: p.scribe || (isChapter ? "" : group?.leaderId || "")
     }));
   }, [form.attendees, form.groupId]);
 
@@ -2365,7 +2382,7 @@ function MeetingForm({
   const updReferral = (id, k, v) => set("referrals", upd(form.referrals, id, k, v));
   const rmReferral = id => set("referrals", rm(form.referrals, id));
   const submit = () => {
-    if (!form.groupId) return alert("請選擇小組");
+    if (!form.groupId) return alert("請選擇小組或全分會");
     if (!form.date) return alert("請輸入日期");
     // 2.5 開啟對話：若主講人已選，但所有目標客群皆為空白 → 提醒
     if (form.speaker?.memberId) {
@@ -2402,7 +2419,9 @@ function MeetingForm({
     className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
-  }, "\u8ACB\u9078\u64C7"), groups.map(g => /*#__PURE__*/React.createElement("option", {
+  }, "\u8ACB\u9078\u64C7"), /*#__PURE__*/React.createElement("option", {
+    value: CHAPTER_GROUP_ID
+  }, "\uD83C\uDF10 \u5168\u5206\u6703"), groups.map(g => /*#__PURE__*/React.createElement("option", {
     key: g.id,
     value: g.id
   }, g.name)))), /*#__PURE__*/React.createElement(Field, {
@@ -2435,14 +2454,16 @@ function MeetingForm({
     placeholder: "\u4F8B\uFF1A\u4E8B\u52D9\u6240\u6703\u8B70\u5BA4\u300185\u5EA6C...",
     className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
   })), /*#__PURE__*/React.createElement(Field, {
-    label: `出席成員（${form.attendees.length} / ${group?.memberIds.length || 0} 人）`,
+    label: `出席成員（${form.attendees.length} / ${groupMembers.length} 人）`,
     required: true,
-    hint: group ? `未勾選者將自動列入缺席（${form.absentees.length} 人）` : "請先選擇小組"
-  }, /*#__PURE__*/React.createElement(AttendeesGrid, {
+    hint: isChapter || group ? `未勾選者將自動列入缺席（${form.absentees.length} 人）` : "請先選擇小組或全分會"
+  }, isChapter || group ? /*#__PURE__*/React.createElement(AttendeesGrid, {
     members: groupMembers,
     selectedIds: form.attendees,
     onChange: v => set("attendees", v)
-  })), /*#__PURE__*/React.createElement(FormSection, {
+  }) : /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-stone-400 italic"
+  }, "\u8ACB\u5148\u9078\u64C7\u5C0F\u7D44\u6216\u5168\u5206\u6703")), /*#__PURE__*/React.createElement(FormSection, {
     title: "\u4F86\u8CD3",
     badge: summary("", (form.guests || []).length),
     icon: /*#__PURE__*/React.createElement(UserCheck, {
@@ -2450,7 +2471,7 @@ function MeetingForm({
     })
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mb-2 bg-emerald-50 border border-emerald-200 rounded p-2 leading-relaxed"
-  }, "\uD83D\uDCA1 \u4F86\u8CD3\u53EF\u4EE5\u662F\u5206\u6703\u5225\u7D44\u6703\u54E1\uFF0C\u4E5F\u53EF\u80FD\u662F\u5916\u90E8\u4F86\u8A2A\u8005\u3002\u4F86\u8CD3\u4E0D\u5F71\u97FF\u51FA\u5E2D/\u7F3A\u5E2D\u7D71\u8A08\uFF0C\u4F46\u5176\u767C\u8A00\u6703\u6536\u5165\u7D44\u805A\u8A18\u9304\u3002"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCA1 ", isChapter ? "來賓可以是分會會員（非出席）或外部來訪者。來賓不影響出席/缺席統計，但其發言會收入會議記錄。" : "來賓可以是分會別組會員，也可能是外部來訪者。來賓不影響出席/缺席統計，但其發言會收入組聚記錄。"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-2 mb-2"
   }, (form.guests || []).map(g => {
     const linkedMember = g.kind === "member" && g.memberId ? members.find(x => x.id === g.memberId) : null;
@@ -2464,7 +2485,7 @@ function MeetingForm({
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => updGuest(g.id, "kind", "member"),
       className: `px-2 py-0.5 rounded ${g.kind === "member" ? "bg-emerald-600 text-white" : "bg-white text-stone-500 border border-stone-200"}`
-    }, "\u5206\u6703\u5225\u7D44\u6703\u54E1"), /*#__PURE__*/React.createElement("button", {
+    }, isChapter ? "分會會員（非出席）" : "分會別組會員"), /*#__PURE__*/React.createElement("button", {
       onClick: () => updGuest(g.id, "kind", "external"),
       className: `px-2 py-0.5 rounded ${g.kind === "external" ? "bg-emerald-600 text-white" : "bg-white text-stone-500 border border-stone-200"}`
     }, "\u5916\u90E8\u4F86\u8CD3")), /*#__PURE__*/React.createElement("button", {
@@ -2475,10 +2496,16 @@ function MeetingForm({
     }))), g.kind === "member" ? /*#__PURE__*/React.createElement("div", {
       className: "mb-2"
     }, /*#__PURE__*/React.createElement(MemberSelect, {
-      members: members.filter(m => !(group?.memberIds || []).includes(m.id) && !(form.guests || []).some(other => other.id !== g.id && other.kind === "member" && other.memberId === m.id)),
+      members: members.filter(m => {
+        // 全分會：扣掉已出席者；組聚：扣掉本組成員
+        const baseExclude = isChapter ? form.attendees.includes(m.id) : (group?.memberIds || []).includes(m.id);
+        if (baseExclude) return false;
+        // 都要扣掉已被選為其他來賓的會員
+        return !(form.guests || []).some(other => other.id !== g.id && other.kind === "member" && other.memberId === m.id);
+      }),
       value: g.memberId,
       onChange: v => updGuest(g.id, "memberId", v),
-      placeholder: "\u9078\u64C7\u5206\u6703\u6703\u54E1\uFF08\u975E\u672C\u7D44\uFF09..."
+      placeholder: isChapter ? "選擇分會會員（非出席者）..." : "選擇分會會員（非本組）..."
     }), linkedMember?.industry && /*#__PURE__*/React.createElement("div", {
       className: "text-[11px] text-stone-500 mt-1"
     }, "\u7522\u696D\uFF1A", linkedMember.industry)) : /*#__PURE__*/React.createElement("div", {
@@ -2804,7 +2831,7 @@ function MeetingForm({
   }, /*#__PURE__*/React.createElement(Plus, {
     className: "w-3.5 h-3.5"
   }), "\u65B0\u589E\u4EBA\u8108\u9700\u6C42")))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "5. \u5C0F\u7D44\u5167\u5F7C\u6B64\u5F15\u85A6",
+    title: isChapter ? "5. 分會內彼此引薦" : "5. 小組內彼此引薦",
     badge: summary("", form.referrals.length),
     icon: /*#__PURE__*/React.createElement(ArrowRightLeft, {
       className: "w-4 h-4 text-[#B8860B]"
@@ -2985,8 +3012,10 @@ function MeetingCard({
   const [exportMenu, setExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
   const getMember = id => members.find(m => m.id === id);
-  const totalInGroup = group?.memberIds.length || 0;
-  const attendRate = totalInGroup ? (meeting.attendees.length / totalInGroup * 100).toFixed(0) : 0;
+  const isChapter = isChapterMeeting(meeting);
+  // 出席率分母：全分會 → 全分會成員數；組聚 → 該組成員數
+  const totalPool = isChapter ? members.length : group?.memberIds.length || 0;
+  const attendRate = totalPool ? (meeting.attendees.length / totalPool * 100).toFixed(0) : 0;
 
   // 6 大欄位統計
   const sharings = meeting.sharings || [];
@@ -2997,7 +3026,7 @@ function MeetingCard({
     const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
     const name = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
     const industry = kind === "member" ? linked?.industry || "" : g.industry || "";
-    const sourceLabel = kind === "member" ? "分會別組會員" : g.fromChapter ? `外部 · ${g.fromChapter}` : "外部來賓";
+    const sourceLabel = kind === "member" ? isChapterMeeting(meeting) ? "分會會員（非出席）" : "分會別組會員" : g.fromChapter ? `外部 · ${g.fromChapter}` : "外部來賓";
     const hasValidIdentity = kind === "member" ? !!linked : !!g.name;
     return {
       id: g.id,
@@ -3029,7 +3058,7 @@ function MeetingCard({
   }, /*#__PURE__*/React.createElement("div", {
     className: "h-1",
     style: {
-      backgroundColor: group?.color || "#999"
+      backgroundColor: isChapter ? CHAPTER_GROUP_COLOR : group?.color || "#999"
     }
   }), /*#__PURE__*/React.createElement("div", {
     className: "p-4"
@@ -3040,8 +3069,8 @@ function MeetingCard({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2 flex-wrap mb-1"
   }, /*#__PURE__*/React.createElement(Tag, {
-    color: group?.color || "#999"
-  }, group?.name || "未知小組"), /*#__PURE__*/React.createElement("span", {
+    color: isChapter ? CHAPTER_GROUP_COLOR : group?.color || "#999"
+  }, isChapter ? `🌐 ${CHAPTER_GROUP_NAME}` : group?.name || "未知小組"), /*#__PURE__*/React.createElement("span", {
     className: "text-sm font-semibold text-stone-800"
   }, fmtDate(meeting.date)), meeting.time && /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-stone-500"
@@ -3122,7 +3151,7 @@ function MeetingCard({
     className: "text-lg font-bold text-emerald-700"
   }, meeting.attendees.length, /*#__PURE__*/React.createElement("span", {
     className: "text-xs font-normal text-emerald-600"
-  }, "/", totalInGroup)), /*#__PURE__*/React.createElement("div", {
+  }, "/", totalPool)), /*#__PURE__*/React.createElement("div", {
     className: "text-[10px] text-emerald-600"
   }, "\u51FA\u5E2D\uFF08", attendRate, "%\uFF09"))), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-1 mb-2"
@@ -3263,7 +3292,7 @@ function MeetingCard({
     className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
   }, /*#__PURE__*/React.createElement(ArrowRightLeft, {
     className: "w-3 h-3 text-pink-600"
-  }), "\u5C0F\u7D44\u5167\u5F15\u85A6\uFF08\u7E3D\u984D NT$", referralTotal.toLocaleString(), "\uFF09"), /*#__PURE__*/React.createElement("div", {
+  }), isChapter ? "分會內引薦" : "小組內引薦", "\uFF08\u7E3D\u984D NT$", referralTotal.toLocaleString(), "\uFF09"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-1"
   }, referrals.map(r => /*#__PURE__*/React.createElement("div", {
     key: r.id,
@@ -5018,7 +5047,7 @@ function GroupStatsBar({
       if (end && d > end) return false;
       return true;
     });
-    return groups.map(g => {
+    const groupRows = groups.map(g => {
       const gMeetings = inRange.filter(m => m.groupId === g.id);
       const refs = gMeetings.flatMap(m => m.referrals || []);
       const refTotal = refs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -5029,6 +5058,23 @@ function GroupStatsBar({
         refTotal
       };
     });
+    // 全分會（獨立列，與小組並列；不混入小組統計）
+    const chapterMeetings = inRange.filter(isChapterMeeting);
+    const chapterRefs = chapterMeetings.flatMap(m => m.referrals || []);
+    const chapterRefTotal = chapterRefs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    if (chapterMeetings.length > 0) {
+      groupRows.push({
+        group: {
+          id: CHAPTER_GROUP_ID,
+          name: `🌐 ${CHAPTER_GROUP_NAME}`,
+          color: CHAPTER_GROUP_COLOR
+        },
+        meetings: chapterMeetings.length,
+        refCount: chapterRefs.length,
+        refTotal: chapterRefTotal
+      });
+    }
+    return groupRows;
   }, [meetings, groups, config]);
   const totalMeetings = stats.reduce((s, x) => s + x.meetings, 0);
   const totalRefCount = stats.reduce((s, x) => s + x.refCount, 0);
@@ -5549,7 +5595,9 @@ function App() {
     className: "border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
-  }, "\u5168\u90E8\u5C0F\u7D44"), groups.map(g => /*#__PURE__*/React.createElement("option", {
+  }, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", {
+    value: CHAPTER_GROUP_ID
+  }, "\uD83C\uDF10 \u5168\u5206\u6703"), groups.map(g => /*#__PURE__*/React.createElement("option", {
     key: g.id,
     value: g.id
   }, g.name))), currentUserId && /*#__PURE__*/React.createElement("label", {
@@ -5651,6 +5699,7 @@ function App() {
   }, "\u5DF2\u52FE\u9078 ", batchSelection.size, " / ", filteredMeetings.length)), /*#__PURE__*/React.createElement("div", {
     className: "max-h-[40vh] overflow-y-auto border border-stone-200 rounded-lg divide-y divide-stone-100"
   }, filteredMeetings.map(m => {
+    const isCh = isChapterMeeting(m);
     const g = groups.find(x => x.id === m.groupId);
     const sp = m.speaker?.memberId ? members.find(x => x.id === m.speaker.memberId) : null;
     const checked = batchSelection.has(m.id);
@@ -5668,8 +5717,8 @@ function App() {
     }), /*#__PURE__*/React.createElement("div", {
       className: "flex-1 min-w-0 flex items-center gap-2 flex-wrap"
     }, /*#__PURE__*/React.createElement(Tag, {
-      color: g?.color || "#999"
-    }, g?.name || "未知小組"), /*#__PURE__*/React.createElement("span", {
+      color: isCh ? CHAPTER_GROUP_COLOR : g?.color || "#999"
+    }, isCh ? `🌐 ${CHAPTER_GROUP_NAME}` : g?.name || "未知小組"), /*#__PURE__*/React.createElement("span", {
       className: "text-sm font-semibold"
     }, fmtDate(m.date)), sp && /*#__PURE__*/React.createElement("span", {
       className: "text-xs text-stone-500"
