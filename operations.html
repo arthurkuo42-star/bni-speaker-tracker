@@ -485,9 +485,25 @@ function buildMeetingContent(meeting, group, members) {
   const timeStr = meeting.time || "";
   const attendeesNames = (meeting.attendees || []).map(memberName).join("、");
   const absenteesNames = (meeting.absentees || []).map(memberName).join("、");
-  const speakerName = meeting.speaker?.memberId ? memberLabel(meeting.speaker.memberId) : "";
-  const speakerTopic = meeting.speaker?.topic || "";
   const scribeName = meeting.scribe ? memberName(meeting.scribe) : "";
+
+  // 主講人（多位）：每位主講人各自帶 openers/feedback/connections/grid
+  // 舊單主講結構（meeting.speaker + meeting.conversationOpeners + meeting.feedback + meeting.neededConnections）相容
+  let speakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
+  if (speakers.length === 0 && (meeting.speaker?.memberId || meeting.speaker?.topic || (meeting.conversationOpeners || []).length || (meeting.feedback || []).length || (meeting.neededConnections || []).length)) {
+    speakers = [{
+      id: "legacy_speaker",
+      memberId: meeting.speaker?.memberId || "",
+      topic: meeting.speaker?.topic || "",
+      conversationOpeners: meeting.conversationOpeners || [],
+      feedback: meeting.feedback || [],
+      neededConnections: meeting.neededConnections || [],
+      collaborationGrid: {
+        centerProfile: "",
+        cells: ["", "", "", "", "", "", "", ""]
+      }
+    }];
+  }
   const isChapter = isChapterMeeting(meeting);
   return {
     isChapter,
@@ -505,6 +521,41 @@ function buildMeetingContent(meeting, group, members) {
     sharings: (meeting.sharings || []).map(s => ({
       name: memberName(s.memberId),
       content: s.content || ""
+    })),
+    resourceShares: (meeting.resourceShares || []).map(r => ({
+      name: memberName(r.memberId),
+      industry: getMember(r.memberId)?.industry || "",
+      needs: r.needs || "",
+      offers: r.offers || ""
+    })).filter(r => r.needs || r.offers),
+    speakers: speakers.map(sp => ({
+      name: sp.memberId ? memberLabel(sp.memberId) : "",
+      topic: sp.topic || "",
+      conversationOpeners: (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).map(o => ({
+        who: o.who || "",
+        yesno: o.yesno || "",
+        tagline: o.tagline || "",
+        painSolution: o.painSolution || "",
+        cta: o.cta || "",
+        verbatim: o.verbatim || ""
+      })),
+      feedback: (sp.feedback || []).map(f => ({
+        from: memberName(f.fromMemberId),
+        content: f.content || ""
+      })),
+      neededConnections: (sp.neededConnections || []).map(nc => ({
+        profileWanted: nc.profileWanted || "",
+        offers: (nc.offers || []).map(of => ({
+          introducer: of.introducerId ? memberName(of.introducerId) : "",
+          contactName: of.contactName || "",
+          contactProfession: of.contactProfession || "",
+          status: of.status || "pending"
+        }))
+      })),
+      collaborationGrid: sp.collaborationGrid && (sp.collaborationGrid.centerProfile || (sp.collaborationGrid.cells || []).some(c => c)) ? {
+        centerProfile: sp.collaborationGrid.centerProfile || "",
+        cells: [...(sp.collaborationGrid.cells || []), "", "", "", "", "", "", "", ""].slice(0, 8)
+      } : null
     })),
     guests: (meeting.guests || []).map(g => {
       const kind = g.kind || "member";
@@ -524,31 +575,6 @@ function buildMeetingContent(meeting, group, members) {
         otherFeedback: g.otherFeedback || ""
       };
     }).filter(g => g.sharing || g.feedback || g.otherFeedback || g.hasValidIdentity),
-    speaker: {
-      name: speakerName,
-      topic: speakerTopic
-    },
-    conversationOpeners: (meeting.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).map(o => ({
-      who: o.who || "",
-      yesno: o.yesno || "",
-      tagline: o.tagline || "",
-      painSolution: o.painSolution || "",
-      cta: o.cta || "",
-      verbatim: o.verbatim || ""
-    })),
-    feedback: (meeting.feedback || []).map(f => ({
-      from: memberName(f.fromMemberId),
-      content: f.content || ""
-    })),
-    neededConnections: (meeting.neededConnections || []).map(nc => ({
-      profileWanted: nc.profileWanted || "",
-      offers: (nc.offers || []).map(of => ({
-        introducer: of.introducerId ? memberName(of.introducerId) : "",
-        contactName: of.contactName || "",
-        contactProfession: of.contactProfession || "",
-        status: of.status || "pending"
-      }))
-    })),
     referrals: (meeting.referrals || []).map(r => ({
       from: memberName(r.fromMemberId),
       to: memberName(r.toMemberId),
@@ -780,72 +806,50 @@ async function exportMeetingDocx(meeting, group, members) {
     });
   }
 
-  // 主講人專業簡報
-  if (c.speaker.name || c.speaker.topic) {
-    children.push(h2("主講人專業簡報", "🎤"));
-    if (c.speaker.name) children.push(kv("主講人", c.speaker.name));
-    if (c.speaker.topic) children.push(kv("主題", c.speaker.topic));
-  }
-
-  // 2.5 開啟對話
-  if (c.conversationOpeners && c.conversationOpeners.length) {
-    children.push(h2("開啟對話", "🗣️"));
-    c.conversationOpeners.forEach((o, i) => {
+  // 資源需求/提供（全分會專用）
+  if (c.resourceShares && c.resourceShares.length) {
+    children.push(h2("資源需求/提供", "🔄"));
+    c.resourceShares.forEach((r, i) => {
+      const header = [new d.TextRun({
+        text: `${i + 1}. ${r.name}`,
+        font: FONT,
+        size: 24,
+        bold: true,
+        color: "059669"
+      })];
+      if (r.industry) header.push(new d.TextRun({
+        text: `（${r.industry}）`,
+        font: FONT,
+        size: 22,
+        color: DARK
+      }));
       children.push(new d.Paragraph({
-        children: [new d.TextRun({
-          text: `目標客群 ${i + 1}`,
-          font: FONT,
-          size: 24,
-          bold: true,
-          color: GOLD
-        })],
+        children: header,
         spacing: {
           before: 80,
           after: 40
         }
       }));
-      if (o.who) children.push(kv("WHO｜我的客戶是", o.who));
-      if (o.yesno) children.push(kv("YES/NO 問題", o.yesno));
-      if (o.tagline) children.push(kv("介紹夥伴", o.tagline));
-      if (o.painSolution) children.push(kv("痛點解決", o.painSolution));
-      if (o.cta) children.push(kv("對接方式", o.cta));
-      if (o.verbatim) {
-        children.push(new d.Paragraph({
-          children: [new d.TextRun({
-            text: "完整逐字稿：",
-            font: FONT,
-            size: 22,
-            bold: true,
-            color: DARK
-          })],
-          spacing: {
-            before: 40,
-            after: 20
-          }
-        }));
-        String(o.verbatim).split(/\r?\n/).forEach(line => {
-          children.push(new d.Paragraph({
-            children: [txt(line)],
-            spacing: {
-              after: 20
-            }
-          }));
-        });
-      }
-    });
-  }
-
-  // 對主講人的建議
-  if (c.feedback.length) {
-    children.push(h2("對主講人的建議", "💡"));
-    c.feedback.forEach((f, i) => {
-      children.push(new d.Paragraph({
+      if (r.needs) children.push(new d.Paragraph({
         children: [new d.TextRun({
-          text: `${i + 1}. ${f.from}：`,
+          text: "💼 需要的資源：",
           font: FONT,
           size: 22,
-          bold: true
-        }), txt(f.content)],
+          bold: true,
+          color: DARK
+        }), txt(r.needs)],
+        spacing: {
+          after: 40
+        }
+      }));
+      if (r.offers) children.push(new d.Paragraph({
+        children: [new d.TextRun({
+          text: "🎁 可提供的資源：",
+          font: FONT,
+          size: 22,
+          bold: true,
+          color: DARK
+        }), txt(r.offers)],
         spacing: {
           after: 60
         }
@@ -853,41 +857,248 @@ async function exportMeetingDocx(meeting, group, members) {
     });
   }
 
-  // 主講人需要的合作人脈
-  if (c.neededConnections.length) {
-    children.push(h2("主講人需要的合作人脈", "🤝"));
-    c.neededConnections.forEach((nc, i) => {
+  // 主講人專業簡報（多位）
+  if (c.speakers && c.speakers.length) {
+    children.push(h2("主講人專業簡報", "🎤"));
+    c.speakers.forEach((sp, spIdx) => {
+      const headerParts = [];
+      if (c.speakers.length > 1) headerParts.push(new d.TextRun({
+        text: `【主講人 ${spIdx + 1}】 `,
+        font: FONT,
+        size: 26,
+        bold: true,
+        color: GOLD
+      }));
+      headerParts.push(new d.TextRun({
+        text: sp.name || "（未指定）",
+        font: FONT,
+        size: 26,
+        bold: true,
+        color: RED
+      }));
+      if (sp.topic) headerParts.push(new d.TextRun({
+        text: ` ｜ ${sp.topic}`,
+        font: FONT,
+        size: 24,
+        color: DARK
+      }));
       children.push(new d.Paragraph({
-        children: [new d.TextRun({
-          text: `需求 ${i + 1}：${nc.profileWanted}`,
-          font: FONT,
-          size: 22,
-          bold: true,
-          color: GOLD
-        })],
+        children: headerParts,
         spacing: {
-          before: 80,
-          after: 40
+          before: 200,
+          after: 100
+        },
+        border: {
+          bottom: {
+            color: GOLD,
+            size: 8,
+            style: "single"
+          }
         }
       }));
-      if (nc.offers.length === 0) {
-        children.push(bullet("（尚無引薦）"));
-      } else {
-        nc.offers.forEach(of => {
-          const parts = [];
-          if (of.introducer) parts.push(`${of.introducer} 有人脈`);
-          if (of.contactName) parts.push(`${of.contactName}`);
-          if (of.contactProfession) parts.push(`（${of.contactProfession}）`);
-          if (of.status === "imported") parts.push("[已匯入咖啡會議]");
-          children.push(bullet(parts.join(" ") || "—"));
+
+      // 開啟對話
+      if (sp.conversationOpeners.length) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({
+            text: "🗣️ 開啟對話",
+            font: FONT,
+            size: 24,
+            bold: true,
+            color: RED
+          })],
+          spacing: {
+            before: 100,
+            after: 60
+          }
+        }));
+        sp.conversationOpeners.forEach((o, i) => {
+          children.push(new d.Paragraph({
+            children: [new d.TextRun({
+              text: `目標客群 ${i + 1}`,
+              font: FONT,
+              size: 22,
+              bold: true,
+              color: GOLD
+            })],
+            spacing: {
+              before: 60,
+              after: 30
+            }
+          }));
+          if (o.who) children.push(kv("WHO｜我的客戶是", o.who));
+          if (o.yesno) children.push(kv("YES/NO 問題", o.yesno));
+          if (o.tagline) children.push(kv("介紹夥伴", o.tagline));
+          if (o.painSolution) children.push(kv("痛點解決", o.painSolution));
+          if (o.cta) children.push(kv("對接方式", o.cta));
+          if (o.verbatim) {
+            children.push(new d.Paragraph({
+              children: [new d.TextRun({
+                text: "完整逐字稿：",
+                font: FONT,
+                size: 22,
+                bold: true,
+                color: DARK
+              })],
+              spacing: {
+                before: 30,
+                after: 20
+              }
+            }));
+            String(o.verbatim).split(/\r?\n/).forEach(line => {
+              children.push(new d.Paragraph({
+                children: [txt(line)],
+                spacing: {
+                  after: 20
+                }
+              }));
+            });
+          }
         });
+      }
+
+      // 對主講人建議
+      if (sp.feedback.length) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({
+            text: `💡 對 ${sp.name || "主講人"} 的建議`,
+            font: FONT,
+            size: 24,
+            bold: true,
+            color: RED
+          })],
+          spacing: {
+            before: 100,
+            after: 60
+          }
+        }));
+        sp.feedback.forEach((f, i) => {
+          children.push(new d.Paragraph({
+            children: [new d.TextRun({
+              text: `${i + 1}. ${f.from}：`,
+              font: FONT,
+              size: 22,
+              bold: true
+            }), txt(f.content)],
+            spacing: {
+              after: 40
+            }
+          }));
+        });
+      }
+
+      // 主講人需要的合作人脈
+      if (sp.neededConnections.length) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({
+            text: `🤝 ${sp.name || "主講人"} 需要的合作人脈`,
+            font: FONT,
+            size: 24,
+            bold: true,
+            color: RED
+          })],
+          spacing: {
+            before: 100,
+            after: 60
+          }
+        }));
+        sp.neededConnections.forEach((nc, i) => {
+          children.push(new d.Paragraph({
+            children: [new d.TextRun({
+              text: `需求 ${i + 1}：${nc.profileWanted}`,
+              font: FONT,
+              size: 22,
+              bold: true,
+              color: GOLD
+            })],
+            spacing: {
+              before: 60,
+              after: 30
+            }
+          }));
+          if (nc.offers.length === 0) {
+            children.push(bullet("（尚無引薦）"));
+          } else {
+            nc.offers.forEach(of => {
+              const parts = [];
+              if (of.introducer) parts.push(`${of.introducer} 有人脈`);
+              if (of.contactName) parts.push(of.contactName);
+              if (of.contactProfession) parts.push(`（${of.contactProfession}）`);
+              if (of.status === "imported") parts.push("[已匯入咖啡會議]");
+              children.push(bullet(parts.join(" ") || "—"));
+            });
+          }
+        });
+      }
+
+      // 九宮格合作圖
+      if (sp.collaborationGrid) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({
+            text: `🔲 ${sp.name || "主講人"} 合作專業九宮格`,
+            font: FONT,
+            size: 24,
+            bold: true,
+            color: RED
+          })],
+          spacing: {
+            before: 100,
+            after: 60
+          }
+        }));
+        const cells = sp.collaborationGrid.cells;
+        const center = sp.collaborationGrid.centerProfile;
+        const cellTxt = (text, isCenter) => new d.TableCell({
+          children: [new d.Paragraph({
+            children: [new d.TextRun({
+              text: isCenter ? (sp.name || "主講人") + "\n" : "",
+              font: FONT,
+              size: 18,
+              bold: true,
+              color: GOLD
+            }), new d.TextRun({
+              text: text || "",
+              font: FONT,
+              size: 18,
+              color: DARK
+            })],
+            alignment: d.AlignmentType.CENTER
+          })],
+          width: {
+            size: 33,
+            type: d.WidthType.PERCENTAGE
+          },
+          shading: isCenter ? {
+            fill: "FEF3C7"
+          } : undefined
+        });
+        const rows = [new d.TableRow({
+          children: [cellTxt(cells[0]), cellTxt(cells[1]), cellTxt(cells[2])]
+        }), new d.TableRow({
+          children: [cellTxt(cells[7]), cellTxt(center, true), cellTxt(cells[3])]
+        }), new d.TableRow({
+          children: [cellTxt(cells[6]), cellTxt(cells[5]), cellTxt(cells[4])]
+        })];
+        children.push(new d.Table({
+          rows,
+          width: {
+            size: 100,
+            type: d.WidthType.PERCENTAGE
+          }
+        }));
+        children.push(new d.Paragraph({
+          children: [txt(" ")],
+          spacing: {
+            after: 100
+          }
+        }));
       }
     });
   }
 
-  // 引薦
-  if (c.referrals.length) {
-    children.push(h2(c.isChapter ? "分會內引薦" : "小組內引薦", "🎯"));
+  // 引薦（全分會不顯示）
+  if (!c.isChapter && c.referrals.length) {
+    children.push(h2("小組內引薦", "🎯"));
     c.referrals.forEach((r, i) => {
       const amount = r.amount > 0 ? ` · 成交 NT$ ${r.amount.toLocaleString()}` : "";
       children.push(new d.Paragraph({
@@ -936,8 +1147,8 @@ async function exportMeetingDocx(meeting, group, members) {
     }
   }
 
-  // 下次組聚
-  if (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location) {
+  // 下次組聚（全分會不顯示）
+  if (!c.isChapter && (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location)) {
     children.push(h2("下次組聚", "📅"));
     if (c.nextMeeting.date) children.push(kv("日期", c.nextMeeting.date));
     if (c.nextMeeting.time) children.push(kv("時間", c.nextMeeting.time));
@@ -1065,46 +1276,77 @@ function buildMeetingHtml(meeting, group, members) {
       return `<div style="${S.ncBlock}"><div style="${S.ncTitle}">${title}</div>${rows.join("")}</div>`;
     }).join("");
   }
-  let speakerBlock = "";
-  if (c.speaker.name || c.speaker.topic) {
-    speakerBlock = (c.speaker.name ? kv("主講人", c.speaker.name) : "") + (c.speaker.topic ? kv("主題", c.speaker.topic) : "");
-  }
-  let openersBlock = "";
-  if (c.conversationOpeners && c.conversationOpeners.length) {
-    openersBlock = c.conversationOpeners.map((o, i) => {
+  let resourceSharesBlock = "";
+  if (c.resourceShares && c.resourceShares.length) {
+    resourceSharesBlock = c.resourceShares.map((r, i) => {
+      const title = `${i + 1}. <b style="color:#059669;">${esc(r.name)}</b>` + (r.industry ? `（${esc(r.industry)}）` : "");
       const rows = [];
-      if (o.who) rows.push(kv("WHO｜我的客戶是", o.who));
-      if (o.yesno) rows.push(kv("YES/NO 問題", o.yesno));
-      if (o.tagline) rows.push(kv("介紹夥伴", o.tagline));
-      if (o.painSolution) rows.push(kv("痛點解決", o.painSolution));
-      if (o.cta) rows.push(kv("對接方式", o.cta));
-      const verbatim = o.verbatim ? `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #ccc;"><b>完整逐字稿：</b><div style="white-space:pre-wrap;color:#555;font-size:11pt;margin-top:2px;">${esc(o.verbatim)}</div></div>` : "";
-      return `<div style="${S.ncBlock}">
-        <div style="${S.ncTitle}">目標客群 ${i + 1}</div>
-        ${rows.join("")}
-        ${verbatim}
-      </div>`;
+      if (r.needs) rows.push(`<div style="${S.item}"><b>💼 需要的資源：</b>${esc(r.needs)}</div>`);
+      if (r.offers) rows.push(`<div style="${S.item}"><b>🎁 可提供的資源：</b>${esc(r.offers)}</div>`);
+      return `<div style="${S.ncBlock}"><div style="${S.ncTitle}">${title}</div>${rows.join("")}</div>`;
     }).join("");
   }
-  let feedbackBlock = "";
-  if (c.feedback.length) {
-    feedbackBlock = c.feedback.map((f, i) => `<div style="${S.item}">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`).join("");
-  }
-  let ncBlock = "";
-  if (c.neededConnections.length) {
-    ncBlock = c.neededConnections.map((nc, i) => {
-      const offersHtml = nc.offers.length ? nc.offers.map(of => {
-        const parts = [];
-        if (of.introducer) parts.push(`${esc(of.introducer)} 有人脈`);
-        if (of.contactName) parts.push(esc(of.contactName));
-        if (of.contactProfession) parts.push(`（${esc(of.contactProfession)}）`);
-        if (of.status === "imported") parts.push(`<span style="${S.imported}">[已匯入咖啡會議]</span>`);
-        return `<li style="${S.ncLi}">${parts.join(" ")}</li>`;
-      }).join("") : `<li style="${S.ncLiEmpty}">（尚無引薦）</li>`;
-      return `<div style="${S.ncBlock}">
-        <div style="${S.ncTitle}">需求 ${i + 1}：${esc(nc.profileWanted)}</div>
-        <ul style="${S.ncList}">${offersHtml}</ul>
-      </div>`;
+
+  // 主講人多位：每位生成一個獨立區塊，內含主題、開啟對話、建議、人脈、九宮格
+  let speakersBlock = "";
+  if (c.speakers && c.speakers.length) {
+    speakersBlock = c.speakers.map((sp, spIdx) => {
+      const heading = c.speakers.length > 1 ? `<div style="background:#FEF3C7;color:#8B1A1A;padding:6px 10px;font-weight:bold;font-size:13pt;border-left:4px solid #B8860B;margin:12px 0 8px;">【主講人 ${spIdx + 1}】 ${esc(sp.name || "（未指定）")}${sp.topic ? `　｜　${esc(sp.topic)}` : ""}</div>` : `<div style="${S.ncTitle}">${esc(sp.name || "（未指定）")}${sp.topic ? ` ｜ ${esc(sp.topic)}` : ""}</div>`;
+      const parts = [heading];
+
+      // 開啟對話
+      if (sp.conversationOpeners.length) {
+        parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">🗣️ 開啟對話</div>`);
+        sp.conversationOpeners.forEach((o, i) => {
+          const rows = [];
+          if (o.who) rows.push(kv("WHO｜我的客戶是", o.who));
+          if (o.yesno) rows.push(kv("YES/NO 問題", o.yesno));
+          if (o.tagline) rows.push(kv("介紹夥伴", o.tagline));
+          if (o.painSolution) rows.push(kv("痛點解決", o.painSolution));
+          if (o.cta) rows.push(kv("對接方式", o.cta));
+          const verbatim = o.verbatim ? `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #ccc;"><b>完整逐字稿：</b><div style="white-space:pre-wrap;color:#555;font-size:11pt;margin-top:2px;">${esc(o.verbatim)}</div></div>` : "";
+          parts.push(`<div style="${S.ncBlock}"><div style="${S.ncTitle}">目標客群 ${i + 1}</div>${rows.join("")}${verbatim}</div>`);
+        });
+      }
+
+      // 對主講人建議
+      if (sp.feedback.length) {
+        parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">💡 對 ${esc(sp.name || "主講人")} 的建議</div>`);
+        sp.feedback.forEach((f, i) => {
+          parts.push(`<div style="${S.item}">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`);
+        });
+      }
+
+      // 主講人需要的合作人脈
+      if (sp.neededConnections.length) {
+        parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">🤝 ${esc(sp.name || "主講人")} 需要的合作人脈</div>`);
+        sp.neededConnections.forEach((nc, i) => {
+          const offersHtml = nc.offers.length ? nc.offers.map(of => {
+            const opieces = [];
+            if (of.introducer) opieces.push(`${esc(of.introducer)} 有人脈`);
+            if (of.contactName) opieces.push(esc(of.contactName));
+            if (of.contactProfession) opieces.push(`（${esc(of.contactProfession)}）`);
+            if (of.status === "imported") opieces.push(`<span style="${S.imported}">[已匯入咖啡會議]</span>`);
+            return `<li style="${S.ncLi}">${opieces.join(" ")}</li>`;
+          }).join("") : `<li style="${S.ncLiEmpty}">（尚無引薦）</li>`;
+          parts.push(`<div style="${S.ncBlock}"><div style="${S.ncTitle}">需求 ${i + 1}：${esc(nc.profileWanted)}</div><ul style="${S.ncList}">${offersHtml}</ul></div>`);
+        });
+      }
+
+      // 九宮格合作圖
+      if (sp.collaborationGrid) {
+        const cells = sp.collaborationGrid.cells;
+        const center = sp.collaborationGrid.centerProfile;
+        const cellStyle = "border:1px solid #B8860B;padding:8px;text-align:center;width:33%;height:60px;vertical-align:middle;";
+        const centerStyle = "border:2px solid #B8860B;padding:8px;text-align:center;width:33%;height:60px;vertical-align:middle;background:#FEF3C7;font-weight:bold;";
+        parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">🔲 ${esc(sp.name || "主講人")} 合作專業九宮格</div>`);
+        parts.push(`<table style="border-collapse:collapse;width:100%;max-width:480px;margin:8px auto;">
+          <tr><td style="${cellStyle}">${esc(cells[0])}</td><td style="${cellStyle}">${esc(cells[1])}</td><td style="${cellStyle}">${esc(cells[2])}</td></tr>
+          <tr><td style="${cellStyle}">${esc(cells[7])}</td><td style="${centerStyle}"><div style="color:#B8860B;font-size:11pt;">${esc(sp.name || "主講人")}</div><div style="color:#1A1414;font-size:10pt;">${esc(center)}</div></td><td style="${cellStyle}">${esc(cells[3])}</td></tr>
+          <tr><td style="${cellStyle}">${esc(cells[6])}</td><td style="${cellStyle}">${esc(cells[5])}</td><td style="${cellStyle}">${esc(cells[4])}</td></tr>
+        </table>`);
+      }
+      return parts.join("");
     }).join("");
   }
   let referralsBlock = "";
@@ -1140,12 +1382,10 @@ function buildMeetingHtml(meeting, group, members) {
 
 ${section("成長/喜悅分享", "💬", sharingsBlock)}
 ${section("來賓", "🎫", guestsBlock)}
-${section("主講人專業簡報", "🎤", speakerBlock)}
-${section("開啟對話", "🗣️", openersBlock)}
-${section("對主講人的建議", "💡", feedbackBlock)}
-${section("主講人需要的合作人脈", "🤝", ncBlock)}
-${section(c.isChapter ? "分會內引薦" : "小組內引薦", "🎯", referralsBlock)}
-${section("下次組聚", "📅", nextBlock)}
+${c.isChapter ? section("資源需求/提供", "🔄", resourceSharesBlock) : ""}
+${section("主講人專業簡報", "🎤", speakersBlock)}
+${!c.isChapter ? section("小組內引薦", "🎯", referralsBlock) : ""}
+${!c.isChapter ? section("下次組聚", "📅", nextBlock) : ""}
 </div>`;
 }
 
@@ -2192,60 +2432,80 @@ function MeetingForm({
     // 1. 成長 / 喜悅分享
     guests: [],
     // 1.5 來賓（分會別組會員 or 外部來賓）
-    speaker: {
-      memberId: "",
-      topic: ""
-    },
-    // 2. 主講人
-    conversationOpeners: [{
-      // 2.5 開啟對話（新建時預設一筆空白）
-      id: uid("co"),
-      who: "",
-      yesno: "",
-      tagline: "",
-      painSolution: "",
-      cta: "",
-      verbatim: ""
-    }],
-    feedback: [],
-    // 3. 對主講人建議
-    neededConnections: [],
-    // 4. 主講人需要的人脈
+    resourceShares: [],
+    // 2.（全分會專用）每位出席者：需要的資源 / 可提供的資源
+    speakers: [],
+    // 3. 主講人陣列（每位主講人各自帶 openers/feedback/connections/grid）
     referrals: [],
-    // 5. 小組內引薦記錄
+    // 4.（組聚專用）小組內引薦記錄
     nextMeeting: {
       date: "",
       time: "",
       location: ""
     },
-    // 6. 下次組聚
+    // 5.（組聚專用）下次組聚
     discussion: "",
     actionItems: [],
     // actionItems 保留欄位但 UI 已移除（舊資料相容）
     createdAt: new Date().toISOString()
   });
 
-  // 遷移舊記錄：若 meeting 沒有新欄位，補齊空值
+  // 遷移舊記錄：若 meeting 沒有新欄位，補齊空值；單主講人結構自動轉成 speakers[]
   useEffect(() => {
     if (!meeting) return;
-    setForm(p => ({
-      sharings: [],
-      guests: [],
-      speaker: {
-        memberId: "",
-        topic: ""
-      },
-      conversationOpeners: [],
-      feedback: [],
-      neededConnections: [],
-      referrals: [],
-      nextMeeting: {
-        date: "",
-        time: "",
-        location: ""
-      },
-      ...p
-    }));
+    setForm(p => {
+      const next = {
+        sharings: [],
+        guests: [],
+        resourceShares: [],
+        speakers: [],
+        referrals: [],
+        nextMeeting: {
+          date: "",
+          time: "",
+          location: ""
+        },
+        ...p
+      };
+      // 舊 schema 遷移：speaker / conversationOpeners / feedback / neededConnections → speakers[0]
+      const hasLegacy = !Array.isArray(p.speakers) || p.speakers.length === 0;
+      const oldSpeaker = p.speaker || {};
+      const oldOpeners = Array.isArray(p.conversationOpeners) ? p.conversationOpeners : [];
+      const oldFeedback = Array.isArray(p.feedback) ? p.feedback : [];
+      const oldConnections = Array.isArray(p.neededConnections) ? p.neededConnections : [];
+      const legacyHasContent = oldSpeaker.memberId || oldSpeaker.topic || oldOpeners.length || oldFeedback.length || oldConnections.length;
+      if (hasLegacy && legacyHasContent) {
+        next.speakers = [{
+          id: uid("sp"),
+          memberId: oldSpeaker.memberId || "",
+          topic: oldSpeaker.topic || "",
+          conversationOpeners: oldOpeners,
+          feedback: oldFeedback,
+          neededConnections: oldConnections,
+          collaborationGrid: {
+            centerProfile: "",
+            cells: ["", "", "", "", "", "", "", ""]
+          }
+        }];
+      }
+      // 確保每個 speaker 都有完整欄位（防禦舊資料部分缺欄）
+      next.speakers = (next.speakers || []).map(sp => ({
+        id: sp.id || uid("sp"),
+        memberId: sp.memberId || "",
+        topic: sp.topic || "",
+        conversationOpeners: Array.isArray(sp.conversationOpeners) ? sp.conversationOpeners : [],
+        feedback: Array.isArray(sp.feedback) ? sp.feedback : [],
+        neededConnections: Array.isArray(sp.neededConnections) ? sp.neededConnections : [],
+        collaborationGrid: sp.collaborationGrid && Array.isArray(sp.collaborationGrid.cells) ? {
+          centerProfile: sp.collaborationGrid.centerProfile || "",
+          cells: [...sp.collaborationGrid.cells, "", "", "", "", "", "", "", ""].slice(0, 8)
+        } : {
+          centerProfile: "",
+          cells: ["", "", "", "", "", "", "", ""]
+        }
+      }));
+      return next;
+    });
   }, []);
   const set = (k, v) => setForm(p => ({
     ...p,
@@ -2304,8 +2564,36 @@ function MeetingForm({
   const updGuest = (id, k, v) => set("guests", upd(form.guests || [], id, k, v));
   const rmGuest = id => set("guests", rm(form.guests || [], id));
 
-  // 2.5 開啟對話
-  const addOpener = () => set("conversationOpeners", [...(form.conversationOpeners || []), {
+  // ===== 主講人（多位）=====
+  // 通用 helper：更新 speakers[id] 的單一欄位
+  const updSpeakerField = (spId, k, v) => set("speakers", (form.speakers || []).map(sp => sp.id === spId ? {
+    ...sp,
+    [k]: v
+  } : sp));
+  const addSpeaker = () => set("speakers", [...(form.speakers || []), {
+    id: uid("sp"),
+    memberId: "",
+    topic: "",
+    conversationOpeners: [{
+      id: uid("co"),
+      who: "",
+      yesno: "",
+      tagline: "",
+      painSolution: "",
+      cta: "",
+      verbatim: ""
+    }],
+    feedback: [],
+    neededConnections: [],
+    collaborationGrid: {
+      centerProfile: "",
+      cells: ["", "", "", "", "", "", "", ""]
+    }
+  }]);
+  const rmSpeaker = spId => set("speakers", (form.speakers || []).filter(sp => sp.id !== spId));
+
+  // ===== 開啟對話（per-speaker）=====
+  const addOpener = spId => updSpeakerField(spId, "conversationOpeners", [...(form.speakers.find(s => s.id === spId)?.conversationOpeners || []), {
     id: uid("co"),
     who: "",
     yesno: "",
@@ -2314,8 +2602,8 @@ function MeetingForm({
     cta: "",
     verbatim: ""
   }]);
-  const updOpener = (id, k, v) => set("conversationOpeners", upd(form.conversationOpeners || [], id, k, v));
-  const rmOpener = id => set("conversationOpeners", rm(form.conversationOpeners || [], id));
+  const updOpener = (spId, oId, k, v) => updSpeakerField(spId, "conversationOpeners", upd(form.speakers.find(s => s.id === spId)?.conversationOpeners || [], oId, k, v));
+  const rmOpener = (spId, oId) => updSpeakerField(spId, "conversationOpeners", rm(form.speakers.find(s => s.id === spId)?.conversationOpeners || [], oId));
   const generateScript = (o, speakerName) => {
     const who = (o.who || "").trim() || "（請填目標客群）";
     const yesno = (o.yesno || "").trim() || "（請填 YES/NO 問題）";
@@ -2331,24 +2619,24 @@ function MeetingForm({
 再說一次，我的客戶是——${who}。我是 ${sp}，${tagline}。`;
   };
 
-  // 3. 回饋
-  const addFeedback = fromMemberId => set("feedback", [...form.feedback, {
+  // ===== 對主講人建議（per-speaker）=====
+  const addFeedback = (spId, fromMemberId) => updSpeakerField(spId, "feedback", [...(form.speakers.find(s => s.id === spId)?.feedback || []), {
     id: uid("fb"),
     fromMemberId,
     content: ""
   }]);
-  const updFeedback = (id, k, v) => set("feedback", upd(form.feedback, id, k, v));
-  const rmFeedback = id => set("feedback", rm(form.feedback, id));
+  const updFeedback = (spId, fId, k, v) => updSpeakerField(spId, "feedback", upd(form.speakers.find(s => s.id === spId)?.feedback || [], fId, k, v));
+  const rmFeedback = (spId, fId) => updSpeakerField(spId, "feedback", rm(form.speakers.find(s => s.id === spId)?.feedback || [], fId));
 
-  // 4. 人脈需求
-  const addConnection = () => set("neededConnections", [...form.neededConnections, {
+  // ===== 主講人需要的合作人脈（per-speaker）=====
+  const addConnection = spId => updSpeakerField(spId, "neededConnections", [...(form.speakers.find(s => s.id === spId)?.neededConnections || []), {
     id: uid("nc"),
     profileWanted: "",
     offers: []
   }]);
-  const updConnection = (id, k, v) => set("neededConnections", upd(form.neededConnections, id, k, v));
-  const rmConnection = id => set("neededConnections", rm(form.neededConnections, id));
-  const addOffer = ncId => set("neededConnections", form.neededConnections.map(nc => nc.id !== ncId ? nc : {
+  const updConnection = (spId, ncId, k, v) => updSpeakerField(spId, "neededConnections", upd(form.speakers.find(s => s.id === spId)?.neededConnections || [], ncId, k, v));
+  const rmConnection = (spId, ncId) => updSpeakerField(spId, "neededConnections", rm(form.speakers.find(s => s.id === spId)?.neededConnections || [], ncId));
+  const addOffer = (spId, ncId) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
     ...nc,
     offers: [...nc.offers, {
       id: uid("of"),
@@ -2359,17 +2647,45 @@ function MeetingForm({
       createdAt: new Date().toISOString()
     }]
   }));
-  const updOffer = (ncId, ofId, k, v) => set("neededConnections", form.neededConnections.map(nc => nc.id !== ncId ? nc : {
+  const updOffer = (spId, ncId, ofId, k, v) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
     ...nc,
     offers: nc.offers.map(of => of.id === ofId ? {
       ...of,
       [k]: v
     } : of)
   }));
-  const rmOffer = (ncId, ofId) => set("neededConnections", form.neededConnections.map(nc => nc.id !== ncId ? nc : {
+  const rmOffer = (spId, ncId, ofId) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
     ...nc,
     offers: nc.offers.filter(of => of.id !== ofId)
   }));
+
+  // ===== 九宮格合作圖（per-speaker）=====
+  const updGridCenter = (spId, v) => updSpeakerField(spId, "collaborationGrid", {
+    ...(form.speakers.find(s => s.id === spId)?.collaborationGrid || {
+      cells: ["", "", "", "", "", "", "", ""]
+    }),
+    centerProfile: v
+  });
+  const updGridCell = (spId, idx, v) => {
+    const sp = form.speakers.find(s => s.id === spId);
+    const cells = [...(sp?.collaborationGrid?.cells || ["", "", "", "", "", "", "", ""])];
+    cells[idx] = v;
+    updSpeakerField(spId, "collaborationGrid", {
+      ...(sp?.collaborationGrid || {}),
+      centerProfile: sp?.collaborationGrid?.centerProfile || "",
+      cells
+    });
+  };
+
+  // ===== 資源需求/提供（全分會專用）=====
+  const addResourceShare = memberId => set("resourceShares", [...(form.resourceShares || []), {
+    id: uid("rs"),
+    memberId,
+    needs: "",
+    offers: ""
+  }]);
+  const updResourceShare = (id, k, v) => set("resourceShares", upd(form.resourceShares || [], id, k, v));
+  const rmResourceShare = id => set("resourceShares", rm(form.resourceShares || [], id));
 
   // 5. 引薦記錄
   const addReferral = () => set("referrals", [...form.referrals, {
@@ -2385,13 +2701,14 @@ function MeetingForm({
   const submit = () => {
     if (!form.groupId) return alert("請選擇小組或全分會");
     if (!form.date) return alert("請輸入日期");
-    // 2.5 開啟對話：若主講人已選，但所有目標客群皆為空白 → 提醒
-    if (form.speaker?.memberId) {
-      const openers = form.conversationOpeners || [];
-      const anyFilled = openers.some(o => (o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim || "").trim());
-      if (!anyFilled) {
-        if (!confirm("「2.5 開啟對話」尚未填寫任何目標客群，確定要儲存嗎？\n（建議至少填 1 個，讓夥伴能把主講人帶出分會）")) return;
-      }
+    // 開啟對話：若有主講人有設 memberId，但所有目標客群皆為空白 → 提醒
+    const speakersWithMember = (form.speakers || []).filter(sp => sp.memberId);
+    const anyOpenerEmpty = speakersWithMember.some(sp => {
+      const openers = sp.conversationOpeners || [];
+      return openers.length === 0 || !openers.some(o => (o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim || "").trim());
+    });
+    if (speakersWithMember.length > 0 && anyOpenerEmpty) {
+      if (!confirm("有主講人尚未填寫任何「開啟對話」目標客群，確定要儲存嗎？\n（建議每位主講人至少填 1 個，讓夥伴能把主講人帶出分會）")) return;
     }
     onSave({
       ...form,
@@ -2399,11 +2716,19 @@ function MeetingForm({
     });
   };
 
-  // 誰還沒分享/回饋（用於下拉選單）
+  // 誰還沒分享（用於下拉選單）
   const sharedIds = form.sharings.map(s => s.memberId);
   const pendingShareMembers = attendingMembers.filter(m => !sharedIds.includes(m.id));
-  const feedbackIds = form.feedback.map(f => f.fromMemberId);
-  const pendingFeedbackMembers = attendingMembers.filter(m => !feedbackIds.includes(m.id) && m.id !== form.speaker?.memberId);
+  // 資源需求/提供 — 誰還沒填
+  const resourceSharedIds = (form.resourceShares || []).map(r => r.memberId);
+  const pendingResourceMembers = attendingMembers.filter(m => !resourceSharedIds.includes(m.id));
+  // 主講人 memberId 集合（用於排除回饋下拉中的主講人自己）
+  const speakerMemberIds = (form.speakers || []).map(sp => sp.memberId).filter(Boolean);
+  // pendingFeedbackMembersFor: 回傳一個 fn，給 speakerCard 用
+  const pendingFeedbackMembersFor = sp => {
+    const fbIds = (sp.feedback || []).map(f => f.fromMemberId);
+    return attendingMembers.filter(m => !fbIds.includes(m.id) && m.id !== sp.memberId);
+  };
   const summary = (label, count) => count > 0 ? /*#__PURE__*/React.createElement("span", {
     className: "text-[10px] bg-[#B8860B] text-white px-1.5 py-0.5 rounded-full"
   }, count) : /*#__PURE__*/React.createElement("span", {
@@ -2606,55 +2931,139 @@ function MeetingForm({
   }, "+ \u65B0\u589E\u5206\u4EAB\uFF08", pendingShareMembers.length, " \u4F4D\u51FA\u5E2D\u6210\u54E1\u5C1A\u672A\u5206\u4EAB\uFF09"), pendingShareMembers.map(m => /*#__PURE__*/React.createElement("option", {
     key: m.id,
     value: m.id
+  }, m.name))))), isChapter && /*#__PURE__*/React.createElement(FormSection, {
+    title: "2. \u8CC7\u6E90\u9700\u6C42/\u63D0\u4F9B",
+    badge: summary("", (form.resourceShares || []).length),
+    icon: /*#__PURE__*/React.createElement(ArrowRightLeft, {
+      className: "w-4 h-4 text-[#059669]"
+    })
+  }, attendingMembers.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-400 italic py-2"
+  }, "\u8ACB\u5148\u52FE\u9078\u51FA\u5E2D\u6210\u54E1") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600 mb-2 bg-emerald-50 border border-emerald-200 rounded p-2 leading-relaxed"
+  }, "\uD83D\uDCA1 \u6BCF\u4F4D\u51FA\u5E2D\u8005\u8F2A\u6D41\u5206\u4EAB\uFF1A\u76EE\u524D\u5DE5\u4F5C\u4E2D\u9700\u8981\u7684\u8CC7\u6E90\u3001\u53EF\u63D0\u4F9B\u7684\u8CC7\u6E90\u3002\u4FC3\u9032\u5206\u6703\u5167\u90E8\u8CC7\u6E90\u6D41\u52D5\u3002"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2 mb-2"
+  }, (form.resourceShares || []).map(r => {
+    const m = members.find(x => x.id === r.memberId);
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.id,
+      className: "border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 mb-2"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-sm font-semibold text-emerald-700"
+    }, m?.name || "?"), m?.industry && /*#__PURE__*/React.createElement("span", {
+      className: "text-[11px] text-stone-500"
+    }, "\xB7 ", m.industry), /*#__PURE__*/React.createElement("button", {
+      onClick: () => rmResourceShare(r.id),
+      className: "ml-auto p-1 text-stone-400 hover:text-red-500"
+    }, /*#__PURE__*/React.createElement(Trash2, {
+      className: "w-3.5 h-3.5"
+    }))), /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-1 sm:grid-cols-2 gap-2"
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      className: "text-[11px] text-stone-500 font-semibold"
+    }, "\uD83D\uDCBC \u5DE5\u4F5C\u4E2D\u9700\u8981\u7684\u8CC7\u6E90"), /*#__PURE__*/React.createElement("textarea", {
+      value: r.needs,
+      onChange: e => updResourceShare(r.id, "needs", e.target.value),
+      rows: 2,
+      placeholder: "\u4F8B\uFF1A\u627E\u4E00\u4F4D\u719F\u6089\u4E0D\u52D5\u7522\u4F30\u50F9\u7684\u4EE3\u66F8...",
+      className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      className: "text-[11px] text-stone-500 font-semibold"
+    }, "\uD83C\uDF81 \u53EF\u63D0\u4F9B\u7684\u8CC7\u6E90"), /*#__PURE__*/React.createElement("textarea", {
+      value: r.offers,
+      onChange: e => updResourceShare(r.id, "offers", e.target.value),
+      rows: 2,
+      placeholder: "\u4F8B\uFF1A\u514D\u8CBB 30 \u5206\u9418\u6CD5\u5F8B\u8AEE\u8A62...",
+      className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
+    }))));
+  })), pendingResourceMembers.length > 0 && /*#__PURE__*/React.createElement("select", {
+    onChange: e => {
+      if (e.target.value) {
+        addResourceShare(e.target.value);
+        e.target.value = "";
+      }
+    },
+    value: "",
+    className: "w-full border border-dashed border-emerald-300 rounded-lg px-3 py-2 text-sm bg-white text-emerald-700"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "+ \u65B0\u589E\u8CC7\u6E90\u5206\u4EAB\uFF08", pendingResourceMembers.length, " \u4F4D\u51FA\u5E2D\u8005\u5C1A\u672A\u586B\u5BEB\uFF09"), pendingResourceMembers.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
   }, m.name))))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "2. \u4E3B\u8B1B\u4EBA\u5C08\u696D\u7C21\u5831",
-    badge: form.speaker?.topic ? /*#__PURE__*/React.createElement("span", {
-      className: "text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full"
-    }, "\u5DF2\u586B") : summary("", 0),
+    title: `${isChapter ? "3" : "2"}. 主講人專業簡報`,
+    badge: summary("", (form.speakers || []).length),
     icon: /*#__PURE__*/React.createElement(Presentation2, {
       className: "w-4 h-4 text-[#B8860B]"
     })
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2"
-  }, /*#__PURE__*/React.createElement(MemberSelect, {
-    members: attendingMembers.length ? attendingMembers : groupMembers,
-    value: form.speaker?.memberId || "",
-    onChange: v => set("speaker", {
-      ...form.speaker,
-      memberId: v
-    }),
-    placeholder: "\u9078\u64C7\u4E3B\u8B1B\u4EBA..."
-  }), /*#__PURE__*/React.createElement("input", {
-    value: form.speaker?.topic || "",
-    onChange: e => set("speaker", {
-      ...form.speaker,
-      topic: e.target.value
-    }),
-    placeholder: "\u7C21\u5831\u6A19\u984C\uFF08\u672C\u6B21\u4E3B\u8B1B\u7684\u4E3B\u984C\uFF09",
-    className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
-  }))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "2.5 \u958B\u555F\u5C0D\u8A71",
-    badge: summary("", (form.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta).length),
-    icon: /*#__PURE__*/React.createElement(MessageSquareQuote, {
-      className: "w-4 h-4 text-[#B8860B]"
-    })
-  }, !form.speaker?.memberId ? /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-400 italic py-2"
-  }, "\u8ACB\u5148\u9078\u64C7\u4E3B\u8B1B\u4EBA") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed"
-  }, "\uD83D\uDCA1 \u91DD\u5C0D\u81F3\u5C11\u4E00\u500B", /*#__PURE__*/React.createElement("b", null, "\u76EE\u6A19\u5BA2\u7FA4"), "\u8A2D\u8A08\u300C\u958B\u555F\u5C0D\u8A71\u300D\u2014\u2014\u8B93\u5925\u4F34\u62FF\u5230\u5206\u6703\u5916\uFF0C\u5E6B\u4F60\u7CBE\u6E96\u8F49\u4ECB\u3002\u4E94\u6B65\u9A5F\uFF1AWHO\uFF08\u8AB0\uFF09\u2192 YES/NO \u554F\u984C \u2192 \u4ECB\u7D39\u5925\u4F34\uFF08tagline\uFF09\u2192 \u75DB\u9EDE\u89E3\u6C7A \u2192 \u5C0D\u63A5\u65B9\u5F0F\u3002"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-3"
-  }, (form.conversationOpeners || []).map((o, idx) => {
-    const speakerName = members.find(x => x.id === form.speaker?.memberId)?.name || "主講人";
+  }, (form.speakers || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-400 italic py-2 mb-2"
+  }, "\u5C1A\u672A\u65B0\u589E\u4E3B\u8B1B\u4EBA"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, (form.speakers || []).map((sp, spIdx) => {
+    const speakerName = members.find(x => x.id === sp.memberId)?.name || "主講人";
+    const filledOpeners = (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta).length;
+    const offerCount = (sp.neededConnections || []).reduce((s, nc) => s + (nc.offers?.length || 0), 0);
+    const grid = sp.collaborationGrid || {
+      centerProfile: "",
+      cells: ["", "", "", "", "", "", "", ""]
+    };
+    const pendingFb = pendingFeedbackMembersFor(sp);
     return /*#__PURE__*/React.createElement("div", {
+      key: sp.id,
+      className: "border-2 border-[#B8860B]/30 rounded-xl bg-amber-50/20 overflow-hidden"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "bg-gradient-to-r from-amber-100/60 to-amber-50/30 px-3 py-2 border-b border-amber-200 flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(Presentation2, {
+      className: "w-4 h-4 text-[#B8860B]"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "text-sm font-bold text-[#B8860B]"
+    }, "\u4E3B\u8B1B\u4EBA ", spIdx + 1), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        if (confirm(`確定移除主講人 ${spIdx + 1}？\n（會連同其開啟對話、建議、人脈、九宮格一併刪除）`)) rmSpeaker(sp.id);
+      },
+      className: "ml-auto p-1 text-stone-400 hover:text-red-500",
+      title: "\u79FB\u9664\u4E3B\u8B1B\u4EBA"
+    }, /*#__PURE__*/React.createElement(Trash2, {
+      className: "w-3.5 h-3.5"
+    }))), /*#__PURE__*/React.createElement("div", {
+      className: "p-3 space-y-3"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2"
+    }, /*#__PURE__*/React.createElement(MemberSelect, {
+      members: (attendingMembers.length ? attendingMembers : groupMembers).filter(m => m.id === sp.memberId || !(form.speakers || []).some(other => other.id !== sp.id && other.memberId === m.id)),
+      value: sp.memberId,
+      onChange: v => updSpeakerField(sp.id, "memberId", v),
+      placeholder: "\u9078\u64C7\u4E3B\u8B1B\u4EBA..."
+    }), /*#__PURE__*/React.createElement("input", {
+      value: sp.topic,
+      onChange: e => updSpeakerField(sp.id, "topic", e.target.value),
+      placeholder: "\u7C21\u5831\u6A19\u984C\uFF08\u672C\u6B21\u4E3B\u8B1B\u7684\u4E3B\u984C\uFF09",
+      className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+    })), !sp.memberId ? /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-400 italic py-2"
+    }, "\u8ACB\u5148\u9078\u64C7\u4E3B\u8B1B\u4EBA\uFF0C\u4E0B\u9762\u5340\u584A\u624D\u6703\u555F\u7528") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("details", {
+      open: true,
+      className: "border border-stone-200 rounded-lg bg-white"
+    }, /*#__PURE__*/React.createElement("summary", {
+      className: "px-3 py-2 text-sm font-semibold text-stone-700 cursor-pointer flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-4 h-4 text-[#B8860B]"
+    }), "\u958B\u555F\u5C0D\u8A71 ", summary("", filledOpeners)), /*#__PURE__*/React.createElement("div", {
+      className: "px-3 pb-3 space-y-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-600 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed"
+    }, "\uD83D\uDCA1 \u91DD\u5C0D\u81F3\u5C11\u4E00\u500B", /*#__PURE__*/React.createElement("b", null, "\u76EE\u6A19\u5BA2\u7FA4"), "\u8A2D\u8A08\uFF1AWHO\uFF08\u8AB0\uFF09\u2192 YES/NO \u554F\u984C \u2192 \u4ECB\u7D39\u5925\u4F34\uFF08tagline\uFF09\u2192 \u75DB\u9EDE\u89E3\u6C7A \u2192 \u5C0D\u63A5\u65B9\u5F0F\u3002"), (sp.conversationOpeners || []).map((o, oIdx) => /*#__PURE__*/React.createElement("div", {
       key: o.id,
       className: "border border-stone-200 rounded-lg p-3 bg-stone-50"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex items-center gap-2 mb-2"
     }, /*#__PURE__*/React.createElement("span", {
       className: "text-sm font-semibold text-[#B8860B]"
-    }, "\u76EE\u6A19\u5BA2\u7FA4 ", idx + 1), /*#__PURE__*/React.createElement("button", {
-      onClick: () => rmOpener(o.id),
+    }, "\u76EE\u6A19\u5BA2\u7FA4 ", oIdx + 1), /*#__PURE__*/React.createElement("button", {
+      onClick: () => rmOpener(sp.id, o.id),
       className: "ml-auto p-1 text-stone-400 hover:text-red-500",
       title: "\u79FB\u9664"
     }, /*#__PURE__*/React.createElement(Trash2, {
@@ -2665,28 +3074,28 @@ function MeetingForm({
       className: "text-[11px] text-stone-500 block mb-0.5"
     }, "\u2460 WHO\uFF5C\u6211\u7684\u5BA2\u6236\u662F"), /*#__PURE__*/React.createElement("input", {
       value: o.who || "",
-      onChange: e => updOpener(o.id, "who", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "who", e.target.value),
       placeholder: "\u4F8B\uFF1A\u9047\u5230\u5A5A\u59FB\u56F0\u64FE\u3001\u8003\u616E\u96E2\u5A5A\u7684\u592B\u59BB",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm"
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       className: "text-[11px] text-stone-500 block mb-0.5"
     }, "\u2461 YES/NO \u554F\u984C\uFF08\u5925\u4F34\u62FF\u53BB\u554F\u6E96\u5BA2\u6236\uFF09"), /*#__PURE__*/React.createElement("input", {
       value: o.yesno || "",
-      onChange: e => updOpener(o.id, "yesno", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "yesno", e.target.value),
       placeholder: "\u4F8B\uFF1A\u4F60\u60F3\u5728\u96E2\u5A5A\u6642\uFF0C\u628A\u8A72\u62FF\u7684\u8CA1\u7522\u4E00\u6B21\u62FF\u6E05\u3001\u907F\u514D\u5F8C\u7E8C\u7E8F\u8A1F\u55CE\uFF1F",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm"
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       className: "text-[11px] text-stone-500 block mb-0.5"
     }, "\u2462 \u4ECB\u7D39\u5925\u4F34\uFF08tagline\uFF0C\u4E00\u53E5\u8A71\uFF09"), /*#__PURE__*/React.createElement("input", {
       value: o.tagline || "",
-      onChange: e => updOpener(o.id, "tagline", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "tagline", e.target.value),
       placeholder: "\u4F8B\uFF1A\u5C08\u8FA6\u96E2\u5A5A\u8CA1\u7522\u7684\u5F8B\u5E2B\uFF0C\u52DD\u8A34\u7387 95%",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm"
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       className: "text-[11px] text-stone-500 block mb-0.5"
     }, "\u2463 \u75DB\u9EDE\u89E3\u6C7A\uFF08\u6848\u4F8B\uFF0B\u6548\u679C\uFF0C\u9078\u586B\uFF09"), /*#__PURE__*/React.createElement("textarea", {
       value: o.painSolution || "",
-      onChange: e => updOpener(o.id, "painSolution", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "painSolution", e.target.value),
       rows: 2,
       placeholder: "\u4F8B\uFF1A\u4E0A\u500B\u6708\u5E6B\u4E00\u4F4D\u9673\u592A\u592A\u8AC7\u5230\u61C9\u5F97\u7684 1,800 \u842C\uFF0C\u5C0D\u65B9\u539F\u672C\u53EA\u9858\u7D66 600 \u842C",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm"
@@ -2694,7 +3103,7 @@ function MeetingForm({
       className: "text-[11px] text-stone-500 block mb-0.5"
     }, "\u2464 \u5C0D\u63A5\u65B9\u5F0F\uFF08CTA\uFF09"), /*#__PURE__*/React.createElement("input", {
       value: o.cta || "",
-      onChange: e => updOpener(o.id, "cta", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "cta", e.target.value),
       placeholder: "\u4F8B\uFF1A\u53EF\u4EE5\u8ACB\u4ED6\u52A0\u6211 LINE\uFF1Axxx\uFF0C\u7B2C\u4E00\u6B21\u8AEE\u8A62\u514D\u8CBB 30 \u5206\u9418",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm"
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -2703,98 +3112,91 @@ function MeetingForm({
       className: "text-[11px] text-stone-500"
     }, "\u2465 \u5B8C\u6574\u9010\u5B57\u7A3F\uFF08\u9078\u586B\uFF09"), /*#__PURE__*/React.createElement("button", {
       type: "button",
-      onClick: () => updOpener(o.id, "verbatim", generateScript(o, speakerName)),
+      onClick: () => updOpener(sp.id, o.id, "verbatim", generateScript(o, speakerName)),
       className: "text-[11px] text-[#B8860B] hover:text-[#8B1A1A] underline"
     }, "\uD83D\uDD04 \u81EA\u52D5\u7D44\u9010\u5B57\u7A3F")), /*#__PURE__*/React.createElement("textarea", {
       value: o.verbatim || "",
-      onChange: e => updOpener(o.id, "verbatim", e.target.value),
+      onChange: e => updOpener(sp.id, o.id, "verbatim", e.target.value),
       rows: 4,
       placeholder: "\u6309\u300C\u81EA\u52D5\u7D44\u9010\u5B57\u7A3F\u300D\u6703\u7528\u4E0A\u9762\u4E94\u6B04\u5957\u5165\u7BC4\u672C\uFF1B\u4E5F\u53EF\u76F4\u63A5\u624B\u5BEB\u5B8C\u6574\u7248\u672C",
       className: "w-full border border-stone-300 rounded px-2 py-1.5 text-sm font-mono"
-    }))));
-  }), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    onClick: addOpener,
-    className: "w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-500 hover:bg-stone-50 hover:text-[#B8860B]"
-  }, "+ \u65B0\u589E\u76EE\u6A19\u5BA2\u7FA4")))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "3. \u5C0D\u4E3B\u8B1B\u4EBA\u7684\u5EFA\u8B70",
-    badge: summary("", form.feedback.length),
-    icon: /*#__PURE__*/React.createElement(MessageSquareQuote, {
-      className: "w-4 h-4 text-[#B8860B]"
-    })
-  }, !form.speaker?.memberId ? /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-400 italic py-2"
-  }, "\u8ACB\u5148\u9078\u64C7\u4E3B\u8B1B\u4EBA") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2 mb-2"
-  }, form.feedback.map(f => {
-    const m = members.find(x => x.id === f.fromMemberId);
-    return /*#__PURE__*/React.createElement("div", {
-      key: f.id,
-      className: "border border-stone-200 rounded-lg p-2.5 bg-stone-50"
+    }))))), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => addOpener(sp.id),
+      className: "w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-500 hover:bg-stone-50 hover:text-[#B8860B]"
+    }, "+ \u65B0\u589E\u76EE\u6A19\u5BA2\u7FA4"))), /*#__PURE__*/React.createElement("details", {
+      className: "border border-stone-200 rounded-lg bg-white"
+    }, /*#__PURE__*/React.createElement("summary", {
+      className: "px-3 py-2 text-sm font-semibold text-stone-700 cursor-pointer flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-4 h-4 text-blue-600"
+    }), "\u5C0D ", speakerName, " \u7684\u5EFA\u8B70 ", summary("", (sp.feedback || []).length)), /*#__PURE__*/React.createElement("div", {
+      className: "px-3 pb-3 space-y-2"
+    }, (sp.feedback || []).map(f => {
+      const m = members.find(x => x.id === f.fromMemberId);
+      return /*#__PURE__*/React.createElement("div", {
+        key: f.id,
+        className: "border border-stone-200 rounded-lg p-2.5 bg-stone-50"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center gap-2 mb-1.5"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "text-sm font-semibold text-stone-700"
+      }, m?.name || "?"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => rmFeedback(sp.id, f.id),
+        className: "ml-auto p-1 text-stone-400 hover:text-red-500"
+      }, /*#__PURE__*/React.createElement(Trash2, {
+        className: "w-3.5 h-3.5"
+      }))), /*#__PURE__*/React.createElement("textarea", {
+        value: f.content,
+        onChange: e => updFeedback(sp.id, f.id, "content", e.target.value),
+        rows: 2,
+        placeholder: `給 ${speakerName} 的建議...`,
+        className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
+      }));
+    }), pendingFb.length > 0 && /*#__PURE__*/React.createElement("select", {
+      onChange: e => {
+        if (e.target.value) {
+          addFeedback(sp.id, e.target.value);
+          e.target.value = "";
+        }
+      },
+      value: "",
+      className: "w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-500"
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "+ \u65B0\u589E\u5EFA\u8B70\uFF08", pendingFb.length, " \u4F4D\u5C1A\u672A\u7D66\u5EFA\u8B70\uFF09"), pendingFb.map(m => /*#__PURE__*/React.createElement("option", {
+      key: m.id,
+      value: m.id
+    }, m.name))))), /*#__PURE__*/React.createElement("details", {
+      className: "border border-stone-200 rounded-lg bg-white"
+    }, /*#__PURE__*/React.createElement("summary", {
+      className: "px-3 py-2 text-sm font-semibold text-stone-700 cursor-pointer flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(Link2, {
+      className: "w-4 h-4 text-purple-600"
+    }), speakerName, " \u9700\u8981\u7684\u5408\u4F5C\u4EBA\u8108 ", summary("", offerCount)), /*#__PURE__*/React.createElement("div", {
+      className: "px-3 pb-3 space-y-3"
     }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-2 mb-1.5"
+      className: "text-xs text-stone-500 bg-amber-50 border border-amber-200 rounded p-2"
+    }, "\uD83D\uDCA1 \u6B64\u8655\u7684\u4EBA\u8108\u5F15\u85A6\u4E0D\u6703\u76F4\u63A5\u5BEB\u5165\u5496\u5561\u6703\u8B70\uFF0C\u9700\u5230\u4E3B\u7AD9\u300CCoffee Meeting\u300D\u4E00\u9375\u532F\u5165\u3002"), (sp.neededConnections || []).map((nc, ncIdx) => /*#__PURE__*/React.createElement("div", {
+      key: nc.id,
+      className: "border border-stone-200 rounded-lg p-3 bg-stone-50"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-start gap-2 mb-2"
     }, /*#__PURE__*/React.createElement("span", {
-      className: "text-sm font-semibold text-stone-700"
-    }, m?.name || "?"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => rmFeedback(f.id),
-      className: "ml-auto p-1 text-stone-400 hover:text-red-500"
+      className: "text-xs font-bold text-[#8B1A1A] mt-1.5"
+    }, "\u9700\u6C42 ", ncIdx + 1), /*#__PURE__*/React.createElement("input", {
+      value: nc.profileWanted,
+      onChange: e => updConnection(sp.id, nc.id, "profileWanted", e.target.value),
+      placeholder: "\u60F3\u8A8D\u8B58\u7684\u5C0D\u8C61\u63CF\u8FF0\uFF08\u4F8B\uFF1A\u719F\u6089\u4E0D\u52D5\u7522\u4F30\u50F9\u7684\u4EE3\u66F8\uFF09",
+      className: "flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm"
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => rmConnection(sp.id, nc.id),
+      className: "p-1.5 text-stone-400 hover:text-red-500"
     }, /*#__PURE__*/React.createElement(Trash2, {
       className: "w-3.5 h-3.5"
-    }))), /*#__PURE__*/React.createElement("textarea", {
-      value: f.content,
-      onChange: e => updFeedback(f.id, "content", e.target.value),
-      rows: 2,
-      placeholder: `給 ${members.find(x => x.id === form.speaker.memberId)?.name || "主講人"} 的建議...`,
-      className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
-    }));
-  })), pendingFeedbackMembers.length > 0 && /*#__PURE__*/React.createElement("select", {
-    onChange: e => {
-      if (e.target.value) {
-        addFeedback(e.target.value);
-        e.target.value = "";
-      }
-    },
-    value: "",
-    className: "w-full border border-dashed border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-500"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "+ \u65B0\u589E\u5EFA\u8B70\uFF08", pendingFeedbackMembers.length, " \u4F4D\u5C1A\u672A\u7D66\u5EFA\u8B70\uFF09"), pendingFeedbackMembers.map(m => /*#__PURE__*/React.createElement("option", {
-    key: m.id,
-    value: m.id
-  }, m.name))))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "4. \u4E3B\u8B1B\u4EBA\u9700\u8981\u7684\u5408\u4F5C\u4EBA\u8108",
-    badge: summary("", form.neededConnections.reduce((s, nc) => s + nc.offers.length, 0)),
-    icon: /*#__PURE__*/React.createElement(Link2, {
-      className: "w-4 h-4 text-[#B8860B]"
-    })
-  }, !form.speaker?.memberId ? /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-400 italic py-2"
-  }, "\u8ACB\u5148\u9078\u64C7\u4E3B\u8B1B\u4EBA") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-500 mb-2 bg-amber-50 border border-amber-200 rounded p-2"
-  }, "\uD83D\uDCA1 \u9019\u88E1\u8A18\u9304\u7684\u5F15\u85A6\u610F\u5411\u4E0D\u6703\u76F4\u63A5\u5BEB\u5165\u5496\u5561\u6703\u8B70\u3002\u7D44\u805A\u7D50\u675F\u5F8C\uFF0C\u4E3B\u8B1B\u4EBA\u53EF\u5230\u4E3B\u7AD9\u300CCoffee Meeting\u300D\u9801\u9762\u4E00\u9375\u532F\u5165\uFF0C\u72C0\u614B\u624D\u6703\u6B63\u5F0F\u8F49\u70BA\u300C\u9080\u7D04\u4E2D\u300D\u3002"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-3"
-  }, form.neededConnections.map((nc, idx) => /*#__PURE__*/React.createElement("div", {
-    key: nc.id,
-    className: "border border-stone-200 rounded-lg p-3 bg-stone-50"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-start gap-2 mb-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-xs font-bold text-[#8B1A1A] mt-1.5"
-  }, "\u9700\u6C42 ", idx + 1), /*#__PURE__*/React.createElement("input", {
-    value: nc.profileWanted,
-    onChange: e => updConnection(nc.id, "profileWanted", e.target.value),
-    placeholder: "\u60F3\u8A8D\u8B58\u7684\u5C0D\u8C61\u63CF\u8FF0\uFF08\u4F8B\uFF1A\u719F\u6089\u4E0D\u52D5\u7522\u4F30\u50F9\u7684\u4EE3\u66F8\uFF09",
-    className: "flex-1 border border-stone-300 rounded-md px-2.5 py-1.5 text-sm"
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => rmConnection(nc.id),
-    className: "p-1.5 text-stone-400 hover:text-red-500"
-  }, /*#__PURE__*/React.createElement(Trash2, {
-    className: "w-3.5 h-3.5"
-  }))), nc.offers.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "ml-4 pl-3 border-l-2 border-[#B8860B] space-y-1.5 mb-2"
-  }, nc.offers.map(of => {
-    const intro = members.find(x => x.id === of.introducerId);
-    return /*#__PURE__*/React.createElement("div", {
+    }))), nc.offers.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "ml-4 pl-3 border-l-2 border-[#B8860B] space-y-1.5 mb-2"
+    }, nc.offers.map(of => /*#__PURE__*/React.createElement("div", {
       key: of.id,
       className: "bg-white rounded p-2 text-xs"
     }, /*#__PURE__*/React.createElement("div", {
@@ -2802,37 +3204,98 @@ function MeetingForm({
     }, /*#__PURE__*/React.createElement(MemberSelect, {
       members: attendingMembers,
       value: of.introducerId,
-      onChange: v => updOffer(nc.id, of.id, "introducerId", v),
+      onChange: v => updOffer(sp.id, nc.id, of.id, "introducerId", v),
       placeholder: "\u9080\u7D04\u4EBA"
     }), /*#__PURE__*/React.createElement("input", {
       value: of.contactName,
-      onChange: e => updOffer(nc.id, of.id, "contactName", e.target.value),
+      onChange: e => updOffer(sp.id, nc.id, of.id, "contactName", e.target.value),
       placeholder: "\u4EBA\u8108\u59D3\u540D",
       className: "border border-stone-200 rounded px-2 py-1"
     }), /*#__PURE__*/React.createElement("button", {
-      onClick: () => rmOffer(nc.id, of.id),
+      onClick: () => rmOffer(sp.id, nc.id, of.id),
       className: "p-1 text-stone-400 hover:text-red-500"
     }, /*#__PURE__*/React.createElement(X, {
       className: "w-3 h-3"
     }))), /*#__PURE__*/React.createElement("input", {
       value: of.contactProfession,
-      onChange: e => updOffer(nc.id, of.id, "contactProfession", e.target.value),
+      onChange: e => updOffer(sp.id, nc.id, of.id, "contactProfession", e.target.value),
       placeholder: "\u4EBA\u8108\u5C08\u696D\uFF08\u4F8B\uFF1A\u4E0D\u52D5\u7522\u4F30\u50F9\u5E2B\uFF09",
       className: "w-full border border-stone-200 rounded px-2 py-1 text-xs"
-    }));
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => addOffer(nc.id),
-    className: "ml-4 text-xs text-[#8B1A1A] hover:underline flex items-center gap-1"
+    })))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => addOffer(sp.id, nc.id),
+      className: "ml-4 text-xs text-[#8B1A1A] hover:underline flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(Plus, {
+      className: "w-3 h-3"
+    }), "\u8AB0\u6709\u6B64\u4EBA\u8108\uFF1F"))), /*#__PURE__*/React.createElement(Btn, {
+      variant: "outline",
+      size: "sm",
+      onClick: () => addConnection(sp.id)
+    }, /*#__PURE__*/React.createElement(Plus, {
+      className: "w-3.5 h-3.5"
+    }), "\u65B0\u589E\u4EBA\u8108\u9700\u6C42"))), /*#__PURE__*/React.createElement("details", {
+      className: "border border-stone-200 rounded-lg bg-white"
+    }, /*#__PURE__*/React.createElement("summary", {
+      className: "px-3 py-2 text-sm font-semibold text-stone-700 cursor-pointer flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block w-4 h-4 grid grid-cols-3 gap-px bg-stone-400 rounded-sm"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-[#B8860B]"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "bg-white"
+    })), speakerName, " \u5408\u4F5C\u5C08\u696D\u4E5D\u5BAE\u683C ", summary("", (grid.cells || []).filter(c => c).length + (grid.centerProfile ? 1 : 0))), /*#__PURE__*/React.createElement("div", {
+      className: "px-3 pb-3 space-y-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-600 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed"
+    }, "\uD83D\uDCA1 \u4E2D\u9593\u586B\u4E3B\u529B\u5BA2\u7FA4\uFF1B\u5468\u570D 8 \u683C\u8166\u529B\u6FC0\u76EA\uFF1A\u54EA\u4E9B\u5C08\u696D\u53EF\u8207\u4E3B\u8B1B\u4EBA\u5408\u4F5C\u3001\u5171\u540C\u670D\u52D9\u9019\u7FA4\u5BA2\u6236\uFF1F"), /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-3 gap-1.5 max-w-md mx-auto"
+    }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+      if (idx === 4) {
+        // 中央格：主講人 + 主力客群
+        return /*#__PURE__*/React.createElement("div", {
+          key: "center",
+          className: "aspect-square border-2 border-[#B8860B] rounded-lg bg-amber-50 p-1.5 flex flex-col"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "text-[10px] font-bold text-[#B8860B] text-center"
+        }, speakerName), /*#__PURE__*/React.createElement("textarea", {
+          value: grid.centerProfile || "",
+          onChange: e => updGridCenter(sp.id, e.target.value),
+          placeholder: "\u4E3B\u529B\u5BA2\u7FA4...",
+          className: "flex-1 w-full text-[11px] bg-transparent border-none resize-none p-1 outline-none text-stone-700 placeholder-stone-400"
+        }));
+      }
+      const cellIdx = idx < 4 ? idx : idx - 1; // map 0-3,5-8 → 0-7
+      return /*#__PURE__*/React.createElement("div", {
+        key: idx,
+        className: "aspect-square border border-stone-300 rounded-lg bg-white p-1.5 flex"
+      }, /*#__PURE__*/React.createElement("textarea", {
+        value: grid.cells?.[cellIdx] || "",
+        onChange: e => updGridCell(sp.id, cellIdx, e.target.value),
+        placeholder: `合作專業 ${cellIdx + 1}`,
+        className: "flex-1 w-full text-[11px] bg-transparent border-none resize-none p-1 outline-none text-stone-700 placeholder-stone-400"
+      }));
+    })))))));
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: addSpeaker,
+    className: "w-full border-2 border-dashed border-[#B8860B]/40 rounded-xl px-3 py-3 text-sm text-[#B8860B] hover:bg-amber-50 font-semibold"
   }, /*#__PURE__*/React.createElement(Plus, {
-    className: "w-3 h-3"
-  }), "\u8AB0\u6709\u6B64\u4EBA\u8108\uFF1F"))), /*#__PURE__*/React.createElement(Btn, {
-    variant: "outline",
-    size: "sm",
-    onClick: addConnection
-  }, /*#__PURE__*/React.createElement(Plus, {
-    className: "w-3.5 h-3.5"
-  }), "\u65B0\u589E\u4EBA\u8108\u9700\u6C42")))), /*#__PURE__*/React.createElement(FormSection, {
-    title: isChapter ? "5. 分會內彼此引薦" : "5. 小組內彼此引薦",
+    className: "w-4 h-4 inline mr-1"
+  }), "\u65B0\u589E\u4E3B\u8B1B\u4EBA"))), !isChapter && /*#__PURE__*/React.createElement(FormSection, {
+    title: "4. \u5C0F\u7D44\u5167\u5F7C\u6B64\u5F15\u85A6",
     badge: summary("", form.referrals.length),
     icon: /*#__PURE__*/React.createElement(ArrowRightLeft, {
       className: "w-4 h-4 text-[#B8860B]"
@@ -2892,8 +3355,8 @@ function MeetingForm({
     onClick: addReferral
   }, /*#__PURE__*/React.createElement(Plus, {
     className: "w-3.5 h-3.5"
-  }), "\u65B0\u589E\u5F15\u85A6"))), /*#__PURE__*/React.createElement(FormSection, {
-    title: "6. \u4E0B\u6B21\u7D44\u805A\u6642\u9593",
+  }), "\u65B0\u589E\u5F15\u85A6"))), !isChapter && /*#__PURE__*/React.createElement(FormSection, {
+    title: "5. \u4E0B\u6B21\u7D44\u805A\u6642\u9593",
     badge: form.nextMeeting?.date ? /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full"
     }, "\u5DF2\u586B") : summary("", 0),
@@ -3020,6 +3483,7 @@ function MeetingCard({
 
   // 6 大欄位統計
   const sharings = meeting.sharings || [];
+  const resourceShares = (meeting.resourceShares || []).filter(r => r.needs || r.offers);
   const guests = meeting.guests || [];
   // 來賓：計算顯示名稱 + 過濾空卡片（與匯出一致）
   const visibleGuests = guests.map(g => {
@@ -3041,11 +3505,24 @@ function MeetingCard({
       otherFeedback: g.otherFeedback || ""
     };
   }).filter(vg => vg.sharing || vg.feedback || vg.otherFeedback || vg.hasValidIdentity);
-  const speaker = meeting.speaker || {};
-  const speakerMember = speaker.memberId ? getMember(speaker.memberId) : null;
-  const feedback = meeting.feedback || [];
-  const neededConnections = meeting.neededConnections || [];
-  const offerCount = neededConnections.reduce((s, nc) => s + (nc.offers?.length || 0), 0);
+
+  // 主講人陣列（含舊單主講相容）
+  let speakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
+  if (speakers.length === 0 && (meeting.speaker?.memberId || meeting.speaker?.topic || (meeting.conversationOpeners || []).length || (meeting.feedback || []).length || (meeting.neededConnections || []).length)) {
+    speakers = [{
+      id: "legacy_speaker",
+      memberId: meeting.speaker?.memberId || "",
+      topic: meeting.speaker?.topic || "",
+      conversationOpeners: meeting.conversationOpeners || [],
+      feedback: meeting.feedback || [],
+      neededConnections: meeting.neededConnections || [],
+      collaborationGrid: {
+        centerProfile: "",
+        cells: ["", "", "", "", "", "", "", ""]
+      }
+    }];
+  }
+  const totalOfferCount = speakers.reduce((s, sp) => s + (sp.neededConnections || []).reduce((s2, nc) => s2 + (nc.offers || []).length, 0), 0);
   const referrals = meeting.referrals || [];
   const referralTotal = referrals.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const nextMeeting = meeting.nextMeeting || {};
@@ -3134,17 +3611,23 @@ function MeetingCard({
     title: "\u7DE8\u8F2F"
   }, /*#__PURE__*/React.createElement(Edit2, {
     className: "w-4 h-4"
-  })))), speakerMember && /*#__PURE__*/React.createElement("div", {
-    className: "bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2 flex items-center gap-2"
+  })))), speakers.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2 flex items-start gap-2"
   }, /*#__PURE__*/React.createElement(Presentation2, {
-    className: "w-4 h-4 text-[#B8860B] flex-shrink-0"
+    className: "w-4 h-4 text-[#B8860B] flex-shrink-0 mt-0.5"
   }), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-[11px] text-[#B8860B] font-semibold"
-  }, "\u672C\u6B21\u4E3B\u8B1B\uFF1A", speakerMember.name), speaker.topic && /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-700 truncate"
-  }, speaker.topic))), /*#__PURE__*/React.createElement("div", {
+  }, "\u672C\u6B21\u4E3B\u8B1B", speakers.length > 1 ? `（${speakers.length} 位）` : "", "\uFF1A"), speakers.map((sp, i) => {
+    const m = getMember(sp.memberId);
+    return /*#__PURE__*/React.createElement("div", {
+      key: sp.id || i,
+      className: "text-xs text-stone-700 truncate"
+    }, /*#__PURE__*/React.createElement("b", null, m?.name || "（未指定）"), sp.topic && /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-500"
+    }, " \xB7 ", sp.topic));
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "my-2"
   }, /*#__PURE__*/React.createElement("div", {
     className: "bg-emerald-50 rounded-lg py-1.5 text-center"
@@ -3156,7 +3639,7 @@ function MeetingCard({
     className: "text-[10px] text-emerald-600"
   }, "\u51FA\u5E2D\uFF08", attendRate, "%\uFF09"))), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-1 mb-2"
-  }, visibleGuests.length > 0 && pill("來賓", visibleGuests.length, "bg-emerald-50 text-emerald-700"), offerCount > 0 && pill("人脈引薦", offerCount, "bg-purple-50 text-purple-700"), referrals.length > 0 && pill(`引薦 NT${referralTotal.toLocaleString()}`, referrals.length, "bg-pink-50 text-pink-700"), nextMeeting.date && pill("下次", fmtShort(nextMeeting.date), "bg-stone-100 text-stone-600")), meeting.discussion && /*#__PURE__*/React.createElement("div", {
+  }, resourceShares.length > 0 && pill("資源分享", resourceShares.length, "bg-emerald-50 text-emerald-700"), visibleGuests.length > 0 && pill("來賓", visibleGuests.length, "bg-emerald-50 text-emerald-700"), totalOfferCount > 0 && pill("人脈引薦", totalOfferCount, "bg-purple-50 text-purple-700"), !isChapter && referrals.length > 0 && pill(`引薦 NT${referralTotal.toLocaleString()}`, referrals.length, "bg-pink-50 text-pink-700"), !isChapter && nextMeeting.date && pill("下次", fmtShort(nextMeeting.date), "bg-stone-100 text-stone-600")), meeting.discussion && /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-stone-600 mb-2"
   }, /*#__PURE__*/React.createElement("p", {
     className: expanded ? "" : "line-clamp-2"
@@ -3225,75 +3708,137 @@ function MeetingCard({
     className: "text-stone-700"
   }, /*#__PURE__*/React.createElement("b", {
     className: "text-stone-600"
-  }, "\uD83D\uDCDD \u5176\u4ED6\uFF1A"), vg.otherFeedback))))), (meeting.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCDD \u5176\u4ED6\uFF1A"), vg.otherFeedback))))), resourceShares.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
-  }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
-    className: "w-3 h-3 text-[#B8860B]"
-  }), "\u958B\u555F\u5C0D\u8A71"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ArrowRightLeft, {
+    className: "w-3 h-3 text-emerald-600"
+  }), "\u8CC7\u6E90\u9700\u6C42/\u63D0\u4F9B\uFF08", resourceShares.length, "\uFF09"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-1.5"
-  }, (meeting.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).map((o, i) => /*#__PURE__*/React.createElement("div", {
-    key: o.id,
-    className: "text-xs bg-amber-50/50 border border-amber-100 rounded p-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-[11px] font-semibold text-[#B8860B] mb-0.5"
-  }, "\u76EE\u6A19\u5BA2\u7FA4 ", i + 1), o.who && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "WHO\uFF1A"), o.who), o.yesno && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\u554F\u984C\uFF1A"), o.yesno), o.tagline && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "Tagline\uFF1A"), o.tagline), o.painSolution && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\u6848\u4F8B\uFF1A"), o.painSolution), o.cta && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "CTA\uFF1A"), o.cta), o.verbatim && /*#__PURE__*/React.createElement("div", {
-    className: "mt-1 pt-1 border-t border-amber-100 text-stone-600 whitespace-pre-wrap text-[11px]"
-  }, o.verbatim))))), feedback.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
-  }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
-    className: "w-3 h-3 text-blue-600"
-  }), "\u5C0D\u4E3B\u8B1B\u4EBA\u7684\u5EFA\u8B70"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1"
-  }, feedback.map(f => /*#__PURE__*/React.createElement("div", {
-    key: f.id,
-    className: "text-xs bg-blue-50/50 rounded p-1.5"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-blue-700"
-  }, getMember(f.fromMemberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
-    className: "text-stone-700"
-  }, f.content || "（未填）"))))), neededConnections.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
-  }, /*#__PURE__*/React.createElement(Link2, {
-    className: "w-3 h-3 text-purple-600"
-  }), "\u4E3B\u8B1B\u4EBA\u9700\u8981\u7684\u5408\u4F5C\u4EBA\u8108"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1.5"
-  }, neededConnections.map(nc => /*#__PURE__*/React.createElement("div", {
-    key: nc.id,
-    className: "text-xs bg-purple-50/50 rounded p-1.5"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, "\uD83C\uDFAF ", nc.profileWanted || "（未填）"), nc.offers?.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "mt-1 ml-3 space-y-0.5 text-[11px]"
-  }, nc.offers.map(of => /*#__PURE__*/React.createElement("div", {
-    key: of.id,
-    className: "text-stone-600"
-  }, "\u2192 ", /*#__PURE__*/React.createElement("b", null, getMember(of.introducerId)?.name || "?"), " \u53EF\u5F15\u85A6 ", /*#__PURE__*/React.createElement("b", null, of.contactName || "?"), "\uFF08", of.contactProfession || "?", "\uFF09", of.status === "imported" && /*#__PURE__*/React.createElement("span", {
-    className: "ml-1 text-[9px] bg-emerald-500 text-white px-1 rounded"
-  }, "\u5DF2\u532F\u5165\u5496\u5561\u6703\u8B70")))))))), referrals.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, resourceShares.map(r => {
+    const m = getMember(r.memberId);
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.id,
+      className: "text-xs bg-emerald-50/40 border border-emerald-100 rounded p-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "mb-1"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-emerald-700"
+    }, m?.name || "?"), m?.industry && /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-500"
+    }, " \xB7 ", m.industry)), r.needs && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\uD83D\uDCBC \u9700\u8981\uFF1A"), r.needs), r.offers && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\uD83C\uDF81 \u53EF\u63D0\u4F9B\uFF1A"), r.offers));
+  }))), speakers.length > 0 && speakers.map((sp, spIdx) => {
+    const m = getMember(sp.memberId);
+    const speakerName = m?.name || "（未指定）";
+    const filledOpeners = (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
+    const fb = sp.feedback || [];
+    const nc = sp.neededConnections || [];
+    const grid = sp.collaborationGrid;
+    const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
+    return /*#__PURE__*/React.createElement("div", {
+      key: sp.id || spIdx,
+      className: "border-l-4 border-[#B8860B]/40 pl-3 space-y-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-[#B8860B]"
+    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName, sp.topic && /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-600 font-normal"
+    }, " \xB7 ", sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-semibold text-stone-600 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-3 h-3 text-[#B8860B]"
+    }), "\u958B\u555F\u5C0D\u8A71"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1"
+    }, filledOpeners.map((o, i) => /*#__PURE__*/React.createElement("div", {
+      key: o.id,
+      className: "text-xs bg-amber-50/50 border border-amber-100 rounded p-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-semibold text-[#B8860B] mb-0.5"
+    }, "\u76EE\u6A19\u5BA2\u7FA4 ", i + 1), o.who && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "WHO\uFF1A"), o.who), o.yesno && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\u554F\u984C\uFF1A"), o.yesno), o.tagline && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "Tagline\uFF1A"), o.tagline), o.painSolution && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\u6848\u4F8B\uFF1A"), o.painSolution), o.cta && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "CTA\uFF1A"), o.cta), o.verbatim && /*#__PURE__*/React.createElement("div", {
+      className: "mt-1 pt-1 border-t border-amber-100 text-stone-600 whitespace-pre-wrap text-[11px]"
+    }, o.verbatim))))), fb.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-semibold text-stone-600 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-3 h-3 text-blue-600"
+    }), "\u5C0D ", speakerName, " \u7684\u5EFA\u8B70"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1"
+    }, fb.map(f => /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      className: "text-xs bg-blue-50/50 rounded p-1.5"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-blue-700"
+    }, getMember(f.fromMemberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-700"
+    }, f.content || "（未填）"))))), nc.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-semibold text-stone-600 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(Link2, {
+      className: "w-3 h-3 text-purple-600"
+    }), speakerName, " \u9700\u8981\u7684\u5408\u4F5C\u4EBA\u8108"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1.5"
+    }, nc.map(ncItem => /*#__PURE__*/React.createElement("div", {
+      key: ncItem.id,
+      className: "text-xs bg-purple-50/50 rounded p-1.5"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, "\uD83C\uDFAF ", ncItem.profileWanted || "（未填）"), ncItem.offers?.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "mt-1 ml-3 space-y-0.5 text-[11px]"
+    }, ncItem.offers.map(of => /*#__PURE__*/React.createElement("div", {
+      key: of.id,
+      className: "text-stone-600"
+    }, "\u2192 ", /*#__PURE__*/React.createElement("b", null, getMember(of.introducerId)?.name || "?"), " \u53EF\u5F15\u85A6 ", /*#__PURE__*/React.createElement("b", null, of.contactName || "?"), "\uFF08", of.contactProfession || "?", "\uFF09", of.status === "imported" && /*#__PURE__*/React.createElement("span", {
+      className: "ml-1 text-[9px] bg-emerald-500 text-white px-1 rounded"
+    }, "\u5DF2\u532F\u5165\u5496\u5561\u6703\u8B70")))))))), hasGrid && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-semibold text-stone-600 mb-1"
+    }, "\uD83D\uDD32 ", speakerName, " \u5408\u4F5C\u5C08\u696D\u4E5D\u5BAE\u683C"), /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-3 gap-1 max-w-xs"
+    }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+      if (idx === 4) {
+        return /*#__PURE__*/React.createElement("div", {
+          key: "c",
+          className: "aspect-square border-2 border-[#B8860B] rounded bg-amber-100 p-1 flex flex-col items-center justify-center"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "text-[9px] font-bold text-[#B8860B]"
+        }, speakerName), /*#__PURE__*/React.createElement("div", {
+          className: "text-[9px] text-stone-700 break-all text-center"
+        }, grid.centerProfile || ""));
+      }
+      const cellIdx = idx < 4 ? idx : idx - 1;
+      return /*#__PURE__*/React.createElement("div", {
+        key: idx,
+        className: "aspect-square border border-stone-300 rounded bg-white p-1 text-[9px] text-stone-700 flex items-center justify-center text-center break-all"
+      }, grid.cells?.[cellIdx] || "");
+    }))));
+  }), !isChapter && referrals.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
   }, /*#__PURE__*/React.createElement(ArrowRightLeft, {
     className: "w-3 h-3 text-pink-600"
-  }), isChapter ? "分會內引薦" : "小組內引薦", "\uFF08\u7E3D\u984D NT$", referralTotal.toLocaleString(), "\uFF09"), /*#__PURE__*/React.createElement("div", {
+  }), "\u5C0F\u7D44\u5167\u5F15\u85A6\uFF08\u7E3D\u984D NT$", referralTotal.toLocaleString(), "\uFF09"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-1"
   }, referrals.map(r => /*#__PURE__*/React.createElement("div", {
     key: r.id,
@@ -3306,7 +3851,7 @@ function MeetingCard({
     className: "ml-1 text-emerald-700 font-semibold"
   }, "NT$", Number(r.amount).toLocaleString()), r.content && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-600 mt-0.5"
-  }, r.content))))), nextMeeting.date && /*#__PURE__*/React.createElement("div", {
+  }, r.content))))), !isChapter && nextMeeting.date && /*#__PURE__*/React.createElement("div", {
     className: "bg-stone-50 rounded-lg p-2 flex items-center gap-2"
   }, /*#__PURE__*/React.createElement(Calendar, {
     className: "w-3.5 h-3.5 text-stone-500"
@@ -5702,7 +6247,12 @@ function App() {
   }, filteredMeetings.map(m => {
     const isCh = isChapterMeeting(m);
     const g = groups.find(x => x.id === m.groupId);
-    const sp = m.speaker?.memberId ? members.find(x => x.id === m.speaker.memberId) : null;
+    // 主講人摘要（多位顯示前 2 位）：speakers[] 為主，舊 speaker 物件相容
+    const speakerArr = Array.isArray(m.speakers) && m.speakers.length ? m.speakers : m.speaker?.memberId ? [{
+      memberId: m.speaker.memberId
+    }] : [];
+    const speakerNames = speakerArr.slice(0, 2).map(s => members.find(x => x.id === s.memberId)?.name).filter(Boolean);
+    const speakerSummary = speakerNames.length > 0 ? speakerNames.join("、") + (speakerArr.length > 2 ? ` +${speakerArr.length - 2}` : "") : "";
     const checked = batchSelection.has(m.id);
     return /*#__PURE__*/React.createElement("label", {
       key: m.id,
@@ -5721,9 +6271,9 @@ function App() {
       color: isCh ? CHAPTER_GROUP_COLOR : g?.color || "#999"
     }, isCh ? `🌐 ${CHAPTER_GROUP_NAME}` : g?.name || "未知小組"), /*#__PURE__*/React.createElement("span", {
       className: "text-sm font-semibold"
-    }, fmtDate(m.date)), sp && /*#__PURE__*/React.createElement("span", {
+    }, fmtDate(m.date)), speakerSummary && /*#__PURE__*/React.createElement("span", {
       className: "text-xs text-stone-500"
-    }, "\u4E3B\u8B1B\uFF1A", sp.name)));
+    }, "\u4E3B\u8B1B\uFF1A", speakerSummary)));
   })), /*#__PURE__*/React.createElement("div", {
     className: "bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900"
   }, "\uD83D\uDCA1 \u532F\u51FA\u6703\u6253\u5305\u6210 zip \u6A94\uFF0C\u6BCF\u7B46\u4E00\u500B\u7368\u7ACB\u6A94\u6848\u3002\u6279\u6B21\u8D85\u904E 20 \u7B46\u6642\u901F\u5EA6\u6703\u8B8A\u6162\uFF0C\u5EFA\u8B70\u5148\u7528\u300C\u7BE9\u9078\u5C0F\u7D44\u300D\u6E1B\u5C11\u7B46\u6578\u3002"), /*#__PURE__*/React.createElement("div", {
