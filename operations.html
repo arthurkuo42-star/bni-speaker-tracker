@@ -504,6 +504,16 @@ function buildMeetingContent(meeting, group, members) {
       }
     }];
   }
+  // 過濾：只匯出有實質內容的主講人（避免使用者誤按 + 後留下空白卡）
+  speakers = speakers.filter(sp => {
+    const hasIdentity = !!sp.memberId || !!(sp.topic || "").trim();
+    const hasOpeners = (sp.conversationOpeners || []).some(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
+    const hasFeedback = (sp.feedback || []).some(f => f.content);
+    const hasConnections = (sp.neededConnections || []).some(nc => nc.profileWanted || (nc.offers || []).length);
+    const grid = sp.collaborationGrid;
+    const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
+    return hasIdentity || hasOpeners || hasFeedback || hasConnections || hasGrid;
+  });
   const isChapter = isChapterMeeting(meeting);
   return {
     isChapter,
@@ -2520,17 +2530,26 @@ function MeetingForm({
   }, [members, group, isChapter]);
   const attendingMembers = useMemo(() => groupMembers.filter(m => form.attendees.includes(m.id)), [groupMembers, form.attendees]);
 
-  // 選了某組/全分會，沒出席的自動算缺席；若記錄人空白，自動預填小組長
+  // 選了某組/全分會，沒出席的自動算缺席；切換 groupId 時清理過時 attendees；記錄人自動預填小組長
   useEffect(() => {
     if (!isChapter && !group) return;
     const pool = isChapter ? members.map(m => m.id) : group?.memberIds || [];
-    const absent = pool.filter(id => !form.attendees.includes(id));
-    setForm(p => ({
-      ...p,
-      absentees: absent,
-      // 全分會沒有小組長預填；組聚維持原本邏輯
-      scribe: p.scribe || (isChapter ? "" : group?.leaderId || "")
-    }));
+    const poolSet = new Set(pool);
+    setForm(p => {
+      // 清理 attendees：只在「真的有不屬於 pool 的成員」時才產生新陣列（避免引用變更觸發無限 useEffect）
+      const hasStale = (p.attendees || []).some(id => !poolSet.has(id));
+      const cleanedAttendees = hasStale ? (p.attendees || []).filter(id => poolSet.has(id)) : p.attendees;
+      const absent = pool.filter(id => !cleanedAttendees.includes(id));
+      // 記錄人：若已選且不在新 pool → 清空
+      const cleanedScribe = p.scribe && !poolSet.has(p.scribe) ? "" : p.scribe;
+      const finalScribe = cleanedScribe || (isChapter ? "" : group?.leaderId || "");
+      return {
+        ...p,
+        attendees: cleanedAttendees,
+        absentees: absent,
+        scribe: finalScribe
+      };
+    });
   }, [form.attendees, form.groupId]);
 
   // ===== 各區塊 CRUD =====
@@ -2565,16 +2584,48 @@ function MeetingForm({
   const rmGuest = id => set("guests", rm(form.guests || [], id));
 
   // ===== 主講人（多位）=====
-  // 通用 helper：更新 speakers[id] 的單一欄位
-  const updSpeakerField = (spId, k, v) => set("speakers", (form.speakers || []).map(sp => sp.id === spId ? {
+  // 全部用 functional update（setForm(p => ...)）避免 stale closure 問題
+  // 通用 helper：對某位 speaker 進行 transform
+  const transformSpeaker = (spId, transformFn) => setForm(p => ({
+    ...p,
+    speakers: (p.speakers || []).map(sp => sp.id === spId ? transformFn(sp) : sp)
+  }));
+  const addSpeaker = () => setForm(p => ({
+    ...p,
+    speakers: [...(p.speakers || []), {
+      id: uid("sp"),
+      memberId: "",
+      topic: "",
+      conversationOpeners: [{
+        id: uid("co"),
+        who: "",
+        yesno: "",
+        tagline: "",
+        painSolution: "",
+        cta: "",
+        verbatim: ""
+      }],
+      feedback: [],
+      neededConnections: [],
+      collaborationGrid: {
+        centerProfile: "",
+        cells: ["", "", "", "", "", "", "", ""]
+      }
+    }]
+  }));
+  const rmSpeaker = spId => setForm(p => ({
+    ...p,
+    speakers: (p.speakers || []).filter(sp => sp.id !== spId)
+  }));
+  const updSpeakerField = (spId, k, v) => transformSpeaker(spId, sp => ({
     ...sp,
     [k]: v
-  } : sp));
-  const addSpeaker = () => set("speakers", [...(form.speakers || []), {
-    id: uid("sp"),
-    memberId: "",
-    topic: "",
-    conversationOpeners: [{
+  }));
+
+  // ===== 開啟對話（per-speaker）=====
+  const addOpener = spId => transformSpeaker(spId, sp => ({
+    ...sp,
+    conversationOpeners: [...(sp.conversationOpeners || []), {
       id: uid("co"),
       who: "",
       yesno: "",
@@ -2582,28 +2633,16 @@ function MeetingForm({
       painSolution: "",
       cta: "",
       verbatim: ""
-    }],
-    feedback: [],
-    neededConnections: [],
-    collaborationGrid: {
-      centerProfile: "",
-      cells: ["", "", "", "", "", "", "", ""]
-    }
-  }]);
-  const rmSpeaker = spId => set("speakers", (form.speakers || []).filter(sp => sp.id !== spId));
-
-  // ===== 開啟對話（per-speaker）=====
-  const addOpener = spId => updSpeakerField(spId, "conversationOpeners", [...(form.speakers.find(s => s.id === spId)?.conversationOpeners || []), {
-    id: uid("co"),
-    who: "",
-    yesno: "",
-    tagline: "",
-    painSolution: "",
-    cta: "",
-    verbatim: ""
-  }]);
-  const updOpener = (spId, oId, k, v) => updSpeakerField(spId, "conversationOpeners", upd(form.speakers.find(s => s.id === spId)?.conversationOpeners || [], oId, k, v));
-  const rmOpener = (spId, oId) => updSpeakerField(spId, "conversationOpeners", rm(form.speakers.find(s => s.id === spId)?.conversationOpeners || [], oId));
+    }]
+  }));
+  const updOpener = (spId, oId, k, v) => transformSpeaker(spId, sp => ({
+    ...sp,
+    conversationOpeners: upd(sp.conversationOpeners || [], oId, k, v)
+  }));
+  const rmOpener = (spId, oId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    conversationOpeners: rm(sp.conversationOpeners || [], oId)
+  }));
   const generateScript = (o, speakerName) => {
     const who = (o.who || "").trim() || "（請填目標客群）";
     const yesno = (o.yesno || "").trim() || "（請填 YES/NO 問題）";
@@ -2620,62 +2659,93 @@ function MeetingForm({
   };
 
   // ===== 對主講人建議（per-speaker）=====
-  const addFeedback = (spId, fromMemberId) => updSpeakerField(spId, "feedback", [...(form.speakers.find(s => s.id === spId)?.feedback || []), {
-    id: uid("fb"),
-    fromMemberId,
-    content: ""
-  }]);
-  const updFeedback = (spId, fId, k, v) => updSpeakerField(spId, "feedback", upd(form.speakers.find(s => s.id === spId)?.feedback || [], fId, k, v));
-  const rmFeedback = (spId, fId) => updSpeakerField(spId, "feedback", rm(form.speakers.find(s => s.id === spId)?.feedback || [], fId));
-
-  // ===== 主講人需要的合作人脈（per-speaker）=====
-  const addConnection = spId => updSpeakerField(spId, "neededConnections", [...(form.speakers.find(s => s.id === spId)?.neededConnections || []), {
-    id: uid("nc"),
-    profileWanted: "",
-    offers: []
-  }]);
-  const updConnection = (spId, ncId, k, v) => updSpeakerField(spId, "neededConnections", upd(form.speakers.find(s => s.id === spId)?.neededConnections || [], ncId, k, v));
-  const rmConnection = (spId, ncId) => updSpeakerField(spId, "neededConnections", rm(form.speakers.find(s => s.id === spId)?.neededConnections || [], ncId));
-  const addOffer = (spId, ncId) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
-    ...nc,
-    offers: [...nc.offers, {
-      id: uid("of"),
-      introducerId: "",
-      contactName: "",
-      contactProfession: "",
-      status: "pending",
-      createdAt: new Date().toISOString()
+  const addFeedback = (spId, fromMemberId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    feedback: [...(sp.feedback || []), {
+      id: uid("fb"),
+      fromMemberId,
+      content: ""
     }]
   }));
-  const updOffer = (spId, ncId, ofId, k, v) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
-    ...nc,
-    offers: nc.offers.map(of => of.id === ofId ? {
-      ...of,
-      [k]: v
-    } : of)
+  const updFeedback = (spId, fId, k, v) => transformSpeaker(spId, sp => ({
+    ...sp,
+    feedback: upd(sp.feedback || [], fId, k, v)
   }));
-  const rmOffer = (spId, ncId, ofId) => updSpeakerField(spId, "neededConnections", (form.speakers.find(s => s.id === spId)?.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
-    ...nc,
-    offers: nc.offers.filter(of => of.id !== ofId)
+  const rmFeedback = (spId, fId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    feedback: rm(sp.feedback || [], fId)
+  }));
+
+  // ===== 主講人需要的合作人脈（per-speaker）=====
+  const addConnection = spId => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: [...(sp.neededConnections || []), {
+      id: uid("nc"),
+      profileWanted: "",
+      offers: []
+    }]
+  }));
+  const updConnection = (spId, ncId, k, v) => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: upd(sp.neededConnections || [], ncId, k, v)
+  }));
+  const rmConnection = (spId, ncId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: rm(sp.neededConnections || [], ncId)
+  }));
+  const addOffer = (spId, ncId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: (sp.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
+      ...nc,
+      offers: [...nc.offers, {
+        id: uid("of"),
+        introducerId: "",
+        contactName: "",
+        contactProfession: "",
+        status: "pending",
+        createdAt: new Date().toISOString()
+      }]
+    })
+  }));
+  const updOffer = (spId, ncId, ofId, k, v) => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: (sp.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
+      ...nc,
+      offers: nc.offers.map(of => of.id === ofId ? {
+        ...of,
+        [k]: v
+      } : of)
+    })
+  }));
+  const rmOffer = (spId, ncId, ofId) => transformSpeaker(spId, sp => ({
+    ...sp,
+    neededConnections: (sp.neededConnections || []).map(nc => nc.id !== ncId ? nc : {
+      ...nc,
+      offers: nc.offers.filter(of => of.id !== ofId)
+    })
   }));
 
   // ===== 九宮格合作圖（per-speaker）=====
-  const updGridCenter = (spId, v) => updSpeakerField(spId, "collaborationGrid", {
-    ...(form.speakers.find(s => s.id === spId)?.collaborationGrid || {
-      cells: ["", "", "", "", "", "", "", ""]
-    }),
-    centerProfile: v
-  });
-  const updGridCell = (spId, idx, v) => {
-    const sp = form.speakers.find(s => s.id === spId);
-    const cells = [...(sp?.collaborationGrid?.cells || ["", "", "", "", "", "", "", ""])];
+  const updGridCenter = (spId, v) => transformSpeaker(spId, sp => ({
+    ...sp,
+    collaborationGrid: {
+      cells: ["", "", "", "", "", "", "", ""],
+      ...(sp.collaborationGrid || {}),
+      centerProfile: v
+    }
+  }));
+  const updGridCell = (spId, idx, v) => transformSpeaker(spId, sp => {
+    const baseCells = sp.collaborationGrid?.cells || ["", "", "", "", "", "", "", ""];
+    const cells = [...baseCells];
     cells[idx] = v;
-    updSpeakerField(spId, "collaborationGrid", {
-      ...(sp?.collaborationGrid || {}),
-      centerProfile: sp?.collaborationGrid?.centerProfile || "",
-      cells
-    });
-  };
+    return {
+      ...sp,
+      collaborationGrid: {
+        centerProfile: sp.collaborationGrid?.centerProfile || "",
+        cells
+      }
+    };
+  });
 
   // ===== 資源需求/提供（全分會專用）=====
   const addResourceShare = memberId => set("resourceShares", [...(form.resourceShares || []), {
@@ -3295,7 +3365,7 @@ function MeetingForm({
   }, /*#__PURE__*/React.createElement(Plus, {
     className: "w-4 h-4 inline mr-1"
   }), "\u65B0\u589E\u4E3B\u8B1B\u4EBA"))), !isChapter && /*#__PURE__*/React.createElement(FormSection, {
-    title: "4. \u5C0F\u7D44\u5167\u5F7C\u6B64\u5F15\u85A6",
+    title: "3. \u5C0F\u7D44\u5167\u5F7C\u6B64\u5F15\u85A6",
     badge: summary("", form.referrals.length),
     icon: /*#__PURE__*/React.createElement(ArrowRightLeft, {
       className: "w-4 h-4 text-[#B8860B]"
@@ -3356,7 +3426,7 @@ function MeetingForm({
   }, /*#__PURE__*/React.createElement(Plus, {
     className: "w-3.5 h-3.5"
   }), "\u65B0\u589E\u5F15\u85A6"))), !isChapter && /*#__PURE__*/React.createElement(FormSection, {
-    title: "5. \u4E0B\u6B21\u7D44\u805A\u6642\u9593",
+    title: "4. \u4E0B\u6B21\u7D44\u805A\u6642\u9593",
     badge: form.nextMeeting?.date ? /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full"
     }, "\u5DF2\u586B") : summary("", 0),
@@ -3507,9 +3577,9 @@ function MeetingCard({
   }).filter(vg => vg.sharing || vg.feedback || vg.otherFeedback || vg.hasValidIdentity);
 
   // 主講人陣列（含舊單主講相容）
-  let speakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
-  if (speakers.length === 0 && (meeting.speaker?.memberId || meeting.speaker?.topic || (meeting.conversationOpeners || []).length || (meeting.feedback || []).length || (meeting.neededConnections || []).length)) {
-    speakers = [{
+  let allSpeakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
+  if (allSpeakers.length === 0 && (meeting.speaker?.memberId || meeting.speaker?.topic || (meeting.conversationOpeners || []).length || (meeting.feedback || []).length || (meeting.neededConnections || []).length)) {
+    allSpeakers = [{
       id: "legacy_speaker",
       memberId: meeting.speaker?.memberId || "",
       topic: meeting.speaker?.topic || "",
@@ -3522,6 +3592,16 @@ function MeetingCard({
       }
     }];
   }
+  // 只顯示「有實質內容」的主講人（過濾掉只按了 + 但完全空白的）
+  const speakers = allSpeakers.filter(sp => {
+    const hasIdentity = !!sp.memberId || !!(sp.topic || "").trim();
+    const hasOpeners = (sp.conversationOpeners || []).some(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
+    const hasFeedback = (sp.feedback || []).some(f => f.content);
+    const hasConnections = (sp.neededConnections || []).some(nc => nc.profileWanted || (nc.offers || []).length);
+    const grid = sp.collaborationGrid;
+    const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
+    return hasIdentity || hasOpeners || hasFeedback || hasConnections || hasGrid;
+  });
   const totalOfferCount = speakers.reduce((s, sp) => s + (sp.neededConnections || []).reduce((s2, nc) => s2 + (nc.offers || []).length, 0), 0);
   const referrals = meeting.referrals || [];
   const referralTotal = referrals.reduce((s, r) => s + (Number(r.amount) || 0), 0);
