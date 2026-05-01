@@ -2702,6 +2702,8 @@ function MeetingForm({
         introducerId: "",
         contactName: "",
         contactProfession: "",
+        wantImport: true,
+        // 預設要匯入到咖啡會議；使用者可取消
         status: "pending",
         createdAt: new Date().toISOString()
       }]
@@ -3321,32 +3323,48 @@ function MeetingForm({
       className: "w-3.5 h-3.5"
     }))), nc.offers.length > 0 && /*#__PURE__*/React.createElement("div", {
       className: "ml-4 pl-3 border-l-2 border-[#B8860B] space-y-1.5 mb-2"
-    }, nc.offers.map(of => /*#__PURE__*/React.createElement("div", {
-      key: of.id,
-      className: "bg-white rounded p-2 text-xs"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "grid grid-cols-[110px_1fr_auto] gap-1.5 items-center mb-1"
-    }, /*#__PURE__*/React.createElement(MemberSelect, {
-      members: attendingMembers,
-      value: of.introducerId,
-      onChange: v => updOffer(sp.id, nc.id, of.id, "introducerId", v),
-      placeholder: "\u9080\u7D04\u4EBA"
-    }), /*#__PURE__*/React.createElement("input", {
-      value: of.contactName,
-      onChange: e => updOffer(sp.id, nc.id, of.id, "contactName", e.target.value),
-      placeholder: "\u4EBA\u8108\u59D3\u540D",
-      className: "border border-stone-200 rounded px-2 py-1"
-    }), /*#__PURE__*/React.createElement("button", {
-      onClick: () => rmOffer(sp.id, nc.id, of.id),
-      className: "p-1 text-stone-400 hover:text-red-500"
-    }, /*#__PURE__*/React.createElement(X, {
-      className: "w-3 h-3"
-    }))), /*#__PURE__*/React.createElement("input", {
-      value: of.contactProfession,
-      onChange: e => updOffer(sp.id, nc.id, of.id, "contactProfession", e.target.value),
-      placeholder: "\u4EBA\u8108\u5C08\u696D\uFF08\u4F8B\uFF1A\u4E0D\u52D5\u7522\u4F30\u50F9\u5E2B\uFF09",
-      className: "w-full border border-stone-200 rounded px-2 py-1 text-xs"
-    })))), /*#__PURE__*/React.createElement("button", {
+    }, nc.offers.map(of => {
+      const wantImport = of.wantImport !== false; // 舊資料 undefined → 視為要匯入
+      const isImported = of.status === "imported";
+      return /*#__PURE__*/React.createElement("div", {
+        key: of.id,
+        className: `bg-white rounded p-2 text-xs ${wantImport ? "" : "opacity-60"}`
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "grid grid-cols-[110px_1fr_auto] gap-1.5 items-center mb-1"
+      }, /*#__PURE__*/React.createElement(MemberSelect, {
+        members: attendingMembers,
+        value: of.introducerId,
+        onChange: v => updOffer(sp.id, nc.id, of.id, "introducerId", v),
+        placeholder: "\u9080\u7D04\u4EBA"
+      }), /*#__PURE__*/React.createElement("input", {
+        value: of.contactName,
+        onChange: e => updOffer(sp.id, nc.id, of.id, "contactName", e.target.value),
+        placeholder: "\u4EBA\u8108\u59D3\u540D",
+        className: "border border-stone-200 rounded px-2 py-1"
+      }), /*#__PURE__*/React.createElement("button", {
+        onClick: () => rmOffer(sp.id, nc.id, of.id),
+        className: "p-1 text-stone-400 hover:text-red-500"
+      }, /*#__PURE__*/React.createElement(X, {
+        className: "w-3 h-3"
+      }))), /*#__PURE__*/React.createElement("input", {
+        value: of.contactProfession,
+        onChange: e => updOffer(sp.id, nc.id, of.id, "contactProfession", e.target.value),
+        placeholder: "\u4EBA\u8108\u5C08\u696D\uFF08\u4F8B\uFF1A\u4E0D\u52D5\u7522\u4F30\u50F9\u5E2B\uFF09",
+        className: "w-full border border-stone-200 rounded px-2 py-1 text-xs"
+      }), /*#__PURE__*/React.createElement("label", {
+        className: "flex items-center gap-1 mt-1.5 text-[11px] cursor-pointer select-none"
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: wantImport,
+        disabled: isImported,
+        onChange: e => updOffer(sp.id, nc.id, of.id, "wantImport", e.target.checked),
+        className: "w-3.5 h-3.5 accent-[#059669]"
+      }), /*#__PURE__*/React.createElement("span", {
+        className: wantImport ? "text-emerald-700 font-medium" : "text-stone-400"
+      }, wantImport ? "✅ 要匯入咖啡會議" : "❌ 不匯入咖啡會議"), isImported && /*#__PURE__*/React.createElement("span", {
+        className: "ml-1 text-[10px] bg-emerald-500 text-white px-1 rounded"
+      }, "\u5DF2\u532F\u5165")));
+    })), /*#__PURE__*/React.createElement("button", {
       onClick: () => addOffer(sp.id, nc.id),
       className: "ml-4 text-xs text-[#8B1A1A] hover:underline flex items-center gap-1"
     }, /*#__PURE__*/React.createElement(Plus, {
@@ -3540,7 +3558,8 @@ function MeetingCard({
   meeting,
   group,
   members,
-  onEdit
+  onEdit,
+  onView
 }) {
   const [expanded, setExpanded] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
@@ -3685,7 +3704,13 @@ function MeetingCard({
     className: "w-full px-3 py-1.5 text-left text-sm hover:bg-stone-50 flex items-center gap-2"
   }, /*#__PURE__*/React.createElement(FileText, {
     className: "w-3.5 h-3.5 text-[#C0392B]"
-  }), " PDF")), /*#__PURE__*/React.createElement("button", {
+  }), " PDF")), onView && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onView(meeting),
+    className: "p-1.5 text-stone-400 hover:text-blue-600 hover:bg-stone-50 rounded-lg",
+    title: "\u6AA2\u8996\uFF08\u5373\u6642\u540C\u6B65\u5176\u4ED6\u4EBA\u7684\u7DE8\u8F2F\u9032\u5EA6\uFF09"
+  }, /*#__PURE__*/React.createElement(Eye, {
+    className: "w-4 h-4"
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => onEdit(meeting),
     className: "p-1.5 text-stone-400 hover:text-[#8B1A1A] hover:bg-stone-50 rounded-lg",
     title: "\u7DE8\u8F2F"
@@ -3938,6 +3963,394 @@ function MeetingCard({
   }), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-stone-700"
   }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), fmtDate(nextMeeting.date), nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location))))));
+}
+
+// ============ 會議檢視 Modal（唯讀，5 秒自動同步 + 手動重新整理）============
+function MeetingViewModal({
+  meetingId,
+  meetings,
+  members,
+  groups,
+  onClose,
+  onRefresh,
+  onEdit
+}) {
+  const [lastSyncedAt, setLastSyncedAt] = useState(Date.now());
+  const [syncing, setSyncing] = useState(false);
+  const [, setTick] = useState(0); // 用來每秒重繪「N 秒前同步」
+
+  // 每秒更新 tick，讓「同步狀態」文字即時跑
+  useEffect(() => {
+    if (!meetingId) return;
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [meetingId]);
+
+  // 自動 polling — 每 5 秒從伺服器拉最新資料
+  useEffect(() => {
+    if (!meetingId) return;
+    const doSync = async () => {
+      setSyncing(true);
+      try {
+        await onRefresh();
+        setLastSyncedAt(Date.now());
+      } finally {
+        setSyncing(false);
+      }
+    };
+    const interval = setInterval(doSync, 5000);
+    return () => clearInterval(interval);
+  }, [meetingId, onRefresh]);
+  const manualRefresh = async () => {
+    setSyncing(true);
+    try {
+      await onRefresh();
+      setLastSyncedAt(Date.now());
+    } finally {
+      setSyncing(false);
+    }
+  };
+  if (!meetingId) return null;
+  const meeting = meetings.find(m => m.id === meetingId);
+  if (!meeting) {
+    return /*#__PURE__*/React.createElement(Modal, {
+      open: true,
+      onClose: onClose,
+      title: "\u6AA2\u8996\u6703\u8B70\u8A18\u9304",
+      maxWidth: "max-w-2xl"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-center text-stone-400 py-12"
+    }, /*#__PURE__*/React.createElement(Eye, {
+      className: "w-10 h-10 mx-auto mb-2 opacity-30"
+    }), /*#__PURE__*/React.createElement("p", null, "\u6703\u8B70\u5DF2\u88AB\u522A\u9664\u6216\u540C\u6B65\u4E2D\u627E\u4E0D\u5230")));
+  }
+  const isChapter = isChapterMeeting(meeting);
+  const group = groups.find(g => g.id === meeting.groupId);
+  const getMember = id => members.find(m => m.id === id);
+  const totalPool = isChapter ? members.length : group?.memberIds?.length || 0;
+  const attendRate = totalPool ? (meeting.attendees.length / totalPool * 100).toFixed(0) : 0;
+  const secondsAgo = Math.floor((Date.now() - lastSyncedAt) / 1000);
+
+  // 來賓
+  const visibleGuests = (meeting.guests || []).map(g => {
+    const kind = g.kind || "member";
+    const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
+    const name = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
+    const industry = kind === "member" ? linked?.industry || "" : g.industry || "";
+    const sourceLabel = kind === "member" ? isChapter ? "分會會員（非出席）" : "分會別組會員" : g.fromChapter ? `外部 · ${g.fromChapter}` : "外部來賓";
+    const hasValidIdentity = kind === "member" ? !!linked : !!g.name;
+    return {
+      id: g.id,
+      name,
+      industry,
+      sourceLabel,
+      hasValidIdentity,
+      sharing: g.sharing || "",
+      feedback: g.feedback || "",
+      otherFeedback: g.otherFeedback || ""
+    };
+  }).filter(vg => vg.sharing || vg.feedback || vg.otherFeedback || vg.hasValidIdentity);
+
+  // 主講人（含舊單主講相容）
+  let allSpeakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
+  if (allSpeakers.length === 0 && (meeting.speaker?.memberId || meeting.speaker?.topic || (meeting.conversationOpeners || []).length || (meeting.feedback || []).length || (meeting.neededConnections || []).length)) {
+    allSpeakers = [{
+      id: "legacy_speaker",
+      memberId: meeting.speaker?.memberId || "",
+      topic: meeting.speaker?.topic || "",
+      conversationOpeners: meeting.conversationOpeners || [],
+      feedback: meeting.feedback || [],
+      neededConnections: meeting.neededConnections || [],
+      collaborationGrid: {
+        centerProfile: "",
+        cells: ["", "", "", "", "", "", "", ""]
+      }
+    }];
+  }
+  const speakers = allSpeakers.filter(sp => {
+    const hasIdentity = !!sp.memberId || !!(sp.topic || "").trim();
+    const hasOpeners = (sp.conversationOpeners || []).some(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
+    const hasFeedback = (sp.feedback || []).some(f => f.content);
+    const hasConnections = (sp.neededConnections || []).some(nc => nc.profileWanted || (nc.offers || []).length);
+    const grid = sp.collaborationGrid;
+    const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
+    return hasIdentity || hasOpeners || hasFeedback || hasConnections || hasGrid;
+  });
+  const sharings = meeting.sharings || [];
+  const resourceShares = (meeting.resourceShares || []).filter(r => r.needs || r.offers);
+  const referrals = meeting.referrals || [];
+  const referralTotal = referrals.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const nextMeeting = meeting.nextMeeting || {};
+
+  // 同步狀態文字
+  let syncStatusText, syncStatusColor;
+  if (syncing) {
+    syncStatusText = "🔄 同步中…";
+    syncStatusColor = "text-blue-600";
+  } else if (secondsAgo < 5) {
+    syncStatusText = `✓ ${secondsAgo} 秒前同步`;
+    syncStatusColor = "text-emerald-600";
+  } else if (secondsAgo < 30) {
+    syncStatusText = `${secondsAgo} 秒前同步`;
+    syncStatusColor = "text-stone-500";
+  } else {
+    syncStatusText = `${secondsAgo} 秒前同步（可能斷線）`;
+    syncStatusColor = "text-amber-600";
+  }
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: true,
+    onClose: onClose,
+    title: /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 flex-wrap"
+    }, /*#__PURE__*/React.createElement(Eye, {
+      className: "w-4 h-4 text-blue-600"
+    }), /*#__PURE__*/React.createElement("span", null, "\u6AA2\u8996\uFF1A", isChapter ? "🌐 全分會" : group?.name || "未知小組", " \xB7 ", fmtDate(meeting.date)), /*#__PURE__*/React.createElement("span", {
+      className: `text-xs font-normal ${syncStatusColor}`
+    }, syncStatusText)),
+    footer: /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center justify-between gap-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500"
+    }, "\uD83D\uDCA1 \u6B64\u6AA2\u8996\u81EA\u52D5\u6BCF 5 \u79D2\u540C\u6B65\u4E00\u6B21\u3002\u5176\u4ED6\u4EBA\u6309\u4E0B\u300C\u5132\u5B58\u300D\u5F8C\uFF0C\u9019\u88E1\u6703\u66F4\u65B0\u3002"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-2"
+    }, /*#__PURE__*/React.createElement(Btn, {
+      variant: "outline",
+      size: "sm",
+      onClick: manualRefresh,
+      disabled: syncing
+    }, /*#__PURE__*/React.createElement(RefreshCw, {
+      className: `w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`
+    }), "\u7ACB\u5373\u540C\u6B65"), onEdit && /*#__PURE__*/React.createElement(Btn, {
+      variant: "primary",
+      size: "sm",
+      onClick: () => onEdit(meeting)
+    }, /*#__PURE__*/React.createElement(Edit2, {
+      className: "w-3.5 h-3.5"
+    }), "\u8F49\u70BA\u7DE8\u8F2F"))),
+    maxWidth: "max-w-5xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-1.5"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\u5C0F\u7D44\uFF1A"), isChapter ? `🌐 ${CHAPTER_GROUP_NAME}` : group?.name || "—"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\u65E5\u671F\uFF1A"), fmtDate(meeting.date), meeting.time && ` ${meeting.time}`), meeting.location && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\u5730\u9EDE\uFF1A"), meeting.location), meeting.scribe && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\u8A18\u9304\u4EBA\uFF1A"), getMember(meeting.scribe)?.name || "—"), /*#__PURE__*/React.createElement("div", {
+    className: "col-span-2"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\u51FA\u5E2D\uFF08", meeting.attendees.length, " / ", totalPool, "\uFF0C", attendRate, "%\uFF09\uFF1A"), meeting.attendees.length > 0 ? meeting.attendees.map(id => getMember(id)?.name || "?").join("、") : "—"), meeting.absentees?.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "col-span-2 text-stone-500"
+  }, /*#__PURE__*/React.createElement("b", null, "\u7F3A\u5E2D\uFF08", meeting.absentees.length, "\uFF09\uFF1A"), meeting.absentees.map(id => getMember(id)?.name || "?").join("、"))), sharings.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement(Sparkles, {
+    className: "w-4 h-4 text-[#B8860B]"
+  }), "\u6210\u9577/\u559C\u6085\u5206\u4EAB\uFF08", sharings.length, "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1"
+  }, sharings.map(s => /*#__PURE__*/React.createElement("div", {
+    key: s.id,
+    className: "bg-amber-50/50 rounded p-2"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-[#B8860B]"
+  }, getMember(s.memberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-700"
+  }, s.content || "（未填）"))))), visibleGuests.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement(UserCheck, {
+    className: "w-4 h-4 text-emerald-600"
+  }), "\u4F86\u8CD3\uFF08", visibleGuests.length, "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5"
+  }, visibleGuests.map(vg => /*#__PURE__*/React.createElement("div", {
+    key: vg.id,
+    className: "bg-emerald-50/50 border border-emerald-100 rounded p-2.5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-1"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-emerald-700"
+  }, vg.name), vg.industry && /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-600"
+  }, " \xB7 ", vg.industry), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500 ml-1"
+  }, "[", vg.sourceLabel, "]")), vg.sharing && /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\uD83D\uDCAC \u6210\u9577/\u559C\u6085\uFF1A"), vg.sharing), vg.feedback && /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\uD83D\uDCA1 \u5C0D\u4E3B\u8B1B\u4EBA\uFF1A"), vg.feedback), vg.otherFeedback && /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-600"
+  }, "\uD83D\uDCDD \u5176\u4ED6\uFF1A"), vg.otherFeedback))))), resourceShares.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement(ArrowRightLeft, {
+    className: "w-4 h-4 text-emerald-600"
+  }), "\u8CC7\u6E90\u9700\u6C42/\u63D0\u4F9B\uFF08", resourceShares.length, "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5"
+  }, resourceShares.map(r => {
+    const m = getMember(r.memberId);
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.id,
+      className: "bg-emerald-50/40 border border-emerald-100 rounded p-2.5"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "mb-1"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-emerald-700"
+    }, m?.name || "?"), m?.industry && /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-500"
+    }, " \xB7 ", m.industry)), r.needs && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\uD83D\uDCBC \u9700\u8981\uFF1A"), r.needs), r.offers && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\uD83C\uDF81 \u53EF\u63D0\u4F9B\uFF1A"), r.offers));
+  }))), speakers.length > 0 && speakers.map((sp, spIdx) => {
+    const m = getMember(sp.memberId);
+    const speakerName = m?.name || "（未指定）";
+    const filledOpeners = (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
+    const fb = sp.feedback || [];
+    const nc = sp.neededConnections || [];
+    const grid = sp.collaborationGrid;
+    const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
+    return /*#__PURE__*/React.createElement("div", {
+      key: sp.id || spIdx,
+      className: "border-2 border-[#B8860B]/30 rounded-lg p-3 bg-amber-50/20 space-y-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 pb-2 border-b border-amber-200"
+    }, /*#__PURE__*/React.createElement(Presentation2, {
+      className: "w-4 h-4 text-[#B8860B]"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "font-bold text-[#B8860B]"
+    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName), sp.topic && /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-700"
+    }, " \xB7 ", sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-stone-700 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-3.5 h-3.5 text-[#B8860B]"
+    }), "\u958B\u555F\u5C0D\u8A71"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1"
+    }, filledOpeners.map((o, i) => /*#__PURE__*/React.createElement("div", {
+      key: o.id,
+      className: "bg-amber-50/50 border border-amber-100 rounded p-2 text-xs"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-semibold text-[#B8860B] mb-0.5"
+    }, "\u76EE\u6A19\u5BA2\u7FA4 ", i + 1), o.who && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "WHO\uFF1A"), o.who), o.yesno && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\u554F\u984C\uFF1A"), o.yesno), o.tagline && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "Tagline\uFF1A"), o.tagline), o.painSolution && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "\u6848\u4F8B\uFF1A"), o.painSolution), o.cta && /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-stone-600"
+    }, "CTA\uFF1A"), o.cta), o.verbatim && /*#__PURE__*/React.createElement("div", {
+      className: "mt-1 pt-1 border-t border-amber-100 text-stone-600 whitespace-pre-wrap"
+    }, o.verbatim))))), fb.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-stone-700 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
+      className: "w-3.5 h-3.5 text-blue-600"
+    }), "\u5C0D ", speakerName, " \u7684\u5EFA\u8B70"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1"
+    }, fb.map(f => /*#__PURE__*/React.createElement("div", {
+      key: f.id,
+      className: "text-xs bg-blue-50/50 rounded p-1.5"
+    }, /*#__PURE__*/React.createElement("b", {
+      className: "text-blue-700"
+    }, getMember(f.fromMemberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-700"
+    }, f.content || "（未填）"))))), hasGrid && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-stone-700 mb-1"
+    }, "\uD83D\uDD32 ", speakerName, " \u5408\u4F5C\u5C08\u696D\u4E5D\u5BAE\u683C"), /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-3 gap-1 max-w-md"
+    }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+      if (idx === 4) {
+        return /*#__PURE__*/React.createElement("div", {
+          key: "c",
+          className: "aspect-square border-2 border-[#B8860B] rounded bg-amber-100 p-1.5 flex flex-col items-center justify-center"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "text-[10px] font-bold text-[#B8860B]"
+        }, speakerName), /*#__PURE__*/React.createElement("div", {
+          className: "text-[10px] text-stone-700 break-all text-center"
+        }, grid.centerProfile || ""));
+      }
+      const cellIdx = idx < 4 ? idx : idx - 1;
+      return /*#__PURE__*/React.createElement("div", {
+        key: idx,
+        className: "aspect-square border border-stone-300 rounded bg-white p-1.5 text-[10px] text-stone-700 flex items-center justify-center text-center break-all"
+      }, grid.cells?.[cellIdx] || "");
+    }))), nc.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-stone-700 mb-1 flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(Link2, {
+      className: "w-3.5 h-3.5 text-purple-600"
+    }), speakerName, " \u9700\u8981\u7684\u5408\u4F5C\u4EBA\u8108"), /*#__PURE__*/React.createElement("div", {
+      className: "space-y-1.5"
+    }, nc.map(ncItem => /*#__PURE__*/React.createElement("div", {
+      key: ncItem.id,
+      className: "text-xs bg-purple-50/50 rounded p-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-stone-700"
+    }, "\uD83C\uDFAF ", ncItem.profileWanted || "（未填）"), ncItem.offers?.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "mt-1 ml-3 space-y-0.5"
+    }, ncItem.offers.map(of => {
+      const wantImport = of.wantImport !== false;
+      return /*#__PURE__*/React.createElement("div", {
+        key: of.id,
+        className: `text-stone-600 ${wantImport ? "" : "opacity-50"}`
+      }, "\u2192 ", /*#__PURE__*/React.createElement("b", null, getMember(of.introducerId)?.name || "?"), " \u53EF\u5F15\u85A6 ", /*#__PURE__*/React.createElement("b", null, of.contactName || "?"), "\uFF08", of.contactProfession || "?", "\uFF09", of.status === "imported" && /*#__PURE__*/React.createElement("span", {
+        className: "ml-1 text-[10px] bg-emerald-500 text-white px-1 rounded"
+      }, "\u5DF2\u532F\u5165"), !wantImport && of.status !== "imported" && /*#__PURE__*/React.createElement("span", {
+        className: "ml-1 text-[10px] bg-stone-400 text-white px-1 rounded"
+      }, "\u4E0D\u532F\u5165"));
+    })))))));
+  }), !isChapter && referrals.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement(ArrowRightLeft, {
+    className: "w-4 h-4 text-pink-600"
+  }), "\u5C0F\u7D44\u5167\u5F15\u85A6\uFF08\u7E3D\u984D NT$", referralTotal.toLocaleString(), "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1"
+  }, referrals.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r.id,
+    className: "bg-pink-50/50 rounded p-2"
+  }, /*#__PURE__*/React.createElement("b", {
+    className: "text-pink-700"
+  }, getMember(r.fromMemberId)?.name || "?"), " \u2192 ", /*#__PURE__*/React.createElement("b", null, getMember(r.toMemberId)?.name || "?"), r.referralName && /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-500"
+  }, " \xB7 ", r.referralName), r.amount && /*#__PURE__*/React.createElement("span", {
+    className: "ml-1 text-emerald-700 font-semibold"
+  }, "NT$", Number(r.amount).toLocaleString()), r.content && /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-600 mt-0.5"
+  }, r.content))))), !isChapter && nextMeeting.date && /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg p-3 flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Calendar, {
+    className: "w-4 h-4 text-stone-500"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), fmtDate(nextMeeting.date), nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location))), meeting.discussion && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-stone-700 mb-1"
+  }, "\u5176\u4ED6\u8A0E\u8AD6"), /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded p-2 text-stone-700 whitespace-pre-wrap"
+  }, meeting.discussion))));
 }
 
 // ============ 組別管理 ============
@@ -5913,6 +6326,28 @@ function App() {
   }); // 組聚表板時間範圍
 
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [viewingMeetingId, setViewingMeetingId] = useState(null); // 即時檢視中的會議 id
+
+  // 重新從伺服器拉最新組聚資料（檢視 modal 打開時用）
+  const refreshMeetings = async () => {
+    try {
+      // 直接 bypass cache 抓 fresh
+      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(STORAGE_KEYS.MEETINGS));
+      if (!res.ok) return null;
+      const json = await res.json();
+      const value = json && json.value !== undefined ? json.value : null;
+      if (value === null) return null;
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      if (Array.isArray(parsed)) {
+        setMeetings(parsed);
+        return parsed;
+      }
+      return null;
+    } catch (e) {
+      console.error('[refreshMeetings]', e);
+      return null;
+    }
+  };
   const [filter, setFilter] = useState({
     groupId: "",
     onlyMine: false
@@ -6264,7 +6699,8 @@ function App() {
     meeting: m,
     group: groups.find(g => g.id === m.groupId),
     members: members,
-    onEdit: setEditingMeeting
+    onEdit: setEditingMeeting,
+    onView: mt => setViewingMeetingId(mt.id)
   })))), tab === "mentorship" && (adminVerified ? /*#__PURE__*/React.createElement(MentorshipView, {
     mentees: mentees,
     setMentees: setMentees,
@@ -6303,7 +6739,18 @@ function App() {
     onSave: saveMeeting,
     onCancel: () => setEditingMeeting(null),
     onDelete: deleteMeeting
-  })), /*#__PURE__*/React.createElement(Modal, {
+  })), /*#__PURE__*/React.createElement(MeetingViewModal, {
+    meetingId: viewingMeetingId,
+    meetings: meetings,
+    members: members,
+    groups: groups,
+    onClose: () => setViewingMeetingId(null),
+    onRefresh: refreshMeetings,
+    onEdit: mt => {
+      setViewingMeetingId(null);
+      setEditingMeeting(mt);
+    }
+  }), /*#__PURE__*/React.createElement(Modal, {
     open: batchExportOpen,
     onClose: () => !batchExporting && setBatchExportOpen(false),
     title: "\u6279\u6B21\u532F\u51FA\u7D44\u805A\u8A18\u9304",
