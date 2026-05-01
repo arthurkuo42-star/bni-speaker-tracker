@@ -2356,9 +2356,10 @@ function CoffeeMeetingPage({
   saveData,
   showToast
 }) {
+  // 預設只看「待進行」的咖啡會議（最常用的工作清單），可手動切換為「所有狀態」看全部
   const [filter, setFilter] = useState({
     inviterId: '',
-    status: '',
+    status: 'scheduled',
     conversion: '',
     search: ''
   });
@@ -2391,24 +2392,26 @@ function CoffeeMeetingPage({
   }, []);
 
   // 從 groupMeetings 計算所有可匯入的 offer
+  // 兼容兩種 schema：
+  //   - 舊版（單主講）：gm.speaker.memberId + gm.neededConnections[]
+  //   - 新版（多主講）：gm.speakers[].memberId + gm.speakers[].neededConnections[]
   const importableOffers = useMemo(() => {
     const results = [];
-    (groupMeetings || []).forEach(gm => {
-      const speakerId = gm.speaker?.memberId;
-      if (!speakerId) return; // 沒主講人的組聚跳過
-      (gm.neededConnections || []).forEach(nc => {
+    const collectFromSpeaker = (gm, speakerId, neededConnections) => {
+      if (!speakerId) return; // 沒主講人的跳過
+      (neededConnections || []).forEach(nc => {
         (nc.offers || []).forEach(of => {
           if (of.status === 'imported') return; // 已匯入跳過
           if (!of.contactName?.trim()) return; // 沒填姓名跳過
           results.push({
-            compositeId: gm.id + ':' + nc.id + ':' + of.id,
-            // 用於 checkbox
+            // compositeId 加上 speakerId，避免新版多主講人時 nc.id 跨 speaker 衝突
+            compositeId: gm.id + ':' + speakerId + ':' + nc.id + ':' + of.id,
             meetingId: gm.id,
+            speakerId,
+            // 咖啡會議的 inviterId + write-back 找 speaker 用
             ncId: nc.id,
             offerId: of.id,
             meetingDate: gm.date,
-            speakerId,
-            // 咖啡會議的 inviterId
             introducerId: of.introducerId,
             contactName: of.contactName,
             contactProfession: of.contactProfession || '',
@@ -2416,6 +2419,15 @@ function CoffeeMeetingPage({
           });
         });
       });
+    };
+    (groupMeetings || []).forEach(gm => {
+      // 新版：speakers[] 陣列
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        gm.speakers.forEach(sp => collectFromSpeaker(gm, sp.memberId, sp.neededConnections));
+      } else {
+        // 舊版：單一 speaker 結構
+        collectFromSpeaker(gm, gm.speaker?.memberId, gm.neededConnections);
+      }
     });
     return results;
   }, [groupMeetings]);
@@ -2548,23 +2560,42 @@ function CoffeeMeetingPage({
       coffeeMeetings: [...allMeetings, ...newCms]
     });
 
-    // 3. 回寫組聚：把對應的 offer 標為 imported
-    const selectedKeys = new Set(selected.map(o => o.meetingId + ':' + o.ncId + ':' + o.offerId));
-    const updatedGroupMeetings = groupMeetings.map(gm => ({
-      ...gm,
-      neededConnections: (gm.neededConnections || []).map(nc => ({
-        ...nc,
-        offers: (nc.offers || []).map(of => {
-          const key = gm.id + ':' + nc.id + ':' + of.id;
-          if (!selectedKeys.has(key)) return of;
-          return {
-            ...of,
-            status: 'imported',
-            importedAt: now
-          };
-        })
-      }))
-    }));
+    // 3. 回寫組聚：把對應的 offer 標為 imported（兼容新舊 schema）
+    // selectedKeys 用 meetingId:speakerId:ncId:offerId（與 compositeId 一致）
+    const selectedKeys = new Set(selected.map(o => o.meetingId + ':' + o.speakerId + ':' + o.ncId + ':' + o.offerId));
+    const markOffer = (gm, speakerId, of, ncId) => {
+      const key = gm.id + ':' + speakerId + ':' + ncId + ':' + of.id;
+      if (!selectedKeys.has(key)) return of;
+      return {
+        ...of,
+        status: 'imported',
+        importedAt: now
+      };
+    };
+    const updatedGroupMeetings = groupMeetings.map(gm => {
+      // 新版：speakers[]
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        return {
+          ...gm,
+          speakers: gm.speakers.map(sp => ({
+            ...sp,
+            neededConnections: (sp.neededConnections || []).map(nc => ({
+              ...nc,
+              offers: (nc.offers || []).map(of => markOffer(gm, sp.memberId, of, nc.id))
+            }))
+          }))
+        };
+      }
+      // 舊版：meeting.neededConnections
+      const oldSpeakerId = gm.speaker?.memberId || '';
+      return {
+        ...gm,
+        neededConnections: (gm.neededConnections || []).map(nc => ({
+          ...nc,
+          offers: (nc.offers || []).map(of => markOffer(gm, oldSpeakerId, of, nc.id))
+        }))
+      };
+    });
     try {
       await apiClient.set('bni_group_meetings_v1', JSON.stringify(updatedGroupMeetings), true);
       setGroupMeetings(updatedGroupMeetings);
@@ -2684,6 +2715,8 @@ function CoffeeMeetingPage({
   }, "\u6240\u6709\u72C0\u614B"), /*#__PURE__*/React.createElement("option", {
     value: "pending"
   }, "\u9080\u7D04\u4E2D"), /*#__PURE__*/React.createElement("option", {
+    value: "scheduled"
+  }, "\u5F85\u9032\u884C"), /*#__PURE__*/React.createElement("option", {
     value: "done"
   }, "\u5DF2\u5B8C\u6210"), /*#__PURE__*/React.createElement("option", {
     value: "cancelled"
