@@ -325,6 +325,29 @@ async function swrFetchRaw(url, onFresh) {
   }
   return (await fetchIt()) || {};
 }
+
+// 共享 PIN 取得邏輯：避免 3 個 useEffect 同時 401 時，prompt 跳 3 次
+// 所有並發呼叫共用同一個 prompt，第一個輸入後其他人從 localStorage 拿到
+let _pinAskingPromise = null;
+async function obtainWritePin() {
+  // 1. localStorage 已有 → 直接回（可能是別人剛 prompt 完並寫入）
+  const cached = localStorage.getItem('bni_write_pin');
+  if (cached) return cached;
+  // 2. 已經有人在問 → 共用那個 promise
+  if (_pinAskingPromise) return _pinAskingPromise;
+  // 3. 第一個發問者：建 promise、彈 prompt、其他人都會等這個
+  _pinAskingPromise = new Promise((resolve, reject) => {
+    const pin = prompt('第一次寫入需要輸入「寫入 PIN」（與 Speaker Tracker 共用）：');
+    if (pin) resolve(pin);else reject(new Error('已取消'));
+  });
+  // 等所有當前 batch 的等待者都拿到結果後，下次 batch 才能再問
+  _pinAskingPromise.finally(() => {
+    setTimeout(() => {
+      _pinAskingPromise = null;
+    }, 0);
+  });
+  return _pinAskingPromise;
+}
 const apiClient = {
   // 第二參數 onFresh：背景拿到新版時的 callback（可選）
   async get(key, onFresh) {
@@ -377,8 +400,8 @@ const apiClient = {
     let pin = localStorage.getItem('bni_write_pin') || '';
     let res = await tryWrite(pin);
     if (res.status === 401) {
-      const newPin = prompt('第一次寫入需要輸入「寫入 PIN」（與 Speaker Tracker 共用）：');
-      if (!newPin) throw new Error('已取消');
+      // 取得 PIN —— 並發呼叫共用同一個 prompt，使用者只會被問 1 次
+      const newPin = await obtainWritePin();
       res = await tryWrite(newPin);
       if (res.ok) {
         localStorage.setItem('bni_write_pin', newPin);

@@ -254,6 +254,24 @@ function swrDelete(key) {
     localStorage.removeItem(SWR_PREFIX + key);
   } catch {}
 }
+
+// 共享 PIN 取得邏輯：避免並發寫入時 prompt 跳多次
+let _pinAskingPromise = null;
+async function obtainWritePin() {
+  const cached = localStorage.getItem('bni_write_pin');
+  if (cached) return cached;
+  if (_pinAskingPromise) return _pinAskingPromise;
+  _pinAskingPromise = new Promise((resolve, reject) => {
+    const pin = prompt('第一次寫入需要輸入「寫入 PIN」（分會共用，請向幹部索取）：');
+    if (pin) resolve(pin);else reject(new Error('已取消'));
+  });
+  _pinAskingPromise.finally(() => {
+    setTimeout(() => {
+      _pinAskingPromise = null;
+    }, 0);
+  });
+  return _pinAskingPromise;
+}
 const apiClient = {
   // 第三參數 onFresh：背景拿到新版時的 callback（可選）
   async get(key, shared = true, onFresh) {
@@ -311,8 +329,8 @@ const apiClient = {
     let pin = localStorage.getItem('bni_write_pin') || '';
     let res = await tryWrite(pin);
     if (res.status === 401) {
-      const newPin = prompt('第一次寫入需要輸入「寫入 PIN」（分會共用，請向幹部索取）：');
-      if (!newPin) throw new Error('已取消');
+      // 並發寫入共用同一個 prompt，使用者只會被問 1 次
+      const newPin = await obtainWritePin();
       res = await tryWrite(newPin);
       if (res.ok) {
         localStorage.setItem('bni_write_pin', newPin);
@@ -2402,6 +2420,7 @@ function CoffeeMeetingPage({
       (neededConnections || []).forEach(nc => {
         (nc.offers || []).forEach(of => {
           if (of.status === 'imported') return; // 已匯入跳過
+          if (of.wantImport === false) return; // 使用者勾選「不匯入」跳過（舊資料 undefined 視為 true）
           if (!of.contactName?.trim()) return; // 沒填姓名跳過
           results.push({
             // compositeId 加上 speakerId，避免新版多主講人時 nc.id 跨 speaker 衝突
