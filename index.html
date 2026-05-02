@@ -2474,6 +2474,7 @@ function CoffeeMeetingPage({
     total: allMeetings.length,
     done: allMeetings.filter(cm => cm.meetingStatus === 'done').length,
     pending: allMeetings.filter(cm => cm.meetingStatus === 'pending').length,
+    scheduled: allMeetings.filter(cm => cm.meetingStatus === 'scheduled').length,
     confirmed: allMeetings.filter(cm => cm.attendanceWillingness === 'confirmed').length,
     following: allMeetings.filter(cm => cm.conversionStatus === 'following').length,
     signed: allMeetings.filter(cm => cm.conversionStatus === 'signed').length,
@@ -2824,19 +2825,23 @@ function CoffeeMeetingPage({
   }), "\u5F9E\u7D44\u805A\u532F\u5165\u5F15\u85A6", /*#__PURE__*/React.createElement("span", {
     className: "absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center"
   }, importableOffers.length))), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 md:grid-cols-7 gap-2 mb-5"
+    className: "grid grid-cols-4 md:grid-cols-8 gap-2 mb-5"
   }, /*#__PURE__*/React.createElement(StatCard, {
     label: "\u7E3D\u5834\u6B21",
     value: stats.total,
     color: "#1A1414"
   }), /*#__PURE__*/React.createElement(StatCard, {
-    label: "\u5DF2\u5B8C\u6210",
-    value: stats.done,
-    color: "#8B6F47"
-  }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u9080\u7D04\u4E2D",
     value: stats.pending,
     color: "#A01E2E"
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "\u5F85\u9032\u884C",
+    value: stats.scheduled,
+    color: "#B8860B"
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "\u5DF2\u5B8C\u6210",
+    value: stats.done,
+    color: "#8B6F47"
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u78BA\u8A8D\u51FA\u5E2D",
     value: stats.confirmed,
