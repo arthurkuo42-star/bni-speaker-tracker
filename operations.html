@@ -538,6 +538,21 @@ function buildMeetingContent(meeting, group, members) {
     return hasIdentity || hasOpeners || hasFeedback || hasConnections || hasGrid;
   });
   const isChapter = isChapterMeeting(meeting);
+
+  // 來賓資料整理（用於合併到組員 sharings / feedback）
+  const guestList = (meeting.guests || []).map(g => {
+    const kind = g.kind || "member";
+    const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
+    const displayName = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
+    return {
+      name: displayName,
+      sharing: g.sharing || "",
+      feedback: g.feedback || ""
+    };
+  });
+  // 多主講人時，來賓的 feedback 歸給「第一位主講人」（單一主講人時自動成立）；
+  // 若沒有任何主講人，guest feedback 不顯示在主講人區塊（保留在來賓自己區塊就好）
+  const firstSpeakerIdx = speakers.length > 0 ? 0 : -1;
   return {
     isChapter,
     meta: {
@@ -551,17 +566,23 @@ function buildMeetingContent(meeting, group, members) {
       attendeeCount: (meeting.attendees || []).length,
       absenteeCount: (meeting.absentees || []).length
     },
-    sharings: (meeting.sharings || []).map(s => ({
+    // 成長/喜悅：組員 + 有填內容的來賓
+    sharings: [...(meeting.sharings || []).map(s => ({
       name: memberName(s.memberId),
-      content: s.content || ""
-    })),
+      content: s.content || "",
+      isGuest: false
+    })), ...guestList.filter(g => g.sharing).map(g => ({
+      name: g.name,
+      content: g.sharing,
+      isGuest: true
+    }))],
     resourceShares: (meeting.resourceShares || []).map(r => ({
       name: memberName(r.memberId),
       industry: getMember(r.memberId)?.industry || "",
       needs: r.needs || "",
       offers: r.offers || ""
     })).filter(r => r.needs || r.offers),
-    speakers: speakers.map(sp => ({
+    speakers: speakers.map((sp, spIdx) => ({
       name: sp.memberId ? memberLabel(sp.memberId) : "",
       topic: sp.topic || "",
       conversationOpeners: (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim).map(o => ({
@@ -572,10 +593,19 @@ function buildMeetingContent(meeting, group, members) {
         cta: o.cta || "",
         verbatim: o.verbatim || ""
       })),
-      feedback: (sp.feedback || []).map(f => ({
+      feedback: [
+      // 組員的建議
+      ...(sp.feedback || []).map(f => ({
         from: memberName(f.fromMemberId),
-        content: f.content || ""
+        content: f.content || "",
+        isGuest: false
       })),
+      // 第一位主講人合進有填 feedback 的來賓
+      ...(spIdx === firstSpeakerIdx ? guestList.filter(g => g.feedback).map(g => ({
+        from: g.name,
+        content: g.feedback,
+        isGuest: true
+      })) : [])].filter(f => f.content),
       neededConnections: (sp.neededConnections || []).map(nc => ({
         profileWanted: nc.profileWanted || "",
         offers: (nc.offers || []).map(of => ({
@@ -590,6 +620,7 @@ function buildMeetingContent(meeting, group, members) {
         cells: [...(sp.collaborationGrid.cells || []), "", "", "", "", "", "", "", ""].slice(0, 8)
       } : null
     })),
+    // 來賓清單 — 僅顯示「身分 + 其他回饋」，sharing/feedback 已合併到組員區塊
     guests: (meeting.guests || []).map(g => {
       const kind = g.kind || "member";
       const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
@@ -603,11 +634,9 @@ function buildMeetingContent(meeting, group, members) {
         sourceLabel,
         kind,
         hasValidIdentity,
-        sharing: g.sharing || "",
-        feedback: g.feedback || "",
         otherFeedback: g.otherFeedback || ""
       };
-    }).filter(g => g.sharing || g.feedback || g.otherFeedback || g.hasValidIdentity),
+    }).filter(g => g.otherFeedback || g.hasValidIdentity),
     referrals: (meeting.referrals || []).map(r => ({
       from: memberName(r.fromMemberId),
       to: memberName(r.toMemberId),
@@ -746,16 +775,18 @@ async function exportMeetingDocx(meeting, group, members) {
   children.push(kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`));
   if (c.meta.absenteeCount > 0) children.push(kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`));
 
-  // 成長/喜悅分享
+  // 成長/喜悅分享（含合併進來的來賓 sharings）
   if (c.sharings.length) {
     children.push(h2("成長/喜悅分享", "💬"));
     c.sharings.forEach(s => {
+      const labelText = s.name + (s.isGuest ? "（來賓）" : "") + "：";
       children.push(new d.Paragraph({
         children: [new d.TextRun({
-          text: s.name + "：",
+          text: labelText,
           font: FONT,
           size: 22,
-          bold: true
+          bold: true,
+          color: s.isGuest ? "059669" : undefined
         }), txt(s.content)],
         spacing: {
           after: 80
@@ -764,7 +795,7 @@ async function exportMeetingDocx(meeting, group, members) {
     });
   }
 
-  // 來賓分享
+  // 來賓清單（成長/喜悅 跟 對主講人建議 已合併到組員區塊；這裡只列身分 + 其他回饋）
   if (c.guests && c.guests.length) {
     children.push(h2("來賓", "🎫"));
     c.guests.forEach((g, i) => {
@@ -794,34 +825,6 @@ async function exportMeetingDocx(meeting, group, members) {
           after: 40
         }
       }));
-      if (g.sharing) {
-        children.push(new d.Paragraph({
-          children: [new d.TextRun({
-            text: "💬 成長/喜悅：",
-            font: FONT,
-            size: 22,
-            bold: true,
-            color: DARK
-          }), txt(g.sharing)],
-          spacing: {
-            after: 40
-          }
-        }));
-      }
-      if (g.feedback) {
-        children.push(new d.Paragraph({
-          children: [new d.TextRun({
-            text: "💡 對主講人建議：",
-            font: FONT,
-            size: 22,
-            bold: true,
-            color: DARK
-          }), txt(g.feedback)],
-          spacing: {
-            after: 40
-          }
-        }));
-      }
       if (g.otherFeedback) {
         children.push(new d.Paragraph({
           children: [new d.TextRun({
@@ -990,7 +993,7 @@ async function exportMeetingDocx(meeting, group, members) {
         });
       }
 
-      // 對主講人建議
+      // 對主講人建議（含合併進來的來賓 feedback，標 [來賓]）
       if (sp.feedback.length) {
         children.push(new d.Paragraph({
           children: [new d.TextRun({
@@ -1006,12 +1009,14 @@ async function exportMeetingDocx(meeting, group, members) {
           }
         }));
         sp.feedback.forEach((f, i) => {
+          const labelText = `${i + 1}. ${f.from}${f.isGuest ? "（來賓）" : ""}：`;
           children.push(new d.Paragraph({
             children: [new d.TextRun({
-              text: `${i + 1}. ${f.from}：`,
+              text: labelText,
               font: FONT,
               size: 22,
-              bold: true
+              bold: true,
+              color: f.isGuest ? "059669" : undefined
             }), txt(f.content)],
             spacing: {
               after: 40
@@ -1181,11 +1186,13 @@ async function exportMeetingDocx(meeting, group, members) {
   }
 
   // 下次組聚（全分會不顯示）
-  if (!c.isChapter && (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location)) {
+  const nextSpeakerName = c.nextMeeting.nextSpeakerId ? memberName(c.nextMeeting.nextSpeakerId) : "";
+  if (!c.isChapter && (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location || nextSpeakerName)) {
     children.push(h2("下次組聚", "📅"));
     if (c.nextMeeting.date) children.push(kv("日期", c.nextMeeting.date));
     if (c.nextMeeting.time) children.push(kv("時間", c.nextMeeting.time));
     if (c.nextMeeting.location) children.push(kv("地點", c.nextMeeting.location));
+    if (nextSpeakerName) children.push(kv("下次主講人", nextSpeakerName));
   }
 
   // 頁尾
@@ -1296,15 +1303,16 @@ function buildMeetingHtml(meeting, group, members) {
   const kv = (k, v) => `<div style="${S.kv}"><b>${esc(k)}：</b>${esc(v || "—")}</div>`;
   let sharingsBlock = "";
   if (c.sharings.length) {
-    sharingsBlock = c.sharings.map(s => `<div style="${S.item}"><b>${esc(s.name)}：</b>${esc(s.content)}</div>`).join("");
+    sharingsBlock = c.sharings.map(s => {
+      const tag = s.isGuest ? `<span style="color:#059669;font-weight:bold;font-size:10pt;">（來賓）</span>` : "";
+      return `<div style="${S.item}"><b${s.isGuest ? ` style="color:#059669;"` : ""}>${esc(s.name)}${tag}：</b>${esc(s.content)}</div>`;
+    }).join("");
   }
   let guestsBlock = "";
   if (c.guests && c.guests.length) {
     guestsBlock = c.guests.map((g, i) => {
       const title = `${i + 1}. <b style="color:#059669;">${esc(g.name)}</b>` + (g.industry ? `（${esc(g.industry)}）` : "") + ` <span style="color:#888;font-size:10pt;">· ${esc(g.sourceLabel)}</span>`;
       const rows = [];
-      if (g.sharing) rows.push(`<div style="${S.item}"><b>💬 成長/喜悅：</b>${esc(g.sharing)}</div>`);
-      if (g.feedback) rows.push(`<div style="${S.item}"><b>💡 對主講人建議：</b>${esc(g.feedback)}</div>`);
       if (g.otherFeedback) rows.push(`<div style="${S.item}"><b>📝 其他回饋：</b>${esc(g.otherFeedback)}</div>`);
       return `<div style="${S.ncBlock}"><div style="${S.ncTitle}">${title}</div>${rows.join("")}</div>`;
     }).join("");
@@ -1342,11 +1350,12 @@ function buildMeetingHtml(meeting, group, members) {
         });
       }
 
-      // 對主講人建議
+      // 對主講人建議（含合併進來的來賓 feedback，標 [來賓]）
       if (sp.feedback.length) {
         parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">💡 對 ${esc(sp.name || "主講人")} 的建議</div>`);
         sp.feedback.forEach((f, i) => {
-          parts.push(`<div style="${S.item}">${i + 1}. <b>${esc(f.from)}：</b>${esc(f.content)}</div>`);
+          const tag = f.isGuest ? `<span style="color:#059669;font-size:10pt;">（來賓）</span>` : "";
+          parts.push(`<div style="${S.item}">${i + 1}. <b${f.isGuest ? ` style="color:#059669;"` : ""}>${esc(f.from)}${tag}：</b>${esc(f.content)}</div>`);
         });
       }
 
@@ -1395,8 +1404,9 @@ function buildMeetingHtml(meeting, group, members) {
     referralsBlock = rows + total;
   }
   let nextBlock = "";
-  if (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location) {
-    nextBlock = (c.nextMeeting.date ? kv("日期", c.nextMeeting.date) : "") + (c.nextMeeting.time ? kv("時間", c.nextMeeting.time) : "") + (c.nextMeeting.location ? kv("地點", c.nextMeeting.location) : "");
+  const nextSpName = c.nextMeeting.nextSpeakerId ? members.find(m => m.id === c.nextMeeting.nextSpeakerId)?.name || "" : "";
+  if (c.nextMeeting.date || c.nextMeeting.time || c.nextMeeting.location || nextSpName) {
+    nextBlock = (c.nextMeeting.date ? kv("日期", c.nextMeeting.date) : "") + (c.nextMeeting.time ? kv("時間", c.nextMeeting.time) : "") + (c.nextMeeting.location ? kv("地點", c.nextMeeting.location) : "") + (nextSpName ? kv("下次主講人", nextSpName) : "");
   }
   return `<div style="${S.root}">
 <div style="${S.h1}">${c.isChapter ? "BNI 富鼎分會 全分會會議記錄" : "BNI 富鼎分會 組聚記錄"}</div>
@@ -1430,16 +1440,14 @@ async function exportMeetingPdf(meeting, group, members) {
     return null;
   }
   const htmlFragment = buildMeetingHtml(meeting, group, members);
-  // 建一個螢幕內可見但透明的容器讓 html2canvas 能正常截圖
+  // 把容器放螢幕外（不要用 opacity:0，因為 html2canvas 會跳過 opacity:0 的元素變成空白 PDF）
   const container = document.createElement("div");
   container.innerHTML = htmlFragment;
-  container.style.position = "absolute";
-  container.style.left = "0";
+  container.style.position = "fixed";
+  container.style.left = "-9999px"; // 螢幕外，不影響使用者畫面但仍正常渲染
   container.style.top = "0";
   container.style.width = "794px"; // 210mm @ 96dpi ≈ 794px
   container.style.background = "white";
-  container.style.zIndex = "-1"; // 藏在所有東西後面
-  container.style.opacity = "0"; // 視覺上看不到
   container.style.pointerEvents = "none";
   document.body.appendChild(container);
 
@@ -2474,9 +2482,10 @@ function MeetingForm({
     nextMeeting: {
       date: "",
       time: "",
-      location: ""
+      location: "",
+      nextSpeakerId: ""
     },
-    // 5.（組聚專用）下次組聚
+    // 5.（組聚專用）下次組聚 + 下次主講人
     discussion: "",
     actionItems: [],
     // actionItems 保留欄位但 UI 已移除（舊資料相容）
@@ -2496,9 +2505,18 @@ function MeetingForm({
         nextMeeting: {
           date: "",
           time: "",
-          location: ""
+          location: "",
+          nextSpeakerId: ""
         },
         ...p
+      };
+      // 確保 nextMeeting 有完整欄位（舊資料可能沒 nextSpeakerId）
+      next.nextMeeting = {
+        date: "",
+        time: "",
+        location: "",
+        nextSpeakerId: "",
+        ...next.nextMeeting
       };
       // 舊 schema 遷移：speaker / conversationOpeners / feedback / neededConnections → speakers[0]
       const hasLegacy = !Array.isArray(p.speakers) || p.speakers.length === 0;
@@ -2819,6 +2837,21 @@ function MeetingForm({
   const pendingResourceMembers = attendingMembers.filter(m => !resourceSharedIds.includes(m.id));
   // 主講人 memberId 集合（用於排除回饋下拉中的主講人自己）
   const speakerMemberIds = (form.speakers || []).map(sp => sp.memberId).filter(Boolean);
+  // 引薦候選：出席組員 + 是分會會員的來賓（kind=member 且有 memberId，外部來賓不列）
+  const referralCandidates = useMemo(() => {
+    const seen = new Set(attendingMembers.map(m => m.id));
+    const list = [...attendingMembers];
+    (form.guests || []).forEach(g => {
+      if (g.kind === "member" && g.memberId && !seen.has(g.memberId)) {
+        const m = members.find(x => x.id === g.memberId);
+        if (m) {
+          list.push(m);
+          seen.add(m.id);
+        }
+      }
+    });
+    return list;
+  }, [attendingMembers, form.guests, members]);
   // pendingFeedbackMembersFor: 回傳一個 fn，給 speakerCard 用
   const pendingFeedbackMembersFor = sp => {
     const fbIds = (sp.feedback || []).map(f => f.fromMemberId);
@@ -3355,7 +3388,7 @@ function MeetingForm({
       }, /*#__PURE__*/React.createElement("div", {
         className: "grid grid-cols-[110px_1fr_auto] gap-1.5 items-center mb-1"
       }, /*#__PURE__*/React.createElement(MemberSelect, {
-        members: attendingMembers,
+        members: referralCandidates,
         value: of.introducerId,
         onChange: v => updOffer(sp.id, nc.id, of.id, "introducerId", v),
         placeholder: "\u9080\u7D04\u4EBA"
@@ -3421,14 +3454,14 @@ function MeetingForm({
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-xs font-bold text-stone-400"
   }, "#", i + 1), /*#__PURE__*/React.createElement(MemberSelect, {
-    members: attendingMembers,
+    members: groupMembers,
     value: r.fromMemberId,
     onChange: v => updReferral(r.id, "fromMemberId", v),
     placeholder: "\u5F15\u85A6\u4EBA"
   }), /*#__PURE__*/React.createElement(ArrowRightLeft, {
     className: "w-3 h-3 text-stone-400"
   }), /*#__PURE__*/React.createElement(MemberSelect, {
-    members: attendingMembers,
+    members: groupMembers,
     value: r.toMemberId,
     onChange: v => updReferral(r.id, "toMemberId", v),
     placeholder: "\u6536\u5230\u5F15\u85A6"
@@ -3508,6 +3541,18 @@ function MeetingForm({
     }),
     placeholder: form.location || "例：事務所會議室...",
     className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "mt-2"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "text-xs text-stone-500"
+  }, "\u4E0B\u6B21\u4E3B\u8B1B\u4EBA\uFF08\u9078\u586B\uFF09"), /*#__PURE__*/React.createElement(MemberSelect, {
+    members: group ? members.filter(m => group.memberIds?.includes(m.id)) : members,
+    value: form.nextMeeting?.nextSpeakerId || "",
+    onChange: v => set("nextMeeting", {
+      ...form.nextMeeting,
+      nextSpeakerId: v || ""
+    }),
+    placeholder: "\uFF08\u9078\u586B\uFF0C\u53EF\u5F8C\u7E8C\u518D\u6C7A\u5B9A\uFF09"
   }))), /*#__PURE__*/React.createElement(FormSection, {
     title: "\u5176\u4ED6\u8A0E\u8AD6",
     defaultOpen: false,
@@ -3594,11 +3639,10 @@ function MeetingCard({
   const attendRate = totalPool ? (meeting.attendees.length / totalPool * 100).toFixed(0) : 0;
 
   // 6 大欄位統計
-  const sharings = meeting.sharings || [];
   const resourceShares = (meeting.resourceShares || []).filter(r => r.needs || r.offers);
   const guests = meeting.guests || [];
-  // 來賓：計算顯示名稱 + 過濾空卡片（與匯出一致）
-  const visibleGuests = guests.map(g => {
+  // 來賓 helper（顯示名稱 + 標籤）
+  const guestDerived = guests.map(g => {
     const kind = g.kind || "member";
     const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
     const name = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
@@ -3616,7 +3660,28 @@ function MeetingCard({
       feedback: g.feedback || "",
       otherFeedback: g.otherFeedback || ""
     };
-  }).filter(vg => vg.sharing || vg.feedback || vg.otherFeedback || vg.hasValidIdentity);
+  });
+  // 卡片中的「來賓」區塊：移除 sharing/feedback（已合併到組員區塊），只顯示 otherFeedback 跟身分
+  const visibleGuests = guestDerived.filter(vg => vg.otherFeedback || vg.hasValidIdentity);
+  // 成長/喜悅：合併組員 + 有填的來賓
+  const sharings = [...(meeting.sharings || []).map(s => ({
+    id: s.id,
+    name: getMember(s.memberId)?.name || "?",
+    content: s.content,
+    isGuest: false
+  })), ...guestDerived.filter(g => g.sharing).map(g => ({
+    id: "g-share-" + g.id,
+    name: g.name,
+    content: g.sharing,
+    isGuest: true
+  }))];
+  // 來賓給主講人的 feedback（合併到第一位主講人的 feedback 列表用）
+  const guestFeedbackList = guestDerived.filter(g => g.feedback).map(g => ({
+    id: "g-fb-" + g.id,
+    fromName: g.name,
+    content: g.feedback,
+    isGuest: true
+  }));
 
   // 主講人陣列（含舊單主講相容）
   let allSpeakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
@@ -3802,10 +3867,12 @@ function MeetingCard({
     className: "space-y-1"
   }, sharings.map(s => /*#__PURE__*/React.createElement("div", {
     key: s.id,
-    className: "text-xs bg-amber-50/50 rounded p-1.5"
+    className: `text-xs rounded p-1.5 ${s.isGuest ? "bg-emerald-50/40" : "bg-amber-50/50"}`
   }, /*#__PURE__*/React.createElement("b", {
-    className: "text-[#B8860B]"
-  }, getMember(s.memberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+    className: s.isGuest ? "text-emerald-700" : "text-[#B8860B]"
+  }, s.name, s.isGuest && /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-stone-500"
+  }, "\uFF08\u4F86\u8CD3\uFF09"), "\uFF1A"), /*#__PURE__*/React.createElement("span", {
     className: "text-stone-700"
   }, s.content || "（未填）"))))), visibleGuests.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
@@ -3824,15 +3891,7 @@ function MeetingCard({
     className: "text-stone-600"
   }, " \xB7 ", vg.industry), /*#__PURE__*/React.createElement("span", {
     className: "text-[10px] text-stone-500 ml-1"
-  }, "[", vg.sourceLabel, "]")), vg.sharing && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\uD83D\uDCAC \u6210\u9577/\u559C\u6085\uFF1A"), vg.sharing), vg.feedback && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\uD83D\uDCA1 \u5C0D\u4E3B\u8B1B\u4EBA\uFF1A"), vg.feedback), vg.otherFeedback && /*#__PURE__*/React.createElement("div", {
+  }, "[", vg.sourceLabel, "]")), vg.otherFeedback && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-700"
   }, /*#__PURE__*/React.createElement("b", {
     className: "text-stone-600"
@@ -3866,7 +3925,13 @@ function MeetingCard({
     const m = getMember(sp.memberId);
     const speakerName = m?.name || "（未指定）";
     const filledOpeners = (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
-    const fb = sp.feedback || [];
+    // 第一位主講人合併進來賓給的 feedback
+    const fb = [...(sp.feedback || []).map(f => ({
+      id: f.id,
+      fromName: getMember(f.fromMemberId)?.name || "?",
+      content: f.content,
+      isGuest: false
+    })), ...(spIdx === 0 ? guestFeedbackList : [])].filter(f => f.content);
     const nc = sp.neededConnections || [];
     const grid = sp.collaborationGrid;
     const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
@@ -3918,10 +3983,12 @@ function MeetingCard({
       className: "space-y-1"
     }, fb.map(f => /*#__PURE__*/React.createElement("div", {
       key: f.id,
-      className: "text-xs bg-blue-50/50 rounded p-1.5"
+      className: `text-xs rounded p-1.5 ${f.isGuest ? "bg-emerald-50/40" : "bg-blue-50/50"}`
     }, /*#__PURE__*/React.createElement("b", {
-      className: "text-blue-700"
-    }, getMember(f.fromMemberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+      className: f.isGuest ? "text-emerald-700" : "text-blue-700"
+    }, f.fromName, f.isGuest && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-stone-500"
+    }, "\uFF08\u4F86\u8CD3\uFF09"), "\uFF1A"), /*#__PURE__*/React.createElement("span", {
       className: "text-stone-700"
     }, f.content || "（未填）"))))), hasGrid && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       className: "text-[11px] font-semibold text-stone-600 mb-1"
@@ -3979,13 +4046,15 @@ function MeetingCard({
     className: "ml-1 text-emerald-700 font-semibold"
   }, "NT$", Number(r.amount).toLocaleString()), r.content && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-600 mt-0.5"
-  }, r.content))))), !isChapter && nextMeeting.date && /*#__PURE__*/React.createElement("div", {
-    className: "bg-stone-50 rounded-lg p-2 flex items-center gap-2"
+  }, r.content))))), !isChapter && (nextMeeting.date || nextMeeting.nextSpeakerId) && /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg p-2 flex items-center gap-2 flex-wrap"
   }, /*#__PURE__*/React.createElement(Calendar, {
     className: "w-3.5 h-3.5 text-stone-500"
   }), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), fmtDate(nextMeeting.date), nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location))))));
+  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), nextMeeting.date ? fmtDate(nextMeeting.date) : "—", nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location)), nextMeeting.nextSpeakerId && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u4E3B\u8B1B\uFF1A"), getMember(nextMeeting.nextSpeakerId)?.name || "—")))));
 }
 
 // ============ 會議檢視 Modal（唯讀，5 秒自動同步 + 手動重新整理）============
@@ -4054,8 +4123,8 @@ function MeetingViewModal({
   const attendRate = totalPool ? (meeting.attendees.length / totalPool * 100).toFixed(0) : 0;
   const secondsAgo = Math.floor((Date.now() - lastSyncedAt) / 1000);
 
-  // 來賓
-  const visibleGuests = (meeting.guests || []).map(g => {
+  // 來賓 helper
+  const guestDerived = (meeting.guests || []).map(g => {
     const kind = g.kind || "member";
     const linked = kind === "member" && g.memberId ? getMember(g.memberId) : null;
     const name = kind === "member" ? linked ? linked.name : "（未選擇會員）" : g.name || "（未填姓名）";
@@ -4072,7 +4141,14 @@ function MeetingViewModal({
       feedback: g.feedback || "",
       otherFeedback: g.otherFeedback || ""
     };
-  }).filter(vg => vg.sharing || vg.feedback || vg.otherFeedback || vg.hasValidIdentity);
+  });
+  const visibleGuests = guestDerived.filter(vg => vg.otherFeedback || vg.hasValidIdentity);
+  const guestFeedbackList = guestDerived.filter(g => g.feedback).map(g => ({
+    id: "g-fb-" + g.id,
+    fromName: g.name,
+    content: g.feedback,
+    isGuest: true
+  }));
 
   // 主講人（含舊單主講相容）
   let allSpeakers = Array.isArray(meeting.speakers) ? meeting.speakers : [];
@@ -4099,7 +4175,19 @@ function MeetingViewModal({
     const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
     return hasIdentity || hasOpeners || hasFeedback || hasConnections || hasGrid;
   });
-  const sharings = meeting.sharings || [];
+
+  // 成長/喜悅：合併組員 + 有填的來賓
+  const sharings = [...(meeting.sharings || []).map(s => ({
+    id: s.id,
+    name: getMember(s.memberId)?.name || "?",
+    content: s.content,
+    isGuest: false
+  })), ...guestDerived.filter(g => g.sharing).map(g => ({
+    id: "g-share-" + g.id,
+    name: g.name,
+    content: g.sharing,
+    isGuest: true
+  }))];
   const resourceShares = (meeting.resourceShares || []).filter(r => r.needs || r.offers);
   const referrals = meeting.referrals || [];
   const referralTotal = referrals.reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -4177,10 +4265,12 @@ function MeetingViewModal({
     className: "space-y-1"
   }, sharings.map(s => /*#__PURE__*/React.createElement("div", {
     key: s.id,
-    className: "bg-amber-50/50 rounded p-2"
+    className: `rounded p-2 ${s.isGuest ? "bg-emerald-50/40" : "bg-amber-50/50"}`
   }, /*#__PURE__*/React.createElement("b", {
-    className: "text-[#B8860B]"
-  }, getMember(s.memberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+    className: s.isGuest ? "text-emerald-700" : "text-[#B8860B]"
+  }, s.name, s.isGuest && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500"
+  }, "\uFF08\u4F86\u8CD3\uFF09"), "\uFF1A"), /*#__PURE__*/React.createElement("span", {
     className: "text-stone-700"
   }, s.content || "（未填）"))))), visibleGuests.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
@@ -4199,15 +4289,7 @@ function MeetingViewModal({
     className: "text-stone-600"
   }, " \xB7 ", vg.industry), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-stone-500 ml-1"
-  }, "[", vg.sourceLabel, "]")), vg.sharing && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\uD83D\uDCAC \u6210\u9577/\u559C\u6085\uFF1A"), vg.sharing), vg.feedback && /*#__PURE__*/React.createElement("div", {
-    className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", {
-    className: "text-stone-600"
-  }, "\uD83D\uDCA1 \u5C0D\u4E3B\u8B1B\u4EBA\uFF1A"), vg.feedback), vg.otherFeedback && /*#__PURE__*/React.createElement("div", {
+  }, "[", vg.sourceLabel, "]")), vg.otherFeedback && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-700"
   }, /*#__PURE__*/React.createElement("b", {
     className: "text-stone-600"
@@ -4241,7 +4323,13 @@ function MeetingViewModal({
     const m = getMember(sp.memberId);
     const speakerName = m?.name || "（未指定）";
     const filledOpeners = (sp.conversationOpeners || []).filter(o => o.who || o.yesno || o.tagline || o.cta || o.painSolution || o.verbatim);
-    const fb = sp.feedback || [];
+    // 第一位主講人合併進來賓的 feedback
+    const fb = [...(sp.feedback || []).map(f => ({
+      id: f.id,
+      fromName: getMember(f.fromMemberId)?.name || "?",
+      content: f.content,
+      isGuest: false
+    })), ...(spIdx === 0 ? guestFeedbackList : [])].filter(f => f.content);
     const nc = sp.neededConnections || [];
     const grid = sp.collaborationGrid;
     const hasGrid = grid && (grid.centerProfile || (grid.cells || []).some(c => c));
@@ -4297,10 +4385,12 @@ function MeetingViewModal({
       className: "space-y-1"
     }, fb.map(f => /*#__PURE__*/React.createElement("div", {
       key: f.id,
-      className: "text-xs bg-blue-50/50 rounded p-1.5"
+      className: `text-xs rounded p-1.5 ${f.isGuest ? "bg-emerald-50/40" : "bg-blue-50/50"}`
     }, /*#__PURE__*/React.createElement("b", {
-      className: "text-blue-700"
-    }, getMember(f.fromMemberId)?.name || "?", "\uFF1A"), /*#__PURE__*/React.createElement("span", {
+      className: f.isGuest ? "text-emerald-700" : "text-blue-700"
+    }, f.fromName, f.isGuest && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-stone-500"
+    }, "\uFF08\u4F86\u8CD3\uFF09"), "\uFF1A"), /*#__PURE__*/React.createElement("span", {
       className: "text-stone-700"
     }, f.content || "（未填）"))))), hasGrid && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       className: "text-xs font-bold text-stone-700 mb-1"
@@ -4363,13 +4453,15 @@ function MeetingViewModal({
     className: "ml-1 text-emerald-700 font-semibold"
   }, "NT$", Number(r.amount).toLocaleString()), r.content && /*#__PURE__*/React.createElement("div", {
     className: "text-stone-600 mt-0.5"
-  }, r.content))))), !isChapter && nextMeeting.date && /*#__PURE__*/React.createElement("div", {
-    className: "bg-stone-50 rounded-lg p-3 flex items-center gap-2"
+  }, r.content))))), !isChapter && (nextMeeting.date || nextMeeting.nextSpeakerId) && /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg p-3 flex items-center gap-3 flex-wrap"
   }, /*#__PURE__*/React.createElement(Calendar, {
     className: "w-4 h-4 text-stone-500"
   }), /*#__PURE__*/React.createElement("span", {
     className: "text-stone-700"
-  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), fmtDate(nextMeeting.date), nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location))), meeting.discussion && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u7D44\u805A\uFF1A"), nextMeeting.date ? fmtDate(nextMeeting.date) : "—", nextMeeting.time && /*#__PURE__*/React.createElement("span", null, " ", nextMeeting.time), nextMeeting.location && /*#__PURE__*/React.createElement("span", null, " \xB7 ", nextMeeting.location)), nextMeeting.nextSpeakerId && /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-700"
+  }, /*#__PURE__*/React.createElement("b", null, "\u4E0B\u6B21\u4E3B\u8B1B\uFF1A"), getMember(nextMeeting.nextSpeakerId)?.name || "—")), meeting.discussion && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-bold text-stone-700 mb-1"
   }, "\u5176\u4ED6\u8A0E\u8AD6"), /*#__PURE__*/React.createElement("div", {
     className: "bg-stone-50 rounded p-2 text-stone-700 whitespace-pre-wrap"
