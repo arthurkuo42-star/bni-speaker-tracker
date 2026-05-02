@@ -2374,11 +2374,11 @@ function CoffeeMeetingPage({
   saveData,
   showToast
 }) {
-  // 預設只看「待進行」的咖啡會議（最常用的工作清單），可手動切換為「所有狀態」看全部
+  // 預設只看「待進行」的咖啡會議（最常用的工作清單），多選 → 空陣列代表「全部」
   const [filter, setFilter] = useState({
     inviterId: '',
-    status: 'scheduled',
-    conversion: '',
+    statuses: ['scheduled'],
+    conversions: [],
     search: ''
   });
   const [editingId, setEditingId] = useState(null);
@@ -2386,6 +2386,12 @@ function CoffeeMeetingPage({
   const [groupMeetings, setGroupMeetings] = useState([]); // 從運營台讀組聚
   const [importPanelOpen, setImportPanelOpen] = useState(false);
   const [selectedOffers, setSelectedOffers] = useState(new Set());
+
+  // 逐筆確認流程：reviewQueue=待確認的 offer 列表；reviewIdx=當前處理到第幾筆；reviewDraft=當前可編輯的草稿；confirmedDrafts=已確認待儲存的
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const [reviewIdx, setReviewIdx] = useState(0);
+  const [reviewDraft, setReviewDraft] = useState(null);
+  const [confirmedDrafts, setConfirmedDrafts] = useState([]);
   const memberById = useMemo(() => {
     const map = {};
     data.members.forEach(m => {
@@ -2454,8 +2460,8 @@ function CoffeeMeetingPage({
   const filtered = useMemo(() => {
     let result = [...allMeetings];
     if (filter.inviterId) result = result.filter(cm => cm.inviterId === filter.inviterId);
-    if (filter.status) result = result.filter(cm => cm.meetingStatus === filter.status);
-    if (filter.conversion) result = result.filter(cm => (cm.conversionStatus || 'none') === filter.conversion);
+    if (filter.statuses && filter.statuses.length > 0) result = result.filter(cm => filter.statuses.includes(cm.meetingStatus || 'pending'));
+    if (filter.conversions && filter.conversions.length > 0) result = result.filter(cm => filter.conversions.includes(cm.conversionStatus || 'none'));
     if (filter.search) {
       const q = filter.search.toLowerCase();
       result = result.filter(cm => (cm.guestName || '').toLowerCase().includes(q) || (cm.guestIndustry || '').toLowerCase().includes(q));
@@ -2489,7 +2495,11 @@ function CoffeeMeetingPage({
       guestName: '',
       guestIndustry: '',
       inviterId: presetInviterId || '',
+      presenterId: '',
+      // 主講人（選填）
       meetingTime: '',
+      location: '',
+      // 地點（選填）
       meetingStatus: 'pending',
       attendanceWillingness: 'pending',
       attendanceTime: '',
@@ -2542,7 +2552,160 @@ function CoffeeMeetingPage({
     showToast('已刪除');
   };
 
-  // 將勾選的組聚 offer 匯入成 coffee meeting
+  // 從 offer 建立可編輯草稿（review 階段每筆都會初始化一份）
+  const makeDraftFromOffer = o => {
+    const introducer = o.introducerId ? memberById[o.introducerId] : null;
+    const note = `由 ${introducer?.name || '組員'} 引薦（${formatDate(o.meetingDate)} 組聚）` + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
+    return {
+      __offerCompositeId: o.compositeId,
+      // 用來最終回寫 imported 狀態
+      guestName: o.contactName || '',
+      guestIndustry: o.contactProfession || '',
+      inviterId: o.speakerId,
+      // 主講人就是要邀來聽他講的人 → 變成此咖啡會議的邀約人
+      presenterId: o.speakerId,
+      // 同時也存為主講人（之後要把客戶帶來聽他）
+      meetingTime: '',
+      // 留空讓使用者填
+      location: '',
+      meetingStatus: 'pending',
+      // 預設邀約中
+      attendanceWillingness: 'pending',
+      attendanceTime: '',
+      conversionStatus: 'none',
+      notes: note
+    };
+  };
+
+  // 開始逐筆確認流程
+  const startReview = () => {
+    const selected = importableOffers.filter(o => selectedOffers.has(o.compositeId));
+    if (selected.length === 0) {
+      showToast('請先勾選要匯入的項目', 'error');
+      return;
+    }
+    setReviewQueue(selected);
+    setReviewIdx(0);
+    setReviewDraft(makeDraftFromOffer(selected[0]));
+    setConfirmedDrafts([]);
+    setImportPanelOpen(false); // 關掉勾選面板，切到逐筆確認
+  };
+
+  // 確認此筆：把 draft 加入 confirmedDrafts；最後一筆 → 觸發 finalize
+  const reviewConfirmCurrent = () => {
+    const newConfirmed = [...confirmedDrafts, reviewDraft];
+    advanceReview(newConfirmed);
+  };
+  // 跳過此筆：不加入 confirmedDrafts，直接 advance
+  const reviewSkipCurrent = () => {
+    advanceReview(confirmedDrafts);
+  };
+  // 推進到下一筆，或結束
+  const advanceReview = currentConfirmed => {
+    const nextIdx = reviewIdx + 1;
+    if (nextIdx >= reviewQueue.length) {
+      // 已到最後 → 收尾儲存
+      finalizeReview(currentConfirmed);
+    } else {
+      setConfirmedDrafts(currentConfirmed);
+      setReviewIdx(nextIdx);
+      setReviewDraft(makeDraftFromOffer(reviewQueue[nextIdx]));
+    }
+  };
+  // 取消整個逐筆確認流程（已確認的依使用者選擇是否保留）
+  const cancelReview = () => {
+    if (confirmedDrafts.length === 0) {
+      // 沒確認過任何 → 直接清空
+      resetReviewState();
+      return;
+    }
+    if (confirm(`已確認 ${confirmedDrafts.length} 筆，是否儲存這些已確認的，或全部放棄？\n\n按「確定」儲存已確認的，按「取消」全部放棄。`)) {
+      finalizeReview(confirmedDrafts);
+    } else {
+      resetReviewState();
+    }
+  };
+  const resetReviewState = () => {
+    setReviewQueue([]);
+    setReviewIdx(0);
+    setReviewDraft(null);
+    setConfirmedDrafts([]);
+    setSelectedOffers(new Set());
+  };
+
+  // 收尾：把所有已確認的 draft 寫進 coffeeMeetings + 對應 group meeting offer 標記 imported
+  const finalizeReview = async allConfirmed => {
+    if (allConfirmed.length === 0) {
+      showToast('沒有要儲存的項目');
+      resetReviewState();
+      return;
+    }
+    const now = new Date().toISOString();
+    const newCms = allConfirmed.map((d, i) => ({
+      id: `cm_${Date.now()}_${i}`,
+      guestName: d.guestName,
+      guestIndustry: d.guestIndustry,
+      inviterId: d.inviterId,
+      presenterId: d.presenterId || '',
+      meetingTime: d.meetingTime || '',
+      location: d.location || '',
+      meetingStatus: d.meetingStatus || 'pending',
+      attendanceWillingness: d.attendanceWillingness || 'pending',
+      attendanceTime: d.attendanceTime || '',
+      conversionStatus: d.conversionStatus || 'none',
+      notes: d.notes || '',
+      sourceGroupMeetingCompositeId: d.__offerCompositeId,
+      createdAt: now
+    }));
+    saveData({
+      ...data,
+      coffeeMeetings: [...allMeetings, ...newCms]
+    });
+
+    // 回寫組聚：把對應 offer 標 imported（兼容新舊 schema，跟原本 doImport 一樣）
+    const confirmedKeys = new Set(allConfirmed.map(d => d.__offerCompositeId));
+    const markOffer = (gm, speakerId, of, ncId) => {
+      const key = gm.id + ':' + speakerId + ':' + ncId + ':' + of.id;
+      if (!confirmedKeys.has(key)) return of;
+      return {
+        ...of,
+        status: 'imported',
+        importedAt: now
+      };
+    };
+    const updatedGroupMeetings = groupMeetings.map(gm => {
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        return {
+          ...gm,
+          speakers: gm.speakers.map(sp => ({
+            ...sp,
+            neededConnections: (sp.neededConnections || []).map(nc => ({
+              ...nc,
+              offers: (nc.offers || []).map(of => markOffer(gm, sp.memberId, of, nc.id))
+            }))
+          }))
+        };
+      }
+      const oldSpeakerId = gm.speaker?.memberId || '';
+      return {
+        ...gm,
+        neededConnections: (gm.neededConnections || []).map(nc => ({
+          ...nc,
+          offers: (nc.offers || []).map(of => markOffer(gm, oldSpeakerId, of, nc.id))
+        }))
+      };
+    });
+    try {
+      await apiClient.set('bni_group_meetings_v1', JSON.stringify(updatedGroupMeetings), true);
+      setGroupMeetings(updatedGroupMeetings);
+      showToast(`已匯入 ${allConfirmed.length} 筆引薦為咖啡會議`);
+    } catch (e) {
+      showToast('匯入成功但回寫組聚失敗，下次可能會重複顯示：' + e.message, 'error');
+    }
+    resetReviewState();
+  };
+
+  // 將勾選的組聚 offer 直接匯入（保留舊邏輯，但目前 UI 已改用 startReview，這個函式僅作備用）
   const doImport = async () => {
     const selected = importableOffers.filter(o => selectedOffers.has(o.compositeId));
     if (selected.length === 0) {
@@ -2722,41 +2885,52 @@ function CoffeeMeetingPage({
     }),
     placeholder: "\u6240\u6709\u9080\u7D04\u4EBA",
     showIndustry: false
-  })), /*#__PURE__*/React.createElement("select", {
-    value: filter.status,
-    onChange: e => setFilter({
+  })), /*#__PURE__*/React.createElement(MultiSelectFilter, {
+    label: "\u72C0\u614B",
+    allText: "\u6240\u6709\u72C0\u614B",
+    values: filter.statuses || [],
+    onChange: vals => setFilter({
       ...filter,
-      status: e.target.value
+      statuses: vals
     }),
-    className: "px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\u6240\u6709\u72C0\u614B"), /*#__PURE__*/React.createElement("option", {
-    value: "pending"
-  }, "\u9080\u7D04\u4E2D"), /*#__PURE__*/React.createElement("option", {
-    value: "scheduled"
-  }, "\u5F85\u9032\u884C"), /*#__PURE__*/React.createElement("option", {
-    value: "done"
-  }, "\u5DF2\u5B8C\u6210"), /*#__PURE__*/React.createElement("option", {
-    value: "cancelled"
-  }, "\u5DF2\u53D6\u6D88")), /*#__PURE__*/React.createElement("select", {
-    value: filter.conversion,
-    onChange: e => setFilter({
+    options: [{
+      value: 'pending',
+      label: '邀約中'
+    }, {
+      value: 'scheduled',
+      label: '待進行'
+    }, {
+      value: 'done',
+      label: '已完成'
+    }, {
+      value: 'cancelled',
+      label: '已取消'
+    }]
+  }), /*#__PURE__*/React.createElement(MultiSelectFilter, {
+    label: "\u8F49\u5316",
+    allText: "\u6240\u6709\u8F49\u5316",
+    values: filter.conversions || [],
+    onChange: vals => setFilter({
       ...filter,
-      conversion: e.target.value
+      conversions: vals
     }),
-    className: "px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\u6240\u6709\u8F49\u5316"), /*#__PURE__*/React.createElement("option", {
-    value: "following"
-  }, "\u8DDF\u9032\u4E2D"), /*#__PURE__*/React.createElement("option", {
-    value: "signed"
-  }, "\u5DF2\u7C3D\u55AE"), /*#__PURE__*/React.createElement("option", {
-    value: "paid"
-  }, "\u5DF2\u7E73\u8CBB"), /*#__PURE__*/React.createElement("option", {
-    value: "sworn"
-  }, "\u5DF2\u5BA3\u8A93")), /*#__PURE__*/React.createElement("button", {
+    options: [{
+      value: 'none',
+      label: '不再追蹤'
+    }, {
+      value: 'following',
+      label: '跟進中'
+    }, {
+      value: 'signed',
+      label: '已簽單'
+    }, {
+      value: 'paid',
+      label: '已繳費'
+    }, {
+      value: 'sworn',
+      label: '已宣誓'
+    }]
+  }), /*#__PURE__*/React.createElement("button", {
     onClick: () => openNew(),
     className: "px-4 py-1.5 text-sm text-white rounded-md flex items-center gap-1",
     style: {
@@ -2778,6 +2952,7 @@ function CoffeeMeetingPage({
     key: cm.id,
     cm: cm,
     inviter: memberById[cm.inviterId],
+    presenter: cm.presenterId ? memberById[cm.presenterId] : null,
     onEdit: () => openEdit(cm),
     onDelete: () => deleteMeeting(cm.id)
   }))), editingId && /*#__PURE__*/React.createElement(CoffeeMeetingModal, {
@@ -2800,7 +2975,7 @@ function CoffeeMeetingPage({
     }
   }, "\u5F9E\u7D44\u805A\u532F\u5165\u5F15\u85A6\u610F\u5411"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mt-0.5"
-  }, "\u52FE\u9078\u8981\u6B63\u5F0F\u8F49\u70BA\u5496\u5561\u6703\u8B70\u7684\u5F15\u85A6\uFF08\u72C0\u614B\u6703\u8A2D\u70BA\u300C\u9080\u7D04\u4E2D\u300D\uFF09")), /*#__PURE__*/React.createElement("button", {
+  }, "\u52FE\u9078\u8981\u8F49\u70BA\u5496\u5561\u6703\u8B70\u7684\u5F15\u85A6 \u2192 \u4E0B\u4E00\u6B65\u6703\u9010\u7B46\u8B93\u4F60\u78BA\u8A8D/\u4FEE\u6539\u7D30\u7BC0")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setImportPanelOpen(false),
     className: "p-1.5 hover:bg-stone-100 rounded-lg"
   }, /*#__PURE__*/React.createElement(X, {
@@ -2858,13 +3033,149 @@ function CoffeeMeetingPage({
     onClick: () => setImportPanelOpen(false),
     className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white"
   }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
-    onClick: doImport,
+    onClick: startReview,
     disabled: selectedOffers.size === 0,
     className: "px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40",
     style: {
       background: '#B8860B'
     }
-  }, "\u532F\u5165 ", selectedOffers.size, " \u7B46")))));
+  }, "\u4E0B\u4E00\u6B65\uFF1A\u9010\u7B46\u78BA\u8A8D ", selectedOffers.size, " \u7B46 \u2192")))), reviewDraft && reviewQueue.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-white w-full max-w-2xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between px-5 py-4 border-b border-stone-200 sm:rounded-t-2xl flex-shrink-0"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "text-lg font-bold",
+    style: {
+      color: '#1A1414'
+    }
+  }, "\u9010\u7B46\u78BA\u8A8D\u532F\u5165\uFF08", reviewIdx + 1, " / ", reviewQueue.length, "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mt-0.5"
+  }, "\u539F\u7D44\u805A\u8CC7\u8A0A\uFF1A", (() => {
+    const o = reviewQueue[reviewIdx];
+    const sp = memberById[o.speakerId];
+    const intro = o.introducerId ? memberById[o.introducerId] : null;
+    return `${formatDate(o.meetingDate)} 組聚 · 主講人 ${sp?.name || '?'}${intro ? ` · 由 ${intro.name} 引薦` : ''}`;
+  })()), confirmedDrafts.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-emerald-600 mt-0.5"
+  }, "\u5DF2\u78BA\u8A8D ", confirmedDrafts.length, " \u7B46\uFF0C\u6309\u300C\u8DF3\u904E\u300D\u53EF\u4E0D\u532F\u5165\u9019\u4E00\u7B46")), /*#__PURE__*/React.createElement("button", {
+    onClick: cancelReview,
+    className: "p-1.5 hover:bg-stone-100 rounded-lg"
+  }, /*#__PURE__*/React.createElement(X, {
+    className: "w-5 h-5 text-stone-500"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "p-5 overflow-y-auto flex-1 space-y-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(CFField, {
+    label: "\u4F86\u8CD3\u59D3\u540D *"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: reviewDraft.guestName,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      guestName: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u884C\u696D\u5225"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: reviewDraft.guestIndustry,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      guestIndustry: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  }))), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u9080\u7D04\u4EBA"
+  }, /*#__PURE__*/React.createElement(MemberSearchSelect, {
+    members: data.members,
+    value: reviewDraft.inviterId,
+    onChange: id => setReviewDraft({
+      ...reviewDraft,
+      inviterId: id || ''
+    }),
+    placeholder: "\u2014 \u9078\u64C7\u9080\u7D04\u4EBA \u2014"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u4E3B\u8B1B\u4EBA\uFF08\u9019\u7B46\u5496\u5561\u662F\u8981\u9080\u4F86\u807D\u8AB0\u7684\u6F14\u8B1B\uFF09"
+  }, /*#__PURE__*/React.createElement(MemberSearchSelect, {
+    members: data.members,
+    value: reviewDraft.presenterId,
+    onChange: id => setReviewDraft({
+      ...reviewDraft,
+      presenterId: id || ''
+    }),
+    placeholder: "\uFF08\u9078\u586B\uFF09"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(CFField, {
+    label: "\u5496\u5561\u6703\u8B70\u6642\u9593"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "datetime-local",
+    value: reviewDraft.meetingTime,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      meetingTime: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u72C0\u614B"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: reviewDraft.meetingStatus,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      meetingStatus: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "pending"
+  }, "\u9080\u7D04\u4E2D"), /*#__PURE__*/React.createElement("option", {
+    value: "scheduled"
+  }, "\u5F85\u9032\u884C"), /*#__PURE__*/React.createElement("option", {
+    value: "done"
+  }, "\u5DF2\u5B8C\u6210"), /*#__PURE__*/React.createElement("option", {
+    value: "cancelled"
+  }, "\u5DF2\u53D6\u6D88")))), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u5730\u9EDE"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: reviewDraft.location,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      location: e.target.value
+    }),
+    placeholder: "\u4F8B\uFF1A85\u5EA6C\u3001Zoom...",
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u5099\u8A3B"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    value: reviewDraft.notes,
+    rows: 3,
+    onChange: e => setReviewDraft({
+      ...reviewDraft,
+      notes: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-none"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "border-t border-stone-200 bg-stone-50 px-5 py-3 flex justify-between gap-2 flex-shrink-0 sm:rounded-b-2xl"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: cancelReview,
+    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white"
+  }, "\u53D6\u6D88\u5168\u90E8"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: reviewSkipCurrent,
+    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white text-stone-600"
+  }, "\u8DF3\u904E\u6B64\u7B46"), /*#__PURE__*/React.createElement("button", {
+    onClick: reviewConfirmCurrent,
+    disabled: !reviewDraft.guestName?.trim(),
+    className: "px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40",
+    style: {
+      background: '#8B6F47'
+    }
+  }, reviewIdx + 1 === reviewQueue.length ? '確認此筆並完成' : '確認此筆 →'))))));
 }
 function StatCard({
   label,
@@ -2885,17 +3196,23 @@ function StatCard({
 function CoffeeCard({
   cm,
   inviter,
+  presenter,
   onEdit,
   onDelete
 }) {
   const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
   const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.pending;
-  const fmtTime = t => t ? new Date(t).toLocaleString('zh-TW', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }) : '—';
+  // 時間：能 parse 成 Date 就漂亮顯示；不能（如 LINE 上傳的中文字串）就直接秀原字串
+  const fmtTime = t => {
+    if (!t) return '—';
+    const d = new Date(t);
+    return isNaN(d.getTime()) ? String(t) : d.toLocaleString('zh-TW', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
   // 出席例會改為只存日期；顯示時切 "YYYY-MM-DD" 並轉成 "MM/DD"
   const fmtDate = t => {
     if (!t) return '—';
@@ -2919,14 +3236,24 @@ function CoffeeCard({
   }, cm.guestName || '(未填)'), cm.guestIndustry && /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500"
   }, "\xB7 ", cm.guestIndustry)), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-1.5 text-xs text-stone-500"
+    className: "flex items-center gap-1.5 text-xs text-stone-500 flex-wrap"
   }, /*#__PURE__*/React.createElement("span", null, "\u9080\u7D04\u4EBA\uFF1A"), /*#__PURE__*/React.createElement("span", {
     className: "font-medium px-1.5 py-0.5 rounded",
     style: {
       background: '#F5EFE6',
       color: '#8B6F47'
     }
-  }, inviter?.name || '—'))), /*#__PURE__*/React.createElement("div", {
+  }, inviter?.name || '—'), presenter && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "\u4E3B\u8B1B\u4EBA\uFF1A"), /*#__PURE__*/React.createElement("span", {
+    className: "font-medium px-1.5 py-0.5 rounded",
+    style: {
+      background: '#FCEFE3',
+      color: '#A01E2E'
+    }
+  }, presenter.name)), cm.location && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCCD ", cm.location)))), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-1 flex-shrink-0"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onEdit,
@@ -3058,7 +3385,9 @@ function CoffeeMeetingModal({
       meetingTime: e.target.value
     }),
     className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
-  })), /*#__PURE__*/React.createElement(CFField, {
+  }), formData.meetingTime && toDatetimeLocal(formData.meetingTime) === '' && /*#__PURE__*/React.createElement("div", {
+    className: "text-[11px] text-amber-700 mt-1"
+  }, "\u26A0\uFE0F \u539F\u59CB\u8F38\u5165\uFF1A", formData.meetingTime, "\uFF08\u8ACB\u624B\u52D5\u8F49\u6210\u65E5\u671F\u6642\u9593\uFF09")), /*#__PURE__*/React.createElement(CFField, {
     label: "\u72C0\u614B"
   }, /*#__PURE__*/React.createElement("select", {
     value: formData.meetingStatus || 'pending',
@@ -3076,6 +3405,30 @@ function CoffeeMeetingModal({
   }, "\u5DF2\u5B8C\u6210"), /*#__PURE__*/React.createElement("option", {
     value: "cancelled"
   }, "\u5DF2\u53D6\u6D88")))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(CFField, {
+    label: "\u5730\u9EDE"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: formData.location || '',
+    onChange: e => setFormData({
+      ...formData,
+      location: e.target.value
+    }),
+    placeholder: "\u4F8B\uFF1A85\u5EA6C\u3001Zoom\u3001\u4E8B\u52D9\u6240...",
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u4E3B\u8B1B\u4EBA\uFF08\u9019\u6B21\u5496\u5561\u662F\u8981\u9080\u4F86\u807D\u8AB0\u7684\u6F14\u8B1B\uFF09"
+  }, /*#__PURE__*/React.createElement(MemberSearchSelect, {
+    members: members,
+    value: formData.presenterId || '',
+    onChange: id => setFormData({
+      ...formData,
+      presenterId: id || ''
+    }),
+    placeholder: "\uFF08\u9078\u586B\uFF09",
+    showIndustry: false
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(CFField, {
     label: "\u51FA\u5E2D\u4F8B\u6703\u610F\u9858"
@@ -3152,6 +3505,64 @@ function CFField({
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mb-1"
   }, label), children);
+}
+
+// 多選下拉（checkbox 樣式）— 給篩選器用，可多選
+function MultiSelectFilter({
+  label,
+  options,
+  values,
+  onChange,
+  allText = "全部"
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  // 點擊外部關閉
+  useEffect(() => {
+    if (!open) return;
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const selectedLabels = options.filter(o => values.includes(o.value)).map(o => o.label);
+  const buttonText = values.length === 0 ? allText : selectedLabels.length === 1 ? selectedLabels[0] : `${label}：${selectedLabels.length} 項`;
+  const toggle = val => {
+    onChange(values.includes(val) ? values.filter(v => v !== val) : [...values, val]);
+  };
+  const clearAll = () => onChange([]);
+  return /*#__PURE__*/React.createElement("div", {
+    ref: ref,
+    className: "relative"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setOpen(!open),
+    className: "px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white hover:bg-stone-50 flex items-center gap-1.5 min-w-[120px] justify-between"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: values.length === 0 ? "text-stone-500" : "text-stone-800 font-medium"
+  }, buttonText), /*#__PURE__*/React.createElement(ChevronDown, {
+    className: `w-4 h-4 text-stone-400 transition-transform ${open ? "rotate-180" : ""}`
+  })), open && /*#__PURE__*/React.createElement("div", {
+    className: "absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-md shadow-lg z-30 min-w-[160px] py-1"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: clearAll,
+    className: "w-full px-3 py-1.5 text-left text-xs text-stone-500 hover:bg-stone-50 border-b border-stone-100"
+  }, "\u6E05\u9664\u9078\u64C7\uFF08\u986F\u793A\u5168\u90E8\uFF09"), options.map(o => {
+    const checked = values.includes(o.value);
+    return /*#__PURE__*/React.createElement("label", {
+      key: o.value,
+      className: `flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm hover:bg-stone-50 ${checked ? "bg-amber-50/50" : ""}`
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: checked,
+      onChange: () => toggle(o.value),
+      className: "w-3.5 h-3.5 accent-[#B8860B]"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-800"
+    }, o.label));
+  })));
 }
 
 // ============ KPI 紅綠燈 Dashboard ============
