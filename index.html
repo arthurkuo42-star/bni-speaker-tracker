@@ -2392,6 +2392,8 @@ function CoffeeMeetingPage({
   const [reviewIdx, setReviewIdx] = useState(0);
   const [reviewDraft, setReviewDraft] = useState(null);
   const [confirmedDrafts, setConfirmedDrafts] = useState([]);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false); // 防止 finalize 重入（連點「確認此筆並完成」會多次寫入）
+
   const memberById = useMemo(() => {
     const map = {};
     data.members.forEach(m => {
@@ -2556,16 +2558,17 @@ function CoffeeMeetingPage({
   // 從 offer 建立可編輯草稿（review 階段每筆都會初始化一份）
   const makeDraftFromOffer = o => {
     const introducer = o.introducerId ? memberById[o.introducerId] : null;
-    const note = `由 ${introducer?.name || '組員'} 引薦（${formatDate(o.meetingDate)} 組聚）` + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
+    const speaker = o.speakerId ? memberById[o.speakerId] : null;
+    const note = `由 ${introducer?.name || '組員'} 引薦給 ${speaker?.name || '主講人'}（${formatDate(o.meetingDate)} 組聚）` + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
     return {
       __offerCompositeId: o.compositeId,
       // 用來最終回寫 imported 狀態
       guestName: o.contactName || '',
       guestIndustry: o.contactProfession || '',
-      inviterId: o.speakerId,
-      // 主講人就是要邀來聽他講的人 → 變成此咖啡會議的邀約人
+      // 邀約人：引薦這個人脈的組員（誰跟這位來賓熟，誰負責約咖啡），沒填引薦人才 fallback 主講人
+      inviterId: o.introducerId || o.speakerId,
+      // 主講人：這場咖啡會議要把這位來賓帶來聽誰的演講
       presenterId: o.speakerId,
-      // 同時也存為主講人（之後要把客戶帶來聽他）
       meetingTime: '',
       // 留空讓使用者填
       location: '',
@@ -2594,11 +2597,13 @@ function CoffeeMeetingPage({
 
   // 確認此筆：把 draft 加入 confirmedDrafts；最後一筆 → 觸發 finalize
   const reviewConfirmCurrent = () => {
+    if (reviewSubmitting) return; // 防重入
     const newConfirmed = [...confirmedDrafts, reviewDraft];
     advanceReview(newConfirmed);
   };
   // 跳過此筆：不加入 confirmedDrafts，直接 advance
   const reviewSkipCurrent = () => {
+    if (reviewSubmitting) return;
     advanceReview(confirmedDrafts);
   };
   // 推進到下一筆，或結束
@@ -2615,6 +2620,7 @@ function CoffeeMeetingPage({
   };
   // 取消整個逐筆確認流程（已確認的依使用者選擇是否保留）
   const cancelReview = () => {
+    if (reviewSubmitting) return;
     if (confirmedDrafts.length === 0) {
       // 沒確認過任何 → 直接清空
       resetReviewState();
@@ -2632,10 +2638,15 @@ function CoffeeMeetingPage({
     setReviewDraft(null);
     setConfirmedDrafts([]);
     setSelectedOffers(new Set());
+    setReviewSubmitting(false);
   };
 
   // 收尾：把所有已確認的 draft 寫進 coffeeMeetings + 對應 group meeting offer 標記 imported
   const finalizeReview = async allConfirmed => {
+    if (reviewSubmitting) return; // 防重入：finalize 還在跑就再呼叫直接 ignore
+    setReviewSubmitting(true); // 鎖 — 防止連點 modal 多次觸發 finalize
+    // 立刻清掉 modal 顯示（reviewDraft=null 會讓 modal unmount），即使 await 還在跑也按不到了
+    setReviewDraft(null);
     if (allConfirmed.length === 0) {
       showToast('沒有要儲存的項目');
       resetReviewState();
@@ -3167,20 +3178,22 @@ function CoffeeMeetingPage({
     className: "border-t border-stone-200 bg-stone-50 px-5 py-3 flex justify-between gap-2 flex-shrink-0 sm:rounded-b-2xl"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: cancelReview,
-    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white"
+    disabled: reviewSubmitting,
+    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
   }, "\u53D6\u6D88\u5168\u90E8"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: reviewSkipCurrent,
-    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white text-stone-600"
+    disabled: reviewSubmitting,
+    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white text-stone-600 disabled:opacity-40 disabled:cursor-not-allowed"
   }, "\u8DF3\u904E\u6B64\u7B46"), /*#__PURE__*/React.createElement("button", {
     onClick: reviewConfirmCurrent,
-    disabled: !reviewDraft.guestName?.trim(),
-    className: "px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40",
+    disabled: !reviewDraft.guestName?.trim() || reviewSubmitting,
+    className: "px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40 disabled:cursor-not-allowed",
     style: {
       background: '#8B6F47'
     }
-  }, reviewIdx + 1 === reviewQueue.length ? '確認此筆並完成' : '確認此筆 →'))))));
+  }, reviewSubmitting ? '處理中…' : reviewIdx + 1 === reviewQueue.length ? '確認此筆並完成' : '確認此筆 →'))))));
 }
 function StatCard({
   label,
