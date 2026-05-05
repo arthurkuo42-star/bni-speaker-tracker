@@ -773,7 +773,7 @@ async function exportMeetingDocx(meeting, group, members) {
   if (c.meta.location) children.push(kv("地點", c.meta.location));
   if (c.meta.scribeName) children.push(kv("記錄", c.meta.scribeName));
   children.push(kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`));
-  if (c.meta.absenteeCount > 0) children.push(kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`));
+  // 缺席：依使用者偏好，不顯示在組聚記錄中（資料仍保留在 meeting.absentees 供統計用）
 
   // 成長/喜悅分享（含合併進來的來賓 sharings）
   if (c.sharings.length) {
@@ -1420,7 +1420,7 @@ function buildMeetingHtml(meeting, group, members) {
   ${c.meta.location ? kv("地點", c.meta.location) : ""}
   ${c.meta.scribeName ? kv("記錄", c.meta.scribeName) : ""}
   ${kv("出席", `${c.meta.attendeesNames || "—"}（${c.meta.attendeeCount} 人）`)}
-  ${c.meta.absenteeCount > 0 ? kv("缺席", `${c.meta.absenteesNames}（${c.meta.absenteeCount} 人）`) : ""}
+  ${ /* 缺席不顯示，資料仍保留 */""}
 </div>
 
 ${section("成長/喜悅分享", "💬", sharingsBlock)}
@@ -3852,13 +3852,6 @@ function MeetingCard({
   }, meeting.attendees.map(id => /*#__PURE__*/React.createElement("span", {
     key: id,
     className: "text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded"
-  }, getMember(id)?.name || id)))), meeting.absentees?.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-stone-700 mb-1.5"
-  }, "\u7F3A\u5E2D (", meeting.absentees.length, ")"), /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-wrap gap-1"
-  }, meeting.absentees.map(id => /*#__PURE__*/React.createElement("span", {
-    key: id,
-    className: "text-xs px-2 py-0.5 bg-stone-100 text-stone-600 rounded"
   }, getMember(id)?.name || id)))), sharings.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1"
   }, /*#__PURE__*/React.createElement(Sparkles, {
@@ -4255,9 +4248,7 @@ function MeetingViewModal({
     className: "col-span-2"
   }, /*#__PURE__*/React.createElement("b", {
     className: "text-stone-600"
-  }, "\u51FA\u5E2D\uFF08", meeting.attendees.length, " / ", totalPool, "\uFF0C", attendRate, "%\uFF09\uFF1A"), meeting.attendees.length > 0 ? meeting.attendees.map(id => getMember(id)?.name || "?").join("、") : "—"), meeting.absentees?.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "col-span-2 text-stone-500"
-  }, /*#__PURE__*/React.createElement("b", null, "\u7F3A\u5E2D\uFF08", meeting.absentees.length, "\uFF09\uFF1A"), meeting.absentees.map(id => getMember(id)?.name || "?").join("、"))), sharings.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "\u51FA\u5E2D\uFF08", meeting.attendees.length, " / ", totalPool, "\uFF0C", attendRate, "%\uFF09\uFF1A"), meeting.attendees.length > 0 ? meeting.attendees.map(id => getMember(id)?.name || "?").join("、") : "—")), sharings.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-bold text-stone-700 mb-1.5 flex items-center gap-1"
   }, /*#__PURE__*/React.createElement(Sparkles, {
     className: "w-4 h-4 text-[#B8860B]"

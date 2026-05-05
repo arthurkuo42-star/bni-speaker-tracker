@@ -2374,10 +2374,11 @@ function CoffeeMeetingPage({
   saveData,
   showToast
 }) {
-  // 預設只看「待進行」的咖啡會議（最常用的工作清單），多選 → 空陣列代表「全部」
+  // 預設只看「待進行」的咖啡會議；3 個多選 + 1 個 inviterId 單選 + search
   const [filter, setFilter] = useState({
     inviterId: '',
     statuses: ['scheduled'],
+    willingnesses: [],
     conversions: [],
     search: ''
   });
@@ -2463,6 +2464,7 @@ function CoffeeMeetingPage({
     let result = [...allMeetings];
     if (filter.inviterId) result = result.filter(cm => cm.inviterId === filter.inviterId);
     if (filter.statuses && filter.statuses.length > 0) result = result.filter(cm => filter.statuses.includes(cm.meetingStatus || 'pending'));
+    if (filter.willingnesses && filter.willingnesses.length > 0) result = result.filter(cm => filter.willingnesses.includes(cm.attendanceWillingness || 'pending'));
     if (filter.conversions && filter.conversions.length > 0) result = result.filter(cm => filter.conversions.includes(cm.conversionStatus || 'none'));
     if (filter.search) {
       const q = filter.search.toLowerCase();
@@ -2500,6 +2502,8 @@ function CoffeeMeetingPage({
       inviterId: presetInviterId || '',
       presenterId: '',
       // 主講人（選填）
+      participantIds: [],
+      // 參與者（多選，記錄分會夥伴實際到場名單）
       meetingTime: '',
       location: '',
       // 地點（選填）
@@ -2507,7 +2511,8 @@ function CoffeeMeetingPage({
       attendanceWillingness: 'pending',
       attendanceTime: '',
       conversionStatus: 'none',
-      notes: ''
+      notes: '',
+      minutes: '' // 會議記錄（事後撰寫實際會談內容、行動項目）
     });
     setEditingId('new');
   };
@@ -2840,35 +2845,92 @@ function CoffeeMeetingPage({
   }, /*#__PURE__*/React.createElement(StatCard, {
     label: "\u7E3D\u5834\u6B21",
     value: stats.total,
-    color: "#1A1414"
+    color: "#1A1414",
+    active: !filter.statuses?.length && !filter.willingnesses?.length && !filter.conversions?.length && !filter.inviterId && !filter.search,
+    onClick: () => setFilter({
+      inviterId: '',
+      statuses: [],
+      willingnesses: [],
+      conversions: [],
+      search: ''
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u9080\u7D04\u4E2D",
     value: stats.pending,
-    color: "#A01E2E"
+    color: "#A01E2E",
+    active: filter.statuses?.length === 1 && filter.statuses[0] === 'pending',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: filter.statuses?.length === 1 && filter.statuses[0] === 'pending' ? [] : ['pending'],
+      willingnesses: [],
+      conversions: []
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u5F85\u9032\u884C",
     value: stats.scheduled,
-    color: "#B8860B"
+    color: "#B8860B",
+    active: filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled' ? [] : ['scheduled'],
+      willingnesses: [],
+      conversions: []
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u5DF2\u5B8C\u6210",
     value: stats.done,
-    color: "#8B6F47"
+    color: "#8B6F47",
+    active: filter.statuses?.length === 1 && filter.statuses[0] === 'done',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: filter.statuses?.length === 1 && filter.statuses[0] === 'done' ? [] : ['done'],
+      willingnesses: [],
+      conversions: []
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u78BA\u8A8D\u51FA\u5E2D",
     value: stats.confirmed,
-    color: "#4A6741"
+    color: "#4A6741",
+    active: filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: [],
+      willingnesses: filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed' ? [] : ['confirmed'],
+      conversions: []
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u8DDF\u9032\u4E2D",
     value: stats.following,
-    color: "#8B6F47"
+    color: "#8B6F47",
+    active: filter.conversions?.length === 1 && filter.conversions[0] === 'following',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: [],
+      willingnesses: [],
+      conversions: filter.conversions?.length === 1 && filter.conversions[0] === 'following' ? [] : ['following']
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u5DF2\u7C3D\u55AE",
     value: stats.signed,
-    color: "#A01E2E"
+    color: "#A01E2E",
+    active: filter.conversions?.length === 1 && filter.conversions[0] === 'signed',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: [],
+      willingnesses: [],
+      conversions: filter.conversions?.length === 1 && filter.conversions[0] === 'signed' ? [] : ['signed']
+    })
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "\u5DF2\u5BA3\u8A93",
     value: stats.sworn,
-    color: "#1A6B1A"
+    color: "#1A6B1A",
+    active: filter.conversions?.length === 1 && filter.conversions[0] === 'sworn',
+    onClick: () => setFilter({
+      ...filter,
+      statuses: [],
+      willingnesses: [],
+      conversions: filter.conversions?.length === 1 && filter.conversions[0] === 'sworn' ? [] : ['sworn']
+    })
   })), upcomingSpeakers.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "mb-4 p-3 bg-white rounded-lg border border-stone-200"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2923,6 +2985,24 @@ function CoffeeMeetingPage({
       label: '已取消'
     }]
   }), /*#__PURE__*/React.createElement(MultiSelectFilter, {
+    label: "\u51FA\u5E2D\u610F\u9858",
+    allText: "\u6240\u6709\u610F\u9858",
+    values: filter.willingnesses || [],
+    onChange: vals => setFilter({
+      ...filter,
+      willingnesses: vals
+    }),
+    options: [{
+      value: 'pending',
+      label: '邀約中'
+    }, {
+      value: 'confirmed',
+      label: '確認出席'
+    }, {
+      value: 'declined',
+      label: '拒絕'
+    }]
+  }), /*#__PURE__*/React.createElement(MultiSelectFilter, {
     label: "\u8F49\u5316",
     allText: "\u6240\u6709\u8F49\u5316",
     values: filter.conversions || [],
@@ -2969,6 +3049,7 @@ function CoffeeMeetingPage({
     cm: cm,
     inviter: memberById[cm.inviterId],
     presenter: cm.presenterId ? memberById[cm.presenterId] : null,
+    members: data.members,
     onEdit: () => openEdit(cm),
     onDelete: () => deleteMeeting(cm.id)
   }))), editingId && /*#__PURE__*/React.createElement(CoffeeMeetingModal, {
@@ -3198,13 +3279,26 @@ function CoffeeMeetingPage({
 function StatCard({
   label,
   value,
-  color
+  color,
+  onClick,
+  active
 }) {
+  const isClickable = !!onClick;
   return /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-lg border border-stone-200 p-3"
+    onClick: isClickable ? onClick : undefined,
+    className: `bg-white rounded-lg border p-3 transition ${isClickable ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""} ${active ? "ring-2 ring-offset-1 shadow-md" : "border-stone-200"}`,
+    style: active ? {
+      borderColor: color,
+      boxShadow: `0 0 0 2px ${color}40`
+    } : {}
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-500"
-  }, label), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 flex items-center gap-1"
+  }, label, active && /*#__PURE__*/React.createElement("span", {
+    className: "text-[9px] px-1 rounded text-white",
+    style: {
+      background: color
+    }
+  }, "\u7BE9\u9078\u4E2D")), /*#__PURE__*/React.createElement("div", {
     className: "text-2xl md:text-3xl font-bold",
     style: {
       color
@@ -3215,9 +3309,11 @@ function CoffeeCard({
   cm,
   inviter,
   presenter,
+  members,
   onEdit,
   onDelete
 }) {
+  const [minutesExpanded, setMinutesExpanded] = useState(false);
   const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
   const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.pending;
   // 時間：能 parse 成 Date 就漂亮顯示；不能（如 LINE 上傳的中文字串）就直接秀原字串
@@ -3318,9 +3414,31 @@ function CoffeeCard({
     }, ci.text) : /*#__PURE__*/React.createElement("div", {
       className: "text-stone-400"
     }, "\u2014");
-  })())), cm.notes && /*#__PURE__*/React.createElement("div", {
+  })())), Array.isArray(cm.participantIds) && cm.participantIds.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 flex flex-wrap items-center gap-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500"
+  }, "\uD83D\uDC65 \u53C3\u8207\u8005\uFF1A"), cm.participantIds.slice(0, 5).map(id => {
+    const m = (members || []).find(x => x.id === id);
+    if (!m) return null;
+    return /*#__PURE__*/React.createElement("span", {
+      key: id,
+      className: "text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200"
+    }, m.name);
+  }), cm.participantIds.length > 5 && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500"
+  }, "+", cm.participantIds.length - 5)), cm.notes && /*#__PURE__*/React.createElement("div", {
     className: "mt-3 text-xs text-stone-600 px-3 py-2 rounded bg-amber-50 border-l-2 border-amber-300"
-  }, "\uD83D\uDCAC ", cm.notes));
+  }, "\uD83D\uDCAC ", cm.notes), cm.minutes && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 text-xs text-stone-700 px-3 py-2 rounded bg-stone-50 border-l-2 border-stone-400"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-semibold text-stone-600 mb-1 flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCDD \u6703\u8B70\u8A18\u9304"), cm.minutes.length > 80 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setMinutesExpanded(v => !v),
+    className: "text-[11px] text-stone-500 hover:text-stone-800 underline"
+  }, minutesExpanded ? "收合" : "展開")), /*#__PURE__*/React.createElement("div", {
+    className: "whitespace-pre-wrap"
+  }, minutesExpanded || cm.minutes.length <= 80 ? cm.minutes : cm.minutes.slice(0, 80) + "…")));
 }
 function CoffeeMeetingModal({
   isNew,
@@ -3493,16 +3611,36 @@ function CoffeeMeetingModal({
   }, "\u5DF2\u7E73\u8CBB\uFF0C\u7B49\u5F85\u8A2A\u8AC7"), /*#__PURE__*/React.createElement("option", {
     value: "sworn"
   }, "\u5DF2\u5BA3\u8A93\u5165\u6703"))), /*#__PURE__*/React.createElement(CFField, {
-    label: "\u5099\u8A3B"
+    label: "\u53C3\u8207\u8005\uFF08\u5176\u4ED6\u5230\u5834\u7684\u5206\u6703\u5925\u4F34\uFF09"
+  }, /*#__PURE__*/React.createElement(ParticipantPicker, {
+    members: members,
+    selectedIds: formData.participantIds || [],
+    onChange: ids => setFormData({
+      ...formData,
+      participantIds: ids
+    })
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u5099\u8A3B\uFF08\u77ED\u53E5\u3001\u4E0A\u4E0B\u6587\uFF09"
   }, /*#__PURE__*/React.createElement("textarea", {
     value: formData.notes || '',
     onChange: e => setFormData({
       ...formData,
       notes: e.target.value
     }),
-    rows: 3,
+    rows: 2,
     className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-none",
     placeholder: "\u95DC\u4FC2\u63CF\u8FF0\u3001\u8DDF\u9032\u72C0\u6CC1\u3001\u7C3D\u55AE\u53EF\u80FD\u6027\u22EF"
+  })), /*#__PURE__*/React.createElement(CFField, {
+    label: "\u6703\u8B70\u8A18\u9304\uFF08\u4E8B\u5F8C\u64B0\u5BEB\u5BE6\u969B\u6703\u8AC7\u5167\u5BB9\u3001\u884C\u52D5\u9805\u76EE\uFF09"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    value: formData.minutes || '',
+    onChange: e => setFormData({
+      ...formData,
+      minutes: e.target.value
+    }),
+    rows: 5,
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-y",
+    placeholder: "\u4F8B\uFF1A\u4ECA\u5929\u804A\u5230\u5C0D\u65B9\u76EE\u524D\u7684\u75DB\u9EDE\u662F ___\uFF0C\u4E0B\u4E00\u6B65\u9810\u8A08 ___\uFF0C\u4E0B\u6B21\u8DDF\u9032\u65E5\u671F ___"
   }))), /*#__PURE__*/React.createElement("div", {
     className: "sticky bottom-0 bg-white border-t border-stone-200 px-5 py-3 flex justify-end gap-2"
   }, /*#__PURE__*/React.createElement("button", {
@@ -3523,6 +3661,64 @@ function CFField({
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mb-1"
   }, label), children);
+}
+
+// 參與者多選：以 chips 顯示已選 + 下方搜尋框可新增
+function ParticipantPicker({
+  members,
+  selectedIds,
+  onChange
+}) {
+  const [q, setQ] = useState("");
+  const selectedSet = new Set(selectedIds);
+  const remaining = members.filter(m => !selectedSet.has(m.id) && (!q || m.name.includes(q) || (m.industry || "").includes(q)));
+  const add = id => {
+    onChange([...selectedIds, id]);
+    setQ("");
+  };
+  const remove = id => onChange(selectedIds.filter(x => x !== id));
+  return /*#__PURE__*/React.createElement("div", {
+    className: "border border-stone-300 rounded-md bg-white"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-2 flex flex-wrap gap-1.5 min-h-[40px]"
+  }, selectedIds.length === 0 && /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400 text-sm self-center"
+  }, "\uFF08\u5C1A\u672A\u9078\u64C7\uFF09"), selectedIds.map(id => {
+    const m = members.find(x => x.id === id);
+    if (!m) return null;
+    return /*#__PURE__*/React.createElement("span", {
+      key: id,
+      className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-900"
+    }, m.name, m.industry ? ` · ${m.industry}` : "", /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => remove(id),
+      className: "ml-0.5 text-amber-700 hover:text-red-600 leading-none"
+    }, "\xD7"));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "border-t border-stone-200 p-2 flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: "\u641C\u5C0B\u59D3\u540D/\u884C\u696D + \u9EDE\u4E0B\u65B9\u52A0\u5165...",
+    className: "flex-1 text-sm outline-none bg-transparent"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "text-[11px] text-stone-400"
+  }, selectedIds.length, " \u4F4D")), (q || remaining.length > 0) && /*#__PURE__*/React.createElement("div", {
+    className: "border-t border-stone-200 max-h-40 overflow-y-auto p-1"
+  }, remaining.length === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-400 px-2 py-1.5"
+  }, selectedIds.length === members.length ? "全部成員都已加入" : "無符合"), remaining.slice(0, 20).map(m => /*#__PURE__*/React.createElement("button", {
+    key: m.id,
+    type: "button",
+    onClick: () => add(m.id),
+    className: "w-full text-left text-sm px-2 py-1 rounded hover:bg-amber-50"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-medium"
+  }, m.name), m.industry && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-400 ml-1.5"
+  }, "\xB7 ", m.industry))), remaining.length > 20 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-400 px-2 py-1"
+  }, "\u2026\u9084\u6709 ", remaining.length - 20, " \u4F4D\uFF0C\u8ACB\u8F38\u5165\u95DC\u9375\u5B57\u904E\u6FFE")));
 }
 
 // 多選下拉（checkbox 樣式）— 給篩選器用，可多選
