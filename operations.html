@@ -912,7 +912,8 @@ async function exportMeetingDocx(meeting, group, members) {
         bold: true,
         color: RED
       }));
-      if (sp.topic) headerParts.push(new d.TextRun({
+      // 組聚：簡報標題 inline；全分會：另起區塊（因為案例分享是多行長文）
+      if (sp.topic && !c.isChapter) headerParts.push(new d.TextRun({
         text: ` ｜ ${sp.topic}`,
         font: FONT,
         size: 24,
@@ -932,6 +933,36 @@ async function exportMeetingDocx(meeting, group, members) {
           }
         }
       }));
+
+      // 全分會的「已完成案例的分享」獨立段落
+      if (c.isChapter && sp.topic) {
+        children.push(new d.Paragraph({
+          children: [new d.TextRun({
+            text: "📋 已完成案例的分享",
+            font: FONT,
+            size: 24,
+            bold: true,
+            color: RED
+          })],
+          spacing: {
+            before: 80,
+            after: 40
+          }
+        }));
+        String(sp.topic).split(/\r?\n/).forEach(line => {
+          children.push(new d.Paragraph({
+            children: [new d.TextRun({
+              text: line,
+              font: FONT,
+              size: 22,
+              color: DARK
+            })],
+            spacing: {
+              after: 20
+            }
+          }));
+        });
+      }
 
       // 開啟對話
       if (sp.conversationOpeners.length) {
@@ -1332,8 +1363,16 @@ function buildMeetingHtml(meeting, group, members) {
   let speakersBlock = "";
   if (c.speakers && c.speakers.length) {
     speakersBlock = c.speakers.map((sp, spIdx) => {
-      const heading = c.speakers.length > 1 ? `<div style="background:#FEF3C7;color:#8B1A1A;padding:6px 10px;font-weight:bold;font-size:13pt;border-left:4px solid #B8860B;margin:12px 0 8px;">【主講人 ${spIdx + 1}】 ${esc(sp.name || "（未指定）")}${sp.topic ? `　｜　${esc(sp.topic)}` : ""}</div>` : `<div style="${S.ncTitle}">${esc(sp.name || "（未指定）")}${sp.topic ? ` ｜ ${esc(sp.topic)}` : ""}</div>`;
+      // 組聚：標題 inline 顯示主題；全分會：標題只顯示姓名，案例分享另開獨立區塊
+      const inlineTopic = sp.topic && !c.isChapter ? esc(sp.topic) : "";
+      const heading = c.speakers.length > 1 ? `<div style="background:#FEF3C7;color:#8B1A1A;padding:6px 10px;font-weight:bold;font-size:13pt;border-left:4px solid #B8860B;margin:12px 0 8px;">【主講人 ${spIdx + 1}】 ${esc(sp.name || "（未指定）")}${inlineTopic ? `　｜　${inlineTopic}` : ""}</div>` : `<div style="${S.ncTitle}">${esc(sp.name || "（未指定）")}${inlineTopic ? ` ｜ ${inlineTopic}` : ""}</div>`;
       const parts = [heading];
+
+      // 全分會：已完成案例的分享 獨立區塊
+      if (c.isChapter && sp.topic) {
+        parts.push(`<div style="margin:8px 0 4px;font-weight:bold;color:#8B1A1A;">📋 已完成案例的分享</div>`);
+        parts.push(`<div style="white-space:pre-wrap;color:#333;font-size:11pt;background:#FFF8E1;padding:8px;border-left:3px solid #B8860B;border-radius:4px;margin-bottom:8px;">${esc(sp.topic)}</div>`);
+      }
 
       // 開啟對話
       if (sp.conversationOpeners.length) {
@@ -2936,10 +2975,10 @@ function MeetingForm({
       className: "flex items-center gap-2 mb-2"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex gap-1 text-[11px]"
-    }, /*#__PURE__*/React.createElement("button", {
+    }, !isChapter && /*#__PURE__*/React.createElement("button", {
       onClick: () => updGuest(g.id, "kind", "member"),
       className: `px-2 py-0.5 rounded ${g.kind === "member" ? "bg-emerald-600 text-white" : "bg-white text-stone-500 border border-stone-200"}`
-    }, isChapter ? "分會會員（非出席）" : "分會別組會員"), /*#__PURE__*/React.createElement("button", {
+    }, "\u5206\u6703\u5225\u7D44\u6703\u54E1"), /*#__PURE__*/React.createElement("button", {
       onClick: () => updGuest(g.id, "kind", "external"),
       className: `px-2 py-0.5 rounded ${g.kind === "external" ? "bg-emerald-600 text-white" : "bg-white text-stone-500 border border-stone-200"}`
     }, "\u5916\u90E8\u4F86\u8CD3")), /*#__PURE__*/React.createElement("button", {
@@ -3008,7 +3047,7 @@ function MeetingForm({
     }))));
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
-  }, /*#__PURE__*/React.createElement("button", {
+  }, !isChapter && /*#__PURE__*/React.createElement("button", {
     onClick: () => addGuest("member"),
     className: "flex-1 border border-dashed border-emerald-300 rounded-lg px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
   }, "+ \u5206\u6703\u5225\u7D44\u6703\u54E1"), /*#__PURE__*/React.createElement("button", {
@@ -3016,11 +3055,13 @@ function MeetingForm({
     className: "flex-1 border border-dashed border-emerald-300 rounded-lg px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
   }, "+ \u5916\u90E8\u4F86\u8CD3"))), /*#__PURE__*/React.createElement(FormSection, {
     title: "1. \u6210\u9577 / \u559C\u6085\u5206\u4EAB",
-    badge: summary("", form.sharings.length),
+    badge: isChapter ? null : summary("", form.sharings.length),
     icon: /*#__PURE__*/React.createElement(Sparkles, {
       className: "w-4 h-4 text-[#B8860B]"
     })
-  }, attendingMembers.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, isChapter ? /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed"
+  }, "\uD83D\uDCA1 \u5168\u5206\u6703\u5834\u5408\uFF0C\u6210\u9577/\u559C\u6085\u5206\u4EAB\u7576\u5834\u53E3\u982D\u4EA4\u6D41\uFF0C\u672C\u6B04\u4F4D\u4E0D\u9700\u9010\u7B46\u767B\u8A18\u3002") : attendingMembers.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-400 italic py-2"
   }, "\u8ACB\u5148\u52FE\u9078\u51FA\u5E2D\u6210\u54E1") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "space-y-2 mb-2"
@@ -3061,66 +3102,13 @@ function MeetingForm({
     value: m.id
   }, m.name))))), isChapter && /*#__PURE__*/React.createElement(FormSection, {
     title: "2. \u8CC7\u6E90\u9700\u6C42/\u63D0\u4F9B",
-    badge: summary("", (form.resourceShares || []).length),
+    badge: null,
     icon: /*#__PURE__*/React.createElement(ArrowRightLeft, {
       className: "w-4 h-4 text-[#059669]"
     })
-  }, attendingMembers.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-400 italic py-2"
-  }, "\u8ACB\u5148\u52FE\u9078\u51FA\u5E2D\u6210\u54E1") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-600 mb-2 bg-emerald-50 border border-emerald-200 rounded p-2 leading-relaxed"
-  }, "\uD83D\uDCA1 \u6BCF\u4F4D\u51FA\u5E2D\u8005\u8F2A\u6D41\u5206\u4EAB\uFF1A\u76EE\u524D\u5DE5\u4F5C\u4E2D\u9700\u8981\u7684\u8CC7\u6E90\u3001\u53EF\u63D0\u4F9B\u7684\u8CC7\u6E90\u3002\u4FC3\u9032\u5206\u6703\u5167\u90E8\u8CC7\u6E90\u6D41\u52D5\u3002"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2 mb-2"
-  }, (form.resourceShares || []).map(r => {
-    const m = members.find(x => x.id === r.memberId);
-    return /*#__PURE__*/React.createElement("div", {
-      key: r.id,
-      className: "border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/40"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-2 mb-2"
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "text-sm font-semibold text-emerald-700"
-    }, m?.name || "?"), m?.industry && /*#__PURE__*/React.createElement("span", {
-      className: "text-[11px] text-stone-500"
-    }, "\xB7 ", m.industry), /*#__PURE__*/React.createElement("button", {
-      onClick: () => rmResourceShare(r.id),
-      className: "ml-auto p-1 text-stone-400 hover:text-red-500"
-    }, /*#__PURE__*/React.createElement(Trash2, {
-      className: "w-3.5 h-3.5"
-    }))), /*#__PURE__*/React.createElement("div", {
-      className: "grid grid-cols-1 sm:grid-cols-2 gap-2"
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      className: "text-[11px] text-stone-500 font-semibold"
-    }, "\uD83D\uDCBC \u5DE5\u4F5C\u4E2D\u9700\u8981\u7684\u8CC7\u6E90"), /*#__PURE__*/React.createElement("textarea", {
-      value: r.needs,
-      onChange: e => updResourceShare(r.id, "needs", e.target.value),
-      rows: 2,
-      placeholder: "\u4F8B\uFF1A\u627E\u4E00\u4F4D\u719F\u6089\u4E0D\u52D5\u7522\u4F30\u50F9\u7684\u4EE3\u66F8...",
-      className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      className: "text-[11px] text-stone-500 font-semibold"
-    }, "\uD83C\uDF81 \u53EF\u63D0\u4F9B\u7684\u8CC7\u6E90"), /*#__PURE__*/React.createElement("textarea", {
-      value: r.offers,
-      onChange: e => updResourceShare(r.id, "offers", e.target.value),
-      rows: 2,
-      placeholder: "\u4F8B\uFF1A\u514D\u8CBB 30 \u5206\u9418\u6CD5\u5F8B\u8AEE\u8A62...",
-      className: "w-full border border-stone-200 rounded px-2 py-1.5 text-sm bg-white"
-    }))));
-  })), pendingResourceMembers.length > 0 && /*#__PURE__*/React.createElement("select", {
-    onChange: e => {
-      if (e.target.value) {
-        addResourceShare(e.target.value);
-        e.target.value = "";
-      }
-    },
-    value: "",
-    className: "w-full border border-dashed border-emerald-300 rounded-lg px-3 py-2 text-sm bg-white text-emerald-700"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "+ \u65B0\u589E\u8CC7\u6E90\u5206\u4EAB\uFF08", pendingResourceMembers.length, " \u4F4D\u51FA\u5E2D\u8005\u5C1A\u672A\u586B\u5BEB\uFF09"), pendingResourceMembers.map(m => /*#__PURE__*/React.createElement("option", {
-    key: m.id,
-    value: m.id
-  }, m.name))))), /*#__PURE__*/React.createElement(FormSection, {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 bg-emerald-50 border border-emerald-200 rounded p-2 leading-relaxed"
+  }, "\uD83D\uDCA1 \u5168\u5206\u6703\u5834\u5408\uFF0C\u8CC7\u6E90\u9700\u6C42/\u63D0\u4F9B\u7576\u5834\u53E3\u982D\u4EA4\u6D41\uFF0C\u672C\u6B04\u4F4D\u4E0D\u9700\u9010\u7B46\u767B\u8A18\u3002")), /*#__PURE__*/React.createElement(FormSection, {
     title: `${isChapter ? "3" : "2"}. 主講人專業簡報`,
     badge: summary("", (form.speakers || []).length),
     icon: /*#__PURE__*/React.createElement(Presentation2, {
@@ -3158,7 +3146,22 @@ function MeetingForm({
       className: "w-3.5 h-3.5"
     }))), /*#__PURE__*/React.createElement("div", {
       className: "p-3 space-y-3"
-    }, /*#__PURE__*/React.createElement("div", {
+    }, isChapter ? /*#__PURE__*/React.createElement("div", {
+      className: "space-y-2"
+    }, /*#__PURE__*/React.createElement(MemberSelect, {
+      members: (attendingMembers.length ? attendingMembers : groupMembers).filter(m => m.id === sp.memberId || !(form.speakers || []).some(other => other.id !== sp.id && other.memberId === m.id)),
+      value: sp.memberId,
+      onChange: v => updSpeakerField(sp.id, "memberId", v),
+      placeholder: "\u9078\u64C7\u4E3B\u8B1B\u4EBA..."
+    }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      className: "text-[11px] text-stone-500 font-semibold block mb-1"
+    }, "\u5DF2\u5B8C\u6210\u6848\u4F8B\u7684\u5206\u4EAB"), /*#__PURE__*/React.createElement("textarea", {
+      value: sp.topic || "",
+      onChange: e => updSpeakerField(sp.id, "topic", e.target.value),
+      rows: 5,
+      placeholder: "建議寫入：\n• 案例分享的內容\n• 目標客戶\n• 此類客戶的關鍵需求\n• 我的服務為什麼可以解決客戶的需求",
+      className: "w-full border border-stone-300 rounded-lg px-3 py-2 text-sm resize-y"
+    }))) : /*#__PURE__*/React.createElement("div", {
       className: "grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2"
     }, /*#__PURE__*/React.createElement(MemberSelect, {
       members: (attendingMembers.length ? attendingMembers : groupMembers).filter(m => m.id === sp.memberId || !(form.speakers || []).some(other => other.id !== sp.id && other.memberId === m.id)),
@@ -3814,12 +3817,14 @@ function MeetingCard({
     className: "text-[11px] text-[#B8860B] font-semibold"
   }, "\u672C\u6B21\u4E3B\u8B1B", speakers.length > 1 ? `（${speakers.length} 位）` : "", "\uFF1A"), speakers.map((sp, i) => {
     const m = getMember(sp.memberId);
+    // 全分會的 topic 是長文（已完成案例的分享）→ 標題只顯示前 30 字 + …
+    const topicShown = sp.topic ? isChapter && sp.topic.length > 30 ? sp.topic.slice(0, 30) + "…" : sp.topic : "";
     return /*#__PURE__*/React.createElement("div", {
       key: sp.id || i,
       className: "text-xs text-stone-700 truncate"
-    }, /*#__PURE__*/React.createElement("b", null, m?.name || "（未指定）"), sp.topic && /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("b", null, m?.name || "（未指定）"), topicShown && /*#__PURE__*/React.createElement("span", {
       className: "text-stone-500"
-    }, " \xB7 ", sp.topic));
+    }, " \xB7 ", topicShown));
   }))), /*#__PURE__*/React.createElement("div", {
     className: "my-2"
   }, /*#__PURE__*/React.createElement("div", {
@@ -3933,9 +3938,15 @@ function MeetingCard({
       className: "border-l-4 border-[#B8860B]/40 pl-3 space-y-2"
     }, /*#__PURE__*/React.createElement("div", {
       className: "text-xs font-bold text-[#B8860B]"
-    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName, sp.topic && /*#__PURE__*/React.createElement("span", {
+    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName, sp.topic && !isChapter && /*#__PURE__*/React.createElement("span", {
       className: "text-stone-600 font-normal"
-    }, " \xB7 ", sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    }, " \xB7 ", sp.topic)), isChapter && sp.topic && /*#__PURE__*/React.createElement("div", {
+      className: "bg-amber-50/60 border-l-2 border-amber-400 px-2 py-1.5 rounded"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-bold text-stone-700 mb-0.5"
+    }, "\uD83D\uDCCB \u5DF2\u5B8C\u6210\u6848\u4F8B\u7684\u5206\u4EAB"), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-700 whitespace-pre-wrap"
+    }, sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       className: "text-[11px] font-semibold text-stone-600 mb-1 flex items-center gap-1"
     }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
       className: "w-3 h-3 text-[#B8860B]"
@@ -4328,14 +4339,20 @@ function MeetingViewModal({
       key: sp.id || spIdx,
       className: "border-2 border-[#B8860B]/30 rounded-lg p-3 bg-amber-50/20 space-y-2"
     }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-2 pb-2 border-b border-amber-200"
+      className: "flex items-center gap-2 pb-2 border-b border-amber-200 flex-wrap"
     }, /*#__PURE__*/React.createElement(Presentation2, {
       className: "w-4 h-4 text-[#B8860B]"
     }), /*#__PURE__*/React.createElement("span", {
       className: "font-bold text-[#B8860B]"
-    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName), sp.topic && /*#__PURE__*/React.createElement("span", {
+    }, speakers.length > 1 ? `主講人 ${spIdx + 1}：` : "主講人：", speakerName), sp.topic && !isChapter && /*#__PURE__*/React.createElement("span", {
       className: "text-stone-700"
-    }, " \xB7 ", sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    }, " \xB7 ", sp.topic)), isChapter && sp.topic && /*#__PURE__*/React.createElement("div", {
+      className: "bg-amber-50/60 border-l-2 border-amber-400 px-3 py-2 rounded"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-bold text-stone-700 mb-1"
+    }, "\uD83D\uDCCB \u5DF2\u5B8C\u6210\u6848\u4F8B\u7684\u5206\u4EAB"), /*#__PURE__*/React.createElement("div", {
+      className: "text-sm text-stone-700 whitespace-pre-wrap"
+    }, sp.topic)), filledOpeners.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       className: "text-xs font-bold text-stone-700 mb-1 flex items-center gap-1"
     }, /*#__PURE__*/React.createElement(MessageSquareQuote, {
       className: "w-3.5 h-3.5 text-[#B8860B]"
