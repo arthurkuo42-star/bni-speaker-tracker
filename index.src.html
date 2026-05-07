@@ -1,0 +1,4252 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNI 主題演講進度追蹤</title>
+
+<!-- Railway Proxy URL（請改成您的 Railway domain） -->
+<script>
+  window.BNI_PROXY_URL = 'https://bni-kpi-production.up.railway.app';
+</script>
+
+<!-- Preconnect：提早跟各 CDN 建立 TCP / TLS，縮短後續下載的首位元組時間 -->
+<link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<!-- Prefetch：主頁閒置時偷偷載 operations.html，之後點「組聚 / 導師」瞬間開 -->
+<link rel="prefetch" href="operations.html" as="document">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- 注意：xlsx (~900KB) 改為按需動態載入（匯入/下載範本時才抓）-->
+<style>
+  body {
+    /* 優先用系統內建 CJK 字型繪出首頁，等 Noto Sans TC 下載完才切換 —— 減少 FOIT */
+    font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', 'Apple LiGothic', sans-serif;
+    background: #F5F0E8;
+    margin: 0;
+  }
+  .loading-screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #F5F0E8; color: #8B6F47; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="loading-screen">載入中⋯</div>
+</div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ===== Icon Components (取代 lucide-react) =====
+function IconWrap({ className, style, children }) {
+  return React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    width: 24, height: 24, viewBox: "0 0 24 24",
+    fill: "none", stroke: "currentColor",
+    strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round",
+    className: className, style: style,
+    dangerouslySetInnerHTML: { __html: children }
+  });
+}
+const Users = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' });
+const Calendar = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' });
+const ListChecks = (props) => React.createElement(IconWrap, { ...props, children: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>' });
+const Settings = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>' });
+const Upload = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>' });
+const Download = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' });
+const Lock = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' });
+const Eye = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' });
+const ChevronRight = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="9 18 15 12 9 6"/>' });
+const ChevronDown = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="6 9 12 15 18 9"/>' });
+const Check = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="20 6 9 17 4 12"/>' });
+const X = (props) => React.createElement(IconWrap, { ...props, children: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' });
+const Plus = (props) => React.createElement(IconWrap, { ...props, children: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' });
+const Trash2 = (props) => React.createElement(IconWrap, { ...props, children: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>' });
+const Edit3 = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>' });
+const Coffee = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/>' });
+const Mic = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>' });
+const FileText = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' });
+const Image = (props) => React.createElement(IconWrap, { ...props, children: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>' });
+const Target = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' });
+const Lightbulb = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>' });
+const CheckCircle2 = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>' });
+const Circle = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/>' });
+const LogOut = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>' });
+const KeyRound = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5"/>' });
+const AlertCircle = (props) => React.createElement(IconWrap, { ...props, children: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' });
+const Presentation = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/>' });
+const Megaphone = (props) => React.createElement(IconWrap, { ...props, children: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>' });
+const MessageSquare = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' });
+const UserCheck = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>' });
+const Filter = (props) => React.createElement(IconWrap, { ...props, children: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' });
+const GraduationCap = (props) => React.createElement(IconWrap, { ...props, children: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>' });
+
+// ===== 按需動態載入 xlsx（~900KB，只有匯入/下載範本時才需要）=====
+const _loadedScripts = {};
+function loadScript(url) {
+  if (_loadedScripts[url]) return _loadedScripts[url];
+  _loadedScripts[url] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => { delete _loadedScripts[url]; reject(new Error('載入失敗：' + url)); };
+    document.head.appendChild(s);
+  });
+  return _loadedScripts[url];
+}
+async function ensureXLSX() {
+  if (window.XLSX) return;
+  await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+}
+
+// ===== Storage (Railway Proxy 雲端同步) =====
+// 部署後在 index.html 裡設定 window.BNI_PROXY_URL
+const PROXY_URL = window.BNI_PROXY_URL || '';
+
+// SWR（Stale-While-Revalidate）快取助手
+// 原理：讀取時先回 localStorage 的舊版（瞬間顯示），同時背景抓新版；
+// 新版回來後透過 onFresh callback 通知畫面靜默更新。
+const SWR_PREFIX = 'swr_cache_v1:';
+function swrRead(key) {
+  try {
+    const raw = localStorage.getItem(SWR_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function swrWrite(key, value) {
+  try { localStorage.setItem(SWR_PREFIX + key, JSON.stringify(value)); } catch {}
+}
+function swrDelete(key) {
+  try { localStorage.removeItem(SWR_PREFIX + key); } catch {}
+}
+
+// 共享 PIN 取得邏輯：避免並發寫入時 prompt 跳多次
+let _pinAskingPromise = null;
+async function obtainWritePin() {
+  const cached = localStorage.getItem('bni_write_pin');
+  if (cached) return cached;
+  if (_pinAskingPromise) return _pinAskingPromise;
+  _pinAskingPromise = new Promise((resolve, reject) => {
+    const pin = prompt('第一次寫入需要輸入「寫入 PIN」（分會共用，請向幹部索取）：');
+    if (pin) resolve(pin);
+    else reject(new Error('已取消'));
+  });
+  _pinAskingPromise.finally(() => {
+    setTimeout(() => { _pinAskingPromise = null; }, 0);
+  });
+  return _pinAskingPromise;
+}
+
+const apiClient = {
+  // 第三參數 onFresh：背景拿到新版時的 callback（可選）
+  async get(key, shared = true, onFresh) {
+    const cached = swrRead(key);
+    const fetchFresh = async () => {
+      try {
+        const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(key));
+        if (res.status === 404) { swrDelete(key); return null; }
+        if (!res.ok) throw new Error('讀取失敗: ' + res.status);
+        const json = await res.json();
+        const result = json && json.value !== undefined ? { value: json.value } : null;
+        if (result) swrWrite(key, result);
+        return result;
+      } catch (e) {
+        console.error('[apiClient.get]', key, e);
+        return null;
+      }
+    };
+    if (cached) {
+      // 有快取：立刻回傳舊版，背景抓新版
+      (async () => {
+        const fresh = await fetchFresh();
+        if (fresh && onFresh) {
+          try {
+            if (JSON.stringify(fresh) !== JSON.stringify(cached)) onFresh(fresh);
+          } catch {}
+        }
+      })();
+      return cached;
+    }
+    // 沒快取：等網路回來
+    const fresh = await fetchFresh();
+    if (!fresh) alert('讀取雲端資料失敗，請檢查網路或 Proxy 設定');
+    return fresh;
+  },
+
+  async set(key, value, shared = true) {
+    const tryWrite = async (pin) => {
+      return fetch(PROXY_URL + '/api/data', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Write-PIN': pin || ''
+        },
+        body: JSON.stringify({ key, value })
+      });
+    };
+
+    let pin = localStorage.getItem('bni_write_pin') || '';
+    let res = await tryWrite(pin);
+
+    if (res.status === 401) {
+      // 並發寫入共用同一個 prompt，使用者只會被問 1 次
+      const newPin = await obtainWritePin();
+      res = await tryWrite(newPin);
+      if (res.ok) {
+        localStorage.setItem('bni_write_pin', newPin);
+      } else {
+        localStorage.removeItem('bni_write_pin');
+        alert('PIN 錯誤，請重新整理再試');
+        throw new Error('PIN 錯誤');
+      }
+    }
+
+    if (!res.ok) throw new Error('寫入失敗: ' + res.status);
+    // 寫入成功後立刻更新 SWR 快取，讓下次讀取不需等網路
+    swrWrite(key, { value });
+    return { value };
+  }
+};
+
+// SWR 版的原始 fetch：給 /api/chains-data 這類不走 apiClient 的 GET 端點用
+async function swrFetchRaw(url, onFresh) {
+  const cacheKey = 'raw:' + url;
+  const cached = swrRead(cacheKey);
+  const fetchIt = async () => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const data = await r.json();
+      swrWrite(cacheKey, data);
+      return data;
+    } catch { return null; }
+  };
+  if (cached) {
+    (async () => {
+      const fresh = await fetchIt();
+      if (fresh && onFresh) {
+        try { if (JSON.stringify(fresh) !== JSON.stringify(cached)) onFresh(fresh); } catch {}
+      }
+    })();
+    return cached;
+  }
+  return await fetchIt();
+}
+
+
+
+const STORAGE_KEY = 'bni_speaker_tracker_v5';
+const PIN_KEY = 'bni_speaker_tracker_pin_v1';
+
+// 預設任務模板（BNI 主題演講提前 6 週準備流程，每週一次咖啡會議）
+// 預設任務模板：只管演講內容準備（content 軌）
+// 咖啡會議軌由 coffeeMeetings 資料動態計算，不走任務勾選
+const DEFAULT_TASKS = [
+  { id: 't_topic', name: '提供 EDM 內容/簡報架構給主講人；主講人提供來賓名單', weekBefore: 6, icon: 'Lightbulb', track: 'content' },
+  { id: 't_outline', name: '交 EDM 內容', weekBefore: 5, icon: 'FileText', track: 'content' },
+  { id: 't_slides_draft', name: '交簡報初稿', weekBefore: 4, icon: 'Presentation', track: 'content' },
+  { id: 't_rehearsal_helper', name: '跟小幫手試講', weekBefore: 3, icon: 'Mic', track: 'content' },
+  { id: 't_slides_final', name: '修正簡報', weekBefore: 2, icon: 'Image', track: 'content' },
+  { id: 't_guest_gift', name: '再次確認來賓、禮物', weekBefore: 1, icon: 'CheckCircle2', track: 'content' },
+  { id: 't_speech', name: '八核試講', weekBefore: 0, icon: 'Target', track: 'content' },
+];
+
+const ICON_MAP = { Lightbulb, Coffee, FileText, Image, Mic, CheckCircle2, Target, Presentation, Megaphone };
+
+// ============ 可搜尋的會員選擇器 ============
+function MemberSearchSelect({ members, value, onChange, placeholder = '— 請選擇 —', allowClear = true, showIndustry = true }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef(null);
+
+  const selected = value ? members.find(m => m.id === value) : null;
+
+  // 點擊外部關閉
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return members;
+    const q = query.toLowerCase();
+    return members.filter(m =>
+      (m.name || '').toLowerCase().includes(q) ||
+      (m.industry || '').toLowerCase().includes(q) ||
+      (m.company || '').toLowerCase().includes(q)
+    );
+  }, [members, query]);
+
+  const pick = (id) => {
+    onChange(id);
+    setOpen(false);
+    setQuery('');
+  };
+
+  return (
+    <div ref={containerRef} className="relative" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white text-left flex items-center justify-between hover:border-stone-500 transition-colors"
+      >
+        <span className={selected ? 'text-stone-800' : 'text-stone-400'}>
+          {selected ? (
+            <>
+              <span className="font-medium">{selected.name}</span>
+              {showIndustry && selected.industry && <span className="text-stone-500 ml-1 text-xs">· {selected.industry}</span>}
+            </>
+          ) : placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-stone-300 rounded-md shadow-lg max-h-64 overflow-hidden flex flex-col">
+          <div className="p-2 border-b border-stone-200 sticky top-0 bg-white">
+            <input
+              type="text"
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="搜尋姓名 / 行業 / 公司⋯"
+              className="w-full px-2 py-1.5 text-sm border border-stone-200 rounded focus:outline-none focus:border-stone-500"
+            />
+          </div>
+          <div className="overflow-y-auto">
+            {allowClear && (
+              <button
+                type="button"
+                onClick={() => pick(null)}
+                className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 text-stone-400 italic border-b border-stone-100"
+              >
+                清除選擇
+              </button>
+            )}
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-stone-400 text-center">找不到符合的會員</div>
+            ) : (
+              filtered.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => pick(m.id)}
+                  className={`w-full px-3 py-2 text-sm text-left hover:bg-amber-50 transition-colors ${value === m.id ? 'bg-amber-50' : ''}`}
+                >
+                  <div className="font-medium text-stone-800">{m.name}</div>
+                  {showIndustry && (m.industry || m.company) && (
+                    <div className="text-xs text-stone-500">
+                      {m.industry}{m.industry && m.company ? ' · ' : ''}{m.company}
+                    </div>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 取得 ISO 週一的日期
+const getMonday = (d) => {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(date.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+const formatDate = (d) => {
+  const date = new Date(d);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+const formatFullDate = (d) => {
+  const date = new Date(d);
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const weekdayZh = (d) => ['日', '一', '二', '三', '四', '五', '六'][new Date(d).getDay()];
+
+const daysBetween = (d1, d2) => {
+  const a = new Date(d1); a.setHours(0, 0, 0, 0);
+  const b = new Date(d2); b.setHours(0, 0, 0, 0);
+  return Math.round((b - a) / (1000 * 60 * 60 * 24));
+};
+
+// 預設 6 週的會議日（週四）
+const generateDefaultMeetings = (count = 12) => {
+  const today = new Date();
+  const monday = getMonday(today);
+  const meetings = [];
+  for (let i = 0; i < count; i++) {
+    const meetingDate = new Date(monday);
+    meetingDate.setDate(monday.getDate() + 3 + i * 7); // 週四
+    meetings.push({
+      id: `m_${meetingDate.getTime()}`,
+      date: meetingDate.toISOString(),
+      slotA: { speakerId: null, helperId: null, topic: '', tasks: {} },
+      slotB: { speakerId: null, helperId: null, topic: '', tasks: {} },
+    });
+  }
+  return meetings;
+};
+
+const defaultData = () => ({
+  members: [],
+  meetings: generateDefaultMeetings(12),
+  taskTemplate: DEFAULT_TASKS,
+  coffeeMeetings: [],
+  coffeeTargetPerSpeech: 5,
+  chapterName: '富鼎分會',
+  updatedAt: new Date().toISOString(),
+});
+
+// ============ 主元件 ============
+function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const v = p.get('view');
+      if (['kpi', 'dashboard', 'coffee', 'chains', 'admin'].includes(v)) return v;
+    } catch {}
+    return 'dashboard';
+  }); // kpi | dashboard | coffee | chains | admin
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminTab, setAdminTab] = useState('schedule');
+  const [pinSet, setPinSet] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // 載入資料（SWR：先用快取瞬間顯示，背景抓新版後靜默更新）
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get(STORAGE_KEY, true, (fresh) => {
+          // 背景拿到新版：無縫更新畫面
+          if (fresh && fresh.value) {
+            try { setData(JSON.parse(fresh.value)); } catch {}
+          }
+        });
+        if (res && res.value) {
+          setData(JSON.parse(res.value));
+        } else {
+          const init = defaultData();
+          setData(init);
+          await apiClient.set(STORAGE_KEY, JSON.stringify(init), true);
+        }
+      } catch (e) {
+        setData(defaultData());
+      }
+      try {
+        const pinRes = await apiClient.get(PIN_KEY, true, (fresh) => {
+          setPinSet(!!(fresh && fresh.value));
+        });
+        setPinSet(!!(pinRes && pinRes.value));
+      } catch (e) {
+        setPinSet(false);
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  // 儲存資料
+  const saveData = async (next) => {
+    const withTime = { ...next, updatedAt: new Date().toISOString() };
+    setData(withTime);
+    try {
+      await apiClient.set(STORAGE_KEY, JSON.stringify(withTime), true);
+    } catch (e) {
+      showToast('儲存失敗，請重試', 'error');
+    }
+  };
+
+  if (loading || !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#FAF7F2' }}>
+        <div className="text-stone-500">載入中⋯</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: '#FAF7F2', fontFamily: "'Noto Serif TC', 'Playfair Display', serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Playfair+Display:wght@600;700;900&display=swap" rel="stylesheet" />
+
+      <Header
+        view={view}
+        setView={setView}
+        adminAuth={adminAuth}
+        setAdminAuth={setAdminAuth}
+        chapterName={data.chapterName}
+      />
+
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+        {view === 'kpi' && (
+          <KpiDashboard />
+        )}
+        {view === 'dashboard' && (
+          <Dashboard data={data} onGoProgress={() => { setAdminTab('progress'); setView('admin'); }} />
+        )}
+        {view === 'coffee' && (
+          <CoffeeMeetingPage data={data} saveData={saveData} showToast={showToast} />
+        )}
+        {view === 'chains' && (
+          <ServiceChainView />
+        )}
+        {view === 'admin' && !adminAuth && (
+          <AdminGate pinSet={pinSet} setPinSet={setPinSet} onPass={() => setAdminAuth(true)} showToast={showToast} />
+        )}
+        {view === 'admin' && adminAuth && (
+          <AdminPanel
+            data={data}
+            saveData={saveData}
+            adminTab={adminTab}
+            setAdminTab={setAdminTab}
+            showToast={showToast}
+          />
+        )}
+      </main>
+
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-xl z-50 text-sm font-medium ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-stone-800 text-white'}`}
+          style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <footer className="text-center py-8 text-xs text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        最後更新：{new Date(data.updatedAt).toLocaleString('zh-TW')}
+      </footer>
+    </div>
+  );
+}
+
+// ============ Header ============
+function Header({ view, setView, adminAuth, setAdminAuth, chapterName }) {
+  return (
+    <header className="border-b-2" style={{ borderColor: '#A01E2E', background: 'white' }}>
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] text-stone-500 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            BNI · CHAPTER ASSISTANT
+          </div>
+          <h1 className="text-xl md:text-2xl font-bold" style={{ color: '#1A1414' }}>
+            {chapterName} <span className="text-stone-400 mx-1">·</span> <span style={{ color: '#A01E2E' }}>分會助理</span>
+          </h1>
+        </div>
+        <div className="flex items-center gap-1 md:gap-2 flex-wrap justify-end">
+          <button
+            onClick={() => { setView('kpi'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'kpi' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'kpi' ? '#2D5A27' : undefined }}
+            title="紅綠燈（原 KPI）"
+          >
+            <Target className="w-4 h-4" />
+            <span className="hidden md:inline">紅綠燈</span>
+          </button>
+          <button
+            onClick={() => { setView('dashboard'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'dashboard' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+          >
+            <Eye className="w-4 h-4" />
+            <span className="hidden md:inline">演講</span>
+          </button>
+          <button
+            onClick={() => { setView('coffee'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'coffee' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'coffee' ? '#8B6F47' : undefined }}
+          >
+            <Coffee className="w-4 h-4" />
+            <span className="hidden md:inline">咖啡</span>
+          </button>
+          <a
+            href="operations.html?tab=meetings"
+            className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200"
+            style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+            title="組聚（會議記錄）"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden md:inline">組聚</span>
+          </a>
+          <a
+            href="operations.html?tab=mentorship"
+            className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200"
+            style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+            title="導生計畫"
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span className="hidden md:inline">導生</span>
+          </a>
+          <button
+            onClick={() => { setView('chains'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'chains' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'chains' ? '#6B4C8A' : undefined }}
+          >
+            <ListChecks className="w-4 h-4" />
+            <span className="hidden md:inline">服務鏈</span>
+          </button>
+          <button
+            onClick={() => { setView('admin'); }}
+            className={`px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'admin' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: view === 'admin' ? '#A01E2E' : undefined }}
+          >
+            <Settings className="w-4 h-4" />
+            <span className="hidden md:inline">後台</span>
+          </button>
+          {adminAuth && (
+            <button
+              onClick={() => setAdminAuth(false)}
+              className="px-2 py-2 text-sm text-stone-500 hover:text-stone-800"
+              title="登出後台"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// ============ 前台 Dashboard ============
+function Dashboard({ data, onGoProgress }) {
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'personal'
+  const [personalMemberId, setPersonalMemberId] = useState('');
+
+  const today = new Date();
+  // 顯示所有「尚未過期 或 本週」的會議，最多 8 筆
+  const upcoming = useMemo(() => {
+    return data.meetings
+      .filter(m => daysBetween(today, new Date(m.date)) >= -1)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 8);
+  }, [data.meetings]);
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  // 篩選個人視角
+  const filteredMeetings = useMemo(() => {
+    if (viewMode !== 'personal' || !personalMemberId) return upcoming;
+    return upcoming.filter(m =>
+      m.slotA.speakerId === personalMemberId ||
+      m.slotA.helperId === personalMemberId ||
+      m.slotB.speakerId === personalMemberId ||
+      m.slotB.helperId === personalMemberId
+    );
+  }, [upcoming, viewMode, personalMemberId]);
+
+  const selectedMember = personalMemberId ? memberById[personalMemberId] : null;
+
+  // 統計個人視角下的待辦數
+  const personalPending = useMemo(() => {
+    if (viewMode !== 'personal' || !personalMemberId) return 0;
+    let count = 0;
+    filteredMeetings.forEach(m => {
+      ['slotA', 'slotB'].forEach(key => {
+        const slot = m[key];
+        if (slot.speakerId === personalMemberId || slot.helperId === personalMemberId) {
+          data.taskTemplate.forEach(t => {
+            if (!slot.tasks?.[t.id]?.done) count++;
+          });
+        }
+      });
+    });
+    return count;
+  }, [filteredMeetings, viewMode, personalMemberId, data.taskTemplate]);
+
+  if (upcoming.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-stone-100 mb-4">
+          <Calendar className="w-8 h-8 text-stone-400" />
+        </div>
+        <div className="text-stone-500 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>尚未安排任何演講週次</div>
+        <div className="text-sm text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>請管理員到後台安排演講人</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            UPCOMING 6 WEEKS
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+            未來六週 <span style={{ color: '#A01E2E' }}>主題演講</span>
+          </h2>
+          <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            每位演講人由小幫手陪伴，提前 6 週啟動準備流程
+          </div>
+        </div>
+        {onGoProgress && (
+          <button
+            onClick={onGoProgress}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-md text-white hover:opacity-90 transition-opacity"
+            style={{ fontFamily: "'Noto Sans TC', sans-serif", background: '#A01E2E' }}
+            title="直接進入後台「進度更新」頁（需管理員 PIN）"
+          >
+            <ListChecks className="w-4 h-4" />
+            進度更新
+          </button>
+        )}
+      </div>
+
+      {/* 視角切換 */}
+      <div className="mb-6 bg-white rounded-lg border border-stone-200 p-3 flex flex-wrap items-center gap-3" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        <div className="flex items-center gap-1.5 text-xs text-stone-500">
+          <Filter className="w-3.5 h-3.5" />檢視模式
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setViewMode('all')}
+            className={`px-3 py-1.5 text-xs rounded transition-colors ${viewMode === 'all' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+          >
+            全分會
+          </button>
+          <button
+            onClick={() => setViewMode('personal')}
+            className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'personal' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            style={viewMode === 'personal' ? { background: '#A01E2E' } : {}}
+          >
+            <UserCheck className="w-3 h-3" />個人視角
+          </button>
+        </div>
+        {viewMode === 'personal' && (
+          <>
+            <select
+              value={personalMemberId}
+              onChange={e => setPersonalMemberId(e.target.value)}
+              className="px-3 py-1.5 text-xs border border-stone-300 rounded bg-white"
+            >
+              <option value="">— 選擇你是誰 —</option>
+              {data.members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            {selectedMember && (
+              <div className="text-xs text-stone-600">
+                你有 <span className="font-bold" style={{ color: '#A01E2E' }}>{filteredMeetings.length}</span> 場需關注 ·
+                未完成任務 <span className="font-bold" style={{ color: '#A01E2E' }}>{personalPending}</span> 項
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {viewMode === 'personal' && !personalMemberId && (
+        <div className="text-center py-12 bg-white rounded-lg border border-stone-200">
+          <UserCheck className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+          <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>請從上方下拉選單選擇你的姓名</div>
+        </div>
+      )}
+
+      {viewMode === 'personal' && personalMemberId && filteredMeetings.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-lg border border-stone-200">
+          <CheckCircle2 className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+          <div className="text-sm text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            未來 6 週沒有您的演講或小幫手安排
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {filteredMeetings.map((meeting) => (
+          <MeetingCard
+            key={meeting.id}
+            meeting={meeting}
+            memberById={memberById}
+            taskTemplate={data.taskTemplate}
+            index={upcoming.indexOf(meeting)}
+            personalMemberId={viewMode === 'personal' ? personalMemberId : null}
+            coffeeMeetings={data.coffeeMeetings || []}
+            coffeeTarget={data.coffeeTargetPerSpeech || 5}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MeetingCard({ meeting, memberById, taskTemplate, index, personalMemberId, coffeeMeetings, coffeeTarget }) {
+  const [expanded, setExpanded] = useState(index < 2 || !!personalMemberId);
+  const date = new Date(meeting.date);
+  const daysDiff = daysBetween(new Date(), date);
+  const isThisWeek = daysDiff >= -1 && daysDiff <= 6;
+  const weeksUntil = Math.ceil(daysDiff / 7);
+
+  return (
+    <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-stone-200">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-5 md:px-7 py-5 flex items-center justify-between text-left hover:bg-stone-50 transition-colors"
+      >
+        <div className="flex items-center gap-5 md:gap-8">
+          <div className="text-center">
+            <div className="text-[10px] tracking-[0.2em] text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>WEEK</div>
+            <div className="text-3xl md:text-4xl font-bold leading-none" style={{ color: isThisWeek ? '#A01E2E' : '#1A1414' }}>
+              {index + 1}
+            </div>
+          </div>
+          <div className="h-12 w-px bg-stone-200" />
+          <div>
+            <div className="text-sm md:text-base font-semibold" style={{ color: '#1A1414' }}>
+              {formatFullDate(date)} <span className="text-stone-400">週{weekdayZh(date)}</span>
+            </div>
+            <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+              {isThisWeek ? (
+                <span style={{ color: '#A01E2E' }} className="font-semibold">本週演講</span>
+              ) : (
+                <span>{weeksUntil > 0 ? `${weeksUntil} 週後` : '即將到來'}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="text-stone-400">
+          {expanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-stone-100 grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-stone-100">
+          <SlotDisplay
+            label="主題演講 A"
+            slot={meeting.slotA}
+            memberById={memberById}
+            taskTemplate={taskTemplate}
+            meetingDate={date}
+            personalMemberId={personalMemberId}
+            coffeeMeetings={coffeeMeetings}
+            coffeeTarget={coffeeTarget}
+          />
+          <SlotDisplay
+            label="主題演講 B"
+            slot={meeting.slotB}
+            memberById={memberById}
+            taskTemplate={taskTemplate}
+            meetingDate={date}
+            personalMemberId={personalMemberId}
+            coffeeMeetings={coffeeMeetings}
+            coffeeTarget={coffeeTarget}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SlotDisplay({ label, slot, memberById, taskTemplate, meetingDate, personalMemberId, coffeeMeetings, coffeeTarget }) {
+  const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
+  const helper = slot.helperId ? memberById[slot.helperId] : null;
+
+  // 個人角色判斷
+  const myRole = personalMemberId
+    ? (slot.speakerId === personalMemberId ? 'speaker' : slot.helperId === personalMemberId ? 'helper' : null)
+    : null;
+
+  // 個人視角：這個 slot 跟我無關就淡化
+  const isPersonalButNotMine = personalMemberId && !myRole;
+
+  if (!speaker) {
+    return (
+      <div className={`p-5 md:p-7 ${isPersonalButNotMine ? 'opacity-40' : ''}`}>
+        <div className="text-[10px] tracking-[0.2em] text-stone-400 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {label.toUpperCase()}
+        </div>
+        <div className="text-stone-400 text-sm py-8 text-center" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          尚未安排演講人
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`p-5 md:p-7 ${isPersonalButNotMine ? 'opacity-40' : ''}`}
+      style={myRole ? { background: 'linear-gradient(180deg, #FFF8F0 0%, white 40%)' } : {}}
+    >
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] tracking-[0.2em] text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {label.toUpperCase()}
+          </div>
+          {myRole && (
+            <div className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white" style={{ background: '#A01E2E', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              <UserCheck className="w-2.5 h-2.5" />
+              你是{myRole === 'speaker' ? '演講人' : '小幫手'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 演講人 & 小幫手 */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div
+          className={myRole === 'speaker' ? 'p-2 rounded-md -m-2' : ''}
+          style={myRole === 'speaker' ? { border: '2px solid #A01E2E' } : {}}
+        >
+          <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>演講人</div>
+          <div className="font-bold text-lg leading-tight" style={{ color: '#1A1414' }}>{speaker.name}</div>
+          <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {speaker.industry || '—'}
+          </div>
+        </div>
+        <div
+          className={myRole === 'helper' ? 'p-2 rounded-md -m-2' : ''}
+          style={myRole === 'helper' ? { border: '2px solid #A01E2E' } : {}}
+        >
+          <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>小幫手</div>
+          <div className="font-semibold text-base leading-tight" style={{ color: '#1A1414' }}>
+            {helper ? helper.name : <span className="text-stone-400">未指派</span>}
+          </div>
+          <div className="text-xs text-stone-500 mt-0.5" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {helper?.industry || '—'}
+          </div>
+        </div>
+      </div>
+
+      {/* 主題 */}
+      <div className="mb-3 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
+        <div className="text-[10px] text-stone-400 mb-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>演講主題</div>
+        <div className="text-sm font-medium" style={{ color: '#1A1414' }}>
+          {slot.topic || <span className="text-stone-400 italic" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>尚未確認主題</span>}
+        </div>
+      </div>
+
+      {/* 主力客群 */}
+      {(slot.targetAudience || slot.generalReferral) && (
+        <div className="grid grid-cols-1 gap-2 mb-2" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          {slot.targetAudience && (
+            <div className="p-2.5 rounded-md border border-stone-100">
+              <div className="text-[10px] text-stone-400 mb-0.5 tracking-wider">主力客群</div>
+              <div className="text-sm text-stone-700">{slot.targetAudience}</div>
+            </div>
+          )}
+          {slot.generalReferral && (
+            <div className="p-2.5 rounded-md border border-stone-100" style={{ background: '#FFFBEA' }}>
+              <div className="text-[10px] text-amber-700 mb-0.5 tracking-wider flex items-center gap-1">
+                <Lightbulb className="w-3 h-3" /> 引薦內容
+              </div>
+              <div className="text-sm text-stone-700">{slot.generalReferral}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 後台登入 ============
+function AdminGate({ pinSet, setPinSet, onPass, showToast }) {
+  const [pin, setPin] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [mode, setMode] = useState(pinSet ? 'login' : 'setup');
+
+  const handleSetup = async () => {
+    if (pin.length < 4) {
+      showToast('PIN 至少 4 碼', 'error');
+      return;
+    }
+    if (pin !== pin2) {
+      showToast('兩次輸入的 PIN 不一致', 'error');
+      return;
+    }
+    await apiClient.set(PIN_KEY, pin, true);
+    setPinSet(true);
+    onPass();
+    showToast('PIN 設定完成');
+  };
+
+  const handleLogin = async () => {
+    const res = await apiClient.get(PIN_KEY, true);
+    if (res && res.value === pin) {
+      onPass();
+    } else {
+      showToast('PIN 錯誤', 'error');
+      setPin('');
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-12 md:mt-20">
+      <div className="bg-white p-8 rounded-lg border border-stone-200 shadow-sm">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-3" style={{ background: '#A01E2E' }}>
+            {mode === 'setup' ? <KeyRound className="w-7 h-7 text-white" /> : <Lock className="w-7 h-7 text-white" />}
+          </div>
+          <h2 className="text-2xl font-bold" style={{ color: '#1A1414' }}>
+            {mode === 'setup' ? '設定管理密碼' : '後台管理'}
+          </h2>
+          <div className="text-sm text-stone-500 mt-1" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+            {mode === 'setup' ? '首次使用，請設定管理員 PIN（至少 4 碼）' : '請輸入管理員 PIN'}
+          </div>
+        </div>
+
+        <div className="space-y-3" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+          <input
+            type="password"
+            value={pin}
+            onChange={e => setPin(e.target.value)}
+            placeholder="PIN"
+            className="w-full px-4 py-3 rounded-md border border-stone-300 focus:border-stone-800 focus:outline-none"
+          />
+          {mode === 'setup' && (
+            <input
+              type="password"
+              value={pin2}
+              onChange={e => setPin2(e.target.value)}
+              placeholder="再次輸入 PIN"
+              className="w-full px-4 py-3 rounded-md border border-stone-300 focus:border-stone-800 focus:outline-none"
+            />
+          )}
+          <button
+            onClick={mode === 'setup' ? handleSetup : handleLogin}
+            className="w-full py-3 rounded-md text-white font-semibold"
+            style={{ background: '#A01E2E' }}
+          >
+            {mode === 'setup' ? '設定並進入' : '登入'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ 後台主面板 ============
+function AdminPanel({ data, saveData, adminTab, setAdminTab, showToast }) {
+  const tabs = [
+    { id: 'schedule', label: '週次安排', icon: Calendar },
+    { id: 'progress', label: '進度更新', icon: ListChecks },
+    { id: 'members', label: '會員管理', icon: Users },
+    { id: 'settings', label: '任務模板', icon: Settings },
+    { id: 'kpi-admin', label: '紅綠燈管理', icon: Target },
+  ];
+
+  return (
+    <div>
+      {/* Tab 列 */}
+      <div className="flex gap-1 border-b border-stone-200 mb-6 overflow-x-auto" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        {tabs.map(t => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setAdminTab(t.id)}
+              className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 flex items-center gap-1.5 transition-colors ${adminTab === t.id ? 'font-semibold' : 'border-transparent text-stone-500 hover:text-stone-800'}`}
+              style={adminTab === t.id ? { borderColor: t.id === 'kpi-admin' ? '#2D5A27' : '#A01E2E', color: t.id === 'kpi-admin' ? '#2D5A27' : '#A01E2E' } : {}}
+            >
+              <Icon className="w-4 h-4" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {adminTab === 'schedule' && <ScheduleManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'progress' && <ProgressManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'members' && <MemberManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'settings' && <TaskTemplateManager data={data} saveData={saveData} showToast={showToast} />}
+      {adminTab === 'kpi-admin' && <KpiAdminPanel showToast={showToast} />}
+    </div>
+  );
+}
+
+// ============ 週次排程管理 ============
+function ScheduleManager({ data, saveData, showToast }) {
+  const updateSlot = (meetingId, slotKey, field, value) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        return {
+          ...m,
+          [slotKey]: { ...m[slotKey], [field]: value }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const updateDate = (meetingId, newDate) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => m.id === meetingId ? { ...m, date: new Date(newDate).toISOString() } : m)
+    };
+    saveData(next);
+  };
+
+  const addMeeting = () => {
+    const lastDate = data.meetings.length > 0
+      ? new Date(data.meetings[data.meetings.length - 1].date)
+      : new Date();
+    const next = new Date(lastDate);
+    next.setDate(next.getDate() + 7);
+    const newMeeting = {
+      id: `m_${next.getTime()}`,
+      date: next.toISOString(),
+      slotA: { speakerId: null, helperId: null, topic: '', tasks: {} },
+      slotB: { speakerId: null, helperId: null, topic: '', tasks: {} },
+    };
+    saveData({ ...data, meetings: [...data.meetings, newMeeting] });
+  };
+
+  const deleteMeeting = (meetingId) => {
+    if (!confirm('確定刪除這一週的排程？')) return;
+    saveData({ ...data, meetings: data.meetings.filter(m => m.id !== meetingId) });
+  };
+
+  const sorted = [...data.meetings].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="flex justify-between items-center mb-5">
+        <h3 className="text-xl font-bold" style={{ color: '#1A1414' }}>週次排程</h3>
+        <button
+          onClick={addMeeting}
+          className="px-4 py-2 rounded-md text-white text-sm flex items-center gap-1.5"
+          style={{ background: '#A01E2E' }}
+        >
+          <Plus className="w-4 h-4" />新增週次
+        </button>
+      </div>
+
+      {data.members.length === 0 && (
+        <div className="mb-4 p-4 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          尚未匯入會員名單，請先到「會員管理」匯入會員
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sorted.map(meeting => (
+          <div key={meeting.id} className="bg-white rounded-lg border border-stone-200 p-4">
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={new Date(meeting.date).toISOString().slice(0, 10)}
+                  onChange={e => updateDate(meeting.id, e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-stone-300 rounded-md"
+                />
+                <span className="text-xs text-stone-500">
+                  週{weekdayZh(meeting.date)}
+                </span>
+              </div>
+              <button
+                onClick={() => deleteMeeting(meeting.id)}
+                className="text-stone-400 hover:text-red-600"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {['slotA', 'slotB'].map(slotKey => (
+                <div key={slotKey} className="space-y-2">
+                  <div className="text-xs font-semibold text-stone-600">
+                    {slotKey === 'slotA' ? '主題演講 A' : '主題演講 B'}
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">演講人</label>
+                    <MemberSearchSelect
+                      members={data.members}
+                      value={meeting[slotKey].speakerId}
+                      onChange={id => updateSlot(meeting.id, slotKey, 'speakerId', id)}
+                      placeholder="— 選擇演講人 —"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">小幫手</label>
+                    <MemberSearchSelect
+                      members={data.members}
+                      value={meeting[slotKey].helperId}
+                      onChange={id => updateSlot(meeting.id, slotKey, 'helperId', id)}
+                      placeholder="— 選擇小幫手 —"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-500 block mb-1">演講主題</label>
+                    <input
+                      type="text"
+                      value={meeting[slotKey].topic || ''}
+                      onChange={e => updateSlot(meeting.id, slotKey, 'topic', e.target.value)}
+                      placeholder="主題未定"
+                      className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============ 進度更新 ============
+function ProgressManager({ data, saveData, showToast }) {
+  const [selectedMeetingId, setSelectedMeetingId] = useState(null);
+  const [expandedNotes, setExpandedNotes] = useState(new Set());
+  const [showAll, setShowAll] = useState(false);
+  const [edmModal, setEdmModal] = useState(null); // null | { text, speakerName }
+
+  // ── 產生 EDM 草稿（依現有 slot 資料填入範本）──
+  const generateEdmDraft = (slot, speaker, dateStr) => {
+    const d = new Date(dateStr);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const fullDate = `${yyyy}.${mm}.${dd}(${weekdayZh(d)})`;
+    const shortDate = `${mm}/${dd}`;
+    const slogan = (slot.slogan || '').trim() || '[請填 Slogan]';
+    const industries = [slot.desiredPartner1, slot.desiredPartner2, slot.desiredPartner3]
+      .map((s, i) => `行業${i + 1}：${(s || '').trim() || '（未填）'}`)
+      .join('\n');
+    return [
+      '富鼎鈦金名人堂專題簡報',
+      `📆 ${fullDate}`,
+      '⏰ 早上06:30-09:30',
+      `📑${slogan}`,
+      '',
+      '[此處主講人自填本文]',
+      '',
+      `✨${slogan}✨`,
+      '',
+      `本週富鼎分會將由${speaker.industry || ''}代表-${speaker.name}分享「${slogan}」心動不如馬上行動，趕快手刀報名「${shortDate}」專題簡報！`,
+      '',
+      `💯 ${slogan}`,
+      '🗣 積極邀請行業別：',
+      industries,
+    ].join('\n');
+  };
+
+  const sorted = [...data.meetings].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const meetingsWithSpeakers = sorted.filter(m => m.slotA.speakerId || m.slotB.speakerId);
+
+  // 預設只顯示未來 6 週（今日起 +1 天內視為本週）
+  const today = new Date();
+  const upcomingMeetings = useMemo(() => {
+    const filtered = meetingsWithSpeakers.filter(m => daysBetween(today, new Date(m.date)) >= -1);
+    return filtered.slice(0, 6);
+  }, [meetingsWithSpeakers]);
+  const displayMeetings = showAll ? meetingsWithSpeakers : upcomingMeetings;
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  const toggleTask = (meetingId, slotKey, taskId) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        const slot = m[slotKey];
+        const currentTask = slot.tasks?.[taskId] || {};
+        return {
+          ...m,
+          [slotKey]: {
+            ...slot,
+            tasks: {
+              ...slot.tasks,
+              [taskId]: {
+                ...currentTask,
+                done: !currentTask.done,
+                doneAt: !currentTask.done ? new Date().toISOString() : null
+              }
+            }
+          }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const updateNote = (meetingId, slotKey, taskId, note) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        const slot = m[slotKey];
+        const currentTask = slot.tasks?.[taskId] || {};
+        return {
+          ...m,
+          [slotKey]: {
+            ...slot,
+            tasks: {
+              ...slot.tasks,
+              [taskId]: { ...currentTask, note }
+            }
+          }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  // 編輯 slot 層級的欄位（主題、主力客群、引薦…）
+  const updateSlotField = (meetingId, slotKey, field, value) => {
+    const next = {
+      ...data,
+      meetings: data.meetings.map(m => {
+        if (m.id !== meetingId) return m;
+        return {
+          ...m,
+          [slotKey]: { ...m[slotKey], [field]: value }
+        };
+      })
+    };
+    saveData(next);
+  };
+
+  const toggleNoteExpand = (key) => {
+    setExpandedNotes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  if (meetingsWithSpeakers.length === 0) {
+    return (
+      <div className="text-center py-12 text-stone-400" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+        尚未安排任何演講人，請先到「週次安排」指派
+      </div>
+    );
+  }
+
+  const selected = displayMeetings.find(m => m.id === selectedMeetingId) || displayMeetings[0] || meetingsWithSpeakers[0];
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-xl font-bold" style={{ color: '#1A1414' }}>進度更新</h3>
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="text-xs text-stone-500 hover:text-stone-800 underline"
+        >
+          {showAll ? `僅顯示未來 6 週` : `顯示全部（${meetingsWithSpeakers.length} 場）`}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-5">
+        {displayMeetings.map(m => {
+          const daysDiff = daysBetween(today, new Date(m.date));
+          const isThisWeek = daysDiff >= -1 && daysDiff <= 6;
+          const isPast = daysDiff < -1;
+          return (
+            <button
+              key={m.id}
+              onClick={() => setSelectedMeetingId(m.id)}
+              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${selected.id === m.id ? 'text-white' : isPast ? 'bg-stone-50 text-stone-400 border-stone-200' : 'bg-white text-stone-600 border-stone-300 hover:border-stone-500'}`}
+              style={selected.id === m.id ? { background: '#A01E2E', borderColor: '#A01E2E' } : {}}
+            >
+              {formatDate(m.date)} 週{weekdayZh(m.date)}
+              {isThisWeek && selected.id !== m.id && <span className="ml-1 text-[10px]" style={{ color: '#A01E2E' }}>· 本週</span>}
+            </button>
+          );
+        })}
+        {displayMeetings.length === 0 && (
+          <div className="text-sm text-stone-400">未來 6 週尚未安排演講人，請先到「週次安排」指派</div>
+        )}
+      </div>
+
+      {/* EDM 草稿彈窗 */}
+      {edmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setEdmModal(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col"
+            style={{ maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-stone-200">
+              <div className="flex items-center gap-2">
+                <Megaphone className="w-5 h-5" style={{ color: '#8B6F47' }} />
+                <h3 className="font-bold text-stone-800">EDM 草稿 — {edmModal.speakerName}</h3>
+              </div>
+              <button onClick={() => setEdmModal(null)} className="p-1 rounded hover:bg-stone-100">
+                <X className="w-5 h-5 text-stone-500" />
+              </button>
+            </div>
+            <div className="p-5 flex-1 overflow-y-auto">
+              <div className="text-xs text-stone-500 mb-2">
+                已自動帶入：日期、Slogan、主講人、想合作的三種專業別。本文段請主講人自填後再寄出。可在下方文字框直接編輯。
+              </div>
+              <textarea
+                value={edmModal.text}
+                onChange={e => setEdmModal({ ...edmModal, text: e.target.value })}
+                rows={20}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md focus:border-stone-500 focus:outline-none"
+                style={{ fontFamily: "'Noto Sans TC', sans-serif", whiteSpace: 'pre' }}
+              />
+            </div>
+            <div className="px-5 py-3 border-t border-stone-200 flex justify-end gap-2">
+              <button
+                onClick={() => setEdmModal(null)}
+                className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-stone-50"
+              >
+                關閉
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(edmModal.text);
+                    showToast?.('已複製到剪貼簿', 'success');
+                  } catch {
+                    showToast?.('複製失敗，請手動選取再 Ctrl+C', 'error');
+                  }
+                }}
+                className="px-4 py-2 text-sm text-white rounded-md hover:opacity-90"
+                style={{ background: '#A01E2E' }}
+              >
+                📋 複製到剪貼簿
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {['slotA', 'slotB'].map(slotKey => {
+          const slot = selected[slotKey];
+          const speaker = slot.speakerId ? memberById[slot.speakerId] : null;
+          const helper = slot.helperId ? memberById[slot.helperId] : null;
+
+          // 計算進度條
+          const contentTasks = data.taskTemplate.filter(t => (t.track || 'content') === 'content');
+          const contentDone = contentTasks.filter(t => slot.tasks?.[t.id]?.done).length;
+          const contentPct = contentTasks.length ? Math.round(contentDone / contentTasks.length * 100) : 0;
+          const mySelfCoffees = (data.coffeeMeetings || []).filter(cm => cm.inviterId === slot.speakerId);
+          const coffeeDone = mySelfCoffees.filter(cm => cm.meetingStatus === 'done').length;
+          const coffeeTarget = data.coffeeTargetPerSpeech || 5;
+          const coffeePct = Math.min(100, Math.round(coffeeDone / coffeeTarget * 100));
+
+          return (
+            <div key={slotKey} className="bg-white rounded-lg border border-stone-200 p-4">
+              <div className="text-xs font-semibold text-stone-600 mb-2">
+                {slotKey === 'slotA' ? '主題演講 A' : '主題演講 B'}
+              </div>
+              {speaker ? (
+                <>
+                  {/* 演講人儀表板頭部 */}
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <div className="font-bold text-lg" style={{ color: '#1A1414' }}>{speaker.name}</div>
+                      <div className="text-xs text-stone-500">{speaker.industry || ''}</div>
+                    </div>
+
+                    {/* 進度條 */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-500 mb-0.5">
+                          <span className="flex items-center gap-1"><Presentation className="w-3 h-3" style={{ color: '#A01E2E' }} />簡報準備</span>
+                          <span>{contentDone}/{contentTasks.length} · {contentPct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+                          <div className="h-full transition-all" style={{ width: contentPct + '%', background: '#A01E2E' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-500 mb-0.5">
+                          <span className="flex items-center gap-1"><Coffee className="w-3 h-3" style={{ color: '#8B6F47' }} />咖啡會議</span>
+                          <span>{coffeeDone}/{coffeeTarget} · {coffeePct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+                          <div className="h-full transition-all" style={{ width: coffeePct + '%', background: '#8B6F47' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 演講人詳細資料編輯 */}
+                  <div className="mb-4 space-y-2 p-3 rounded-md" style={{ background: '#FAF7F2' }}>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">Slogan（EDM 主標、宣傳金句）</label>
+                      <input type="text" value={slot.slogan || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'slogan', e.target.value)}
+                        placeholder="例：讓財富，不只存在，而是持續流動"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">演講主題</label>
+                      <input type="text" value={slot.topic || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'topic', e.target.value)}
+                        placeholder="例：商標異議實戰案例"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">主力客群</label>
+                      <input type="text" value={slot.targetAudience || ''}
+                        onChange={e => updateSlotField(selected.id, slotKey, 'targetAudience', e.target.value)}
+                        placeholder="例：中小企業主、品牌持有人"
+                        className="w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 tracking-wider">想要合作的對象（業務人脈圈中三種專業別）</label>
+                      {(slot.desiredPartners && !slot.desiredPartner1 && !slot.desiredPartner2 && !slot.desiredPartner3) && (
+                        <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-0.5 mb-1">
+                          舊資料合併欄位：「{slot.desiredPartners}」 → 請拆到下方三格
+                        </div>
+                      )}
+                      <div className="grid grid-cols-3 gap-1 mt-0.5">
+                        <input type="text" value={slot.desiredPartner1 || ''}
+                          onChange={e => updateSlotField(selected.id, slotKey, 'desiredPartner1', e.target.value)}
+                          placeholder="行業 1"
+                          className="px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                        <input type="text" value={slot.desiredPartner2 || ''}
+                          onChange={e => updateSlotField(selected.id, slotKey, 'desiredPartner2', e.target.value)}
+                          placeholder="行業 2"
+                          className="px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                        <input type="text" value={slot.desiredPartner3 || ''}
+                          onChange={e => updateSlotField(selected.id, slotKey, 'desiredPartner3', e.target.value)}
+                          placeholder="行業 3"
+                          className="px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none" />
+                      </div>
+                    </div>
+                    <div className="pt-1 border-t border-stone-200/60">
+                      <div className="text-[10px] text-amber-700 tracking-wider mb-1 flex items-center gap-1">
+                        <Lightbulb className="w-3 h-3" /> 引薦金字塔
+                      </div>
+                      <div className="space-y-1.5">
+                        <div>
+                          <label className="text-[10px] text-stone-500">一般引薦</label>
+                          <input type="text" value={slot.generalReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'generalReferral', e.target.value)}
+                            placeholder="門檻低、容易遇到的引薦類型"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-stone-500">理想引薦</label>
+                          <input type="text" value={slot.idealReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'idealReferral', e.target.value)}
+                            placeholder="有難度但可行的引薦"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-stone-500">夢幻引薦</label>
+                          <input type="text" value={slot.dreamReferral || ''}
+                            onChange={e => updateSlotField(selected.id, slotKey, 'dreamReferral', e.target.value)}
+                            placeholder="夢想中的大客戶類型"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-stone-200 rounded bg-white" />
+                        </div>
+                      </div>
+                    </div>
+                    {helper && (
+                      <div className="text-xs text-stone-500 pt-1 border-t border-stone-200/60">
+                        小幫手：<span className="font-semibold text-stone-700">{helper.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {['content', 'coffee'].map(trackKey => {
+                    const trackTasks = data.taskTemplate.filter(t => (t.track || 'content') === trackKey);
+                    if (trackTasks.length === 0) return null;
+                    const trackDone = trackTasks.filter(t => slot.tasks?.[t.id]?.done).length;
+                    const trackTotal = trackTasks.length;
+                    const trackLabel = trackKey === 'content' ? '演講準備' : '咖啡會議邀約';
+                    const trackColor = trackKey === 'content' ? '#A01E2E' : '#8B6F47';
+                    const TrackIcon = trackKey === 'content' ? Presentation : Coffee;
+                    return (
+                      <div key={trackKey} className="mb-4">
+                        <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-stone-100">
+                          <div className="flex items-center gap-1.5">
+                            <TrackIcon className="w-4 h-4" style={{ color: trackColor }} />
+                            <div className="text-sm font-semibold" style={{ color: '#1A1414' }}>
+                              {trackLabel}
+                            </div>
+                          </div>
+                          <div className="text-xs text-stone-500">
+                            {trackDone} / {trackTotal}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          {trackTasks.map(task => {
+                            const taskData = slot.tasks?.[task.id] || {};
+                            const done = taskData.done || false;
+                            const note = taskData.note || '';
+                            const doneAt = taskData.doneAt;
+                            const noteKey = `${selected.id}_${slotKey}_${task.id}`;
+                            const noteExpanded = expandedNotes.has(noteKey);
+                            return (
+                              <div
+                                key={task.id}
+                                className={`p-2.5 rounded-md transition-colors ${done ? 'bg-stone-50' : 'hover:bg-stone-50'}`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={done}
+                                    onChange={() => toggleTask(selected.id, slotKey, task.id)}
+                                    className="w-4 h-4 rounded cursor-pointer"
+                                    style={{ accentColor: trackColor }}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className={`text-sm ${done ? 'text-stone-400 line-through' : 'text-stone-800'}`}>
+                                      {task.name}
+                                    </div>
+                                    {done && doneAt && (
+                                      <div className="text-[10px] text-stone-400">
+                                        完成於 {new Date(doneAt).toLocaleDateString('zh-TW')}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => toggleNoteExpand(noteKey)}
+                                    className={`p-1 rounded hover:bg-stone-200 transition-colors ${note ? 'text-amber-600' : 'text-stone-400'}`}
+                                    title={note ? '編輯備註' : (trackKey === 'coffee' ? '記錄邀約對象' : '加入備註')}
+                                  >
+                                    <MessageSquare className="w-4 h-4" />
+                                  </button>
+                                  <div className="text-[10px] text-stone-400 whitespace-nowrap">第-{task.weekBefore}週</div>
+                                </div>
+                                {(noteExpanded || note) && (
+                                  <textarea
+                                    value={note}
+                                    onChange={e => updateNote(selected.id, slotKey, task.id, e.target.value)}
+                                    placeholder={trackKey === 'coffee' ? '邀約對象：(例：陳會計師 / 李建築師)' : '加入備註（自動儲存，前台會顯示）'}
+                                    rows={2}
+                                    className="mt-2 w-full px-3 py-1.5 text-xs border border-stone-200 rounded bg-white resize-none focus:border-stone-500 focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* EDM 草稿產生器 */}
+                  <button
+                    onClick={() => setEdmModal({ text: generateEdmDraft(slot, speaker, selected.date), speakerName: speaker.name })}
+                    className="w-full mt-2 px-3 py-2 text-sm rounded-md text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                    style={{ background: '#8B6F47', fontFamily: "'Noto Sans TC', sans-serif" }}
+                  >
+                    <Megaphone className="w-4 h-4" />
+                    📋 產生 EDM 草稿
+                  </button>
+                </>
+              ) : (
+                <div className="text-sm text-stone-400 py-8 text-center">尚未安排演講人</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============ 會員管理 ============
+function MemberManager({ data, saveData, showToast }) {
+  const fileRef = useRef(null);
+  const [form, setForm] = useState({ name: '', industry: '', company: '', email: '', phone: '' });
+
+  const handleExcelImport = async (file) => {
+    try {
+      await ensureXLSX();
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (rows.length === 0) {
+        showToast('Excel 沒有資料', 'error');
+        return;
+      }
+
+      // 自動辨識欄位（兼容中英文欄名）
+      const newMembers = rows.map((r, idx) => {
+        const get = (keys) => {
+          for (const k of keys) {
+            if (r[k] !== undefined && r[k] !== '') return String(r[k]).trim();
+          }
+          return '';
+        };
+        return {
+          id: `u_${Date.now()}_${idx}`,
+          name: get(['姓名', '名字', 'Name', 'name', '會員姓名']),
+          industry: get(['行業別', '行業', '產業', 'Industry', 'industry', '分類']),
+          company: get(['公司', '公司名稱', 'Company', 'company']),
+          email: get(['Email', 'email', '電子郵件', 'E-mail']),
+          phone: get(['電話', '手機', 'Phone', 'phone', '聯絡電話']),
+        };
+      }).filter(m => m.name);
+
+      if (newMembers.length === 0) {
+        showToast('找不到「姓名」欄位，請檢查 Excel 格式', 'error');
+        return;
+      }
+
+      const confirmed = confirm(`匯入 ${newMembers.length} 位會員？\n（將覆蓋現有會員名單）`);
+      if (!confirmed) return;
+
+      saveData({ ...data, members: newMembers });
+      showToast(`成功匯入 ${newMembers.length} 位會員`);
+    } catch (e) {
+      showToast('匯入失敗：' + e.message, 'error');
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const downloadTemplate = async () => {
+    await ensureXLSX();
+    const ws = XLSX.utils.json_to_sheet([
+      { 姓名: '郭泓志', 行業別: '律師', 公司: '泓品法律事務所', 電話: '07-xxx-xxxx', Email: 'test@example.com' },
+      { 姓名: '陳婉瑜', 行業別: '律師', 公司: '泓品法律事務所', 電話: '07-xxx-xxxx', Email: 'test2@example.com' },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '會員名單');
+    XLSX.writeFile(wb, 'BNI_會員名單_範本.xlsx');
+  };
+
+  const addMember = () => {
+    if (!form.name.trim()) {
+      showToast('請填姓名', 'error');
+      return;
+    }
+    const newM = { id: `u_${Date.now()}`, ...form };
+    saveData({ ...data, members: [...data.members, newM] });
+    setForm({ name: '', industry: '', company: '', email: '', phone: '' });
+    showToast('新增成功');
+  };
+
+  const deleteMember = (id) => {
+    if (!confirm('確定刪除？該會員已排入的演講將被清空')) return;
+    const meetings = data.meetings.map(m => ({
+      ...m,
+      slotA: m.slotA.speakerId === id || m.slotA.helperId === id
+        ? { ...m.slotA, speakerId: m.slotA.speakerId === id ? null : m.slotA.speakerId, helperId: m.slotA.helperId === id ? null : m.slotA.helperId }
+        : m.slotA,
+      slotB: m.slotB.speakerId === id || m.slotB.helperId === id
+        ? { ...m.slotB, speakerId: m.slotB.speakerId === id ? null : m.slotB.speakerId, helperId: m.slotB.helperId === id ? null : m.slotB.helperId }
+        : m.slotB,
+    }));
+    saveData({ ...data, members: data.members.filter(m => m.id !== id), meetings });
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <h3 className="text-xl font-bold mb-5" style={{ color: '#1A1414' }}>會員管理</h3>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">Excel 匯入</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={e => e.target.files?.[0] && handleExcelImport(e.target.files[0])}
+            className="text-sm"
+          />
+          <button
+            onClick={downloadTemplate}
+            className="px-3 py-1.5 text-sm border border-stone-300 rounded-md hover:bg-stone-50 flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4" />下載範本
+          </button>
+        </div>
+        <div className="text-xs text-stone-500 mt-2">
+          支援欄位：姓名（必填）、行業別、公司、電話、Email。匯入會覆蓋現有名單。
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">手動新增</div>
+        <div className="grid md:grid-cols-5 gap-2">
+          <input type="text" placeholder="姓名*" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="行業別" value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="公司" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <input type="text" placeholder="電話" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <button onClick={addMember} className="px-3 py-2 text-sm text-white rounded-md" style={{ background: '#A01E2E' }}>新增</button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-200 flex justify-between items-center">
+          <div className="text-sm font-semibold">會員清單（{data.members.length}）</div>
+        </div>
+        {data.members.length === 0 ? (
+          <div className="text-center py-12 text-stone-400 text-sm">尚未建立會員</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 text-xs text-stone-500">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">姓名</th>
+                  <th className="px-4 py-2 text-left font-medium">行業別</th>
+                  <th className="px-4 py-2 text-left font-medium">公司</th>
+                  <th className="px-4 py-2 text-left font-medium">電話</th>
+                  <th className="px-4 py-2 text-left font-medium">Email</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {data.members.map(m => (
+                  <tr key={m.id}>
+                    <td className="px-4 py-2 font-semibold">{m.name}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.industry}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.company}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.phone}</td>
+                    <td className="px-4 py-2 text-stone-600">{m.email}</td>
+                    <td className="px-4 py-2 text-right">
+                      <button onClick={() => deleteMember(m.id)} className="text-stone-400 hover:text-red-600">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ 任務模板管理 ============
+function TaskTemplateManager({ data, saveData, showToast }) {
+  const [chapter, setChapter] = useState(data.chapterName);
+  const [tasks, setTasks] = useState(data.taskTemplate);
+
+  const updateTask = (idx, field, value) => {
+    const next = [...tasks];
+    next[idx] = { ...next[idx], [field]: value };
+    setTasks(next);
+  };
+
+  const addTask = () => {
+    setTasks([...tasks, { id: `t_${Date.now()}`, name: '新任務', weekBefore: 0, icon: 'Circle', track: 'content' }]);
+  };
+
+  const deleteTask = (idx) => {
+    if (!confirm('確定刪除這個任務項目？')) return;
+    setTasks(tasks.filter((_, i) => i !== idx));
+  };
+
+  const save = () => {
+    saveData({ ...data, chapterName: chapter, taskTemplate: tasks });
+    showToast('儲存完成');
+  };
+
+  const resetDefault = () => {
+    if (!confirm('確定重置為預設任務模板？')) return;
+    setTasks(DEFAULT_TASKS);
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <h3 className="text-xl font-bold mb-5" style={{ color: '#1A1414' }}>分會與任務設定</h3>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="text-sm font-semibold mb-3">分會名稱</div>
+        <input
+          type="text"
+          value={chapter}
+          onChange={e => setChapter(e.target.value)}
+          className="px-3 py-2 text-sm border border-stone-300 rounded-md w-full md:w-1/2"
+        />
+      </div>
+
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-5">
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-sm font-semibold">任務模板</div>
+          <div className="flex gap-2">
+            <button onClick={resetDefault} className="px-3 py-1.5 text-xs border border-stone-300 rounded-md hover:bg-stone-50">重置預設</button>
+            <button onClick={addTask} className="px-3 py-1.5 text-xs text-white rounded-md flex items-center gap-1" style={{ background: '#A01E2E' }}>
+              <Plus className="w-3 h-3" />新增任務
+            </button>
+          </div>
+        </div>
+        <div className="text-xs text-stone-500 mb-3">
+          「第 -N 週」代表演講前 N 週。軌道分為「演講準備」（content）與「咖啡會議邀約」（coffee），兩條平行進行。
+        </div>
+        {['content', 'coffee'].map(trackKey => {
+          const trackTasks = tasks.filter(t => (t.track || 'content') === trackKey).sort((a, b) => b.weekBefore - a.weekBefore);
+          const trackLabel = trackKey === 'content' ? '演講準備' : '咖啡會議邀約';
+          const trackColor = trackKey === 'content' ? '#A01E2E' : '#8B6F47';
+          const TrackIcon = trackKey === 'content' ? Presentation : Coffee;
+          return (
+            <div key={trackKey} className="mb-4">
+              <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-stone-200">
+                <TrackIcon className="w-4 h-4" style={{ color: trackColor }} />
+                <div className="text-sm font-semibold" style={{ color: trackColor }}>{trackLabel}</div>
+                <div className="text-xs text-stone-400">({trackTasks.length})</div>
+              </div>
+              <div className="space-y-2">
+                {trackTasks.map((task) => (
+                  <div key={task.id} className="flex flex-wrap gap-2 items-center p-2 rounded-md bg-stone-50">
+                    <input
+                      type="text"
+                      value={task.name}
+                      onChange={e => updateTask(tasks.indexOf(task), 'name', e.target.value)}
+                      className="flex-1 min-w-[180px] px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+                    />
+                    <div className="flex items-center gap-1 text-xs text-stone-500">
+                      第-
+                      <input
+                        type="number"
+                        value={task.weekBefore}
+                        onChange={e => updateTask(tasks.indexOf(task), 'weekBefore', parseInt(e.target.value) || 0)}
+                        className="w-14 px-2 py-1.5 text-sm border border-stone-300 rounded-md bg-white"
+                      />
+                      週
+                    </div>
+                    <select
+                      value={task.track || 'content'}
+                      onChange={e => updateTask(tasks.indexOf(task), 'track', e.target.value)}
+                      className="px-2 py-1.5 text-xs border border-stone-300 rounded-md bg-white"
+                    >
+                      <option value="content">演講準備</option>
+                      <option value="coffee">咖啡會議</option>
+                    </select>
+                    <select
+                      value={task.icon}
+                      onChange={e => updateTask(tasks.indexOf(task), 'icon', e.target.value)}
+                      className="px-2 py-1.5 text-xs border border-stone-300 rounded-md bg-white"
+                    >
+                      {Object.keys(ICON_MAP).map(ic => <option key={ic} value={ic}>{ic}</option>)}
+                    </select>
+                    <button onClick={() => deleteTask(tasks.indexOf(task))} className="text-stone-400 hover:text-red-600">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button onClick={save} className="px-5 py-2.5 text-white rounded-md font-semibold" style={{ background: '#A01E2E' }}>
+        儲存設定
+      </button>
+    </div>
+  );
+}
+
+// ============ 咖啡會議頁 ============
+const COFFEE_STATUS = {
+  pending: { text: '邀約中', color: '#A01E2E', bg: '#FCEFE3' },
+  scheduled: { text: '待進行', color: '#B8860B', bg: '#FFF8E1' },
+  done: { text: '已完成', color: '#4A6741', bg: '#EDF3E8' },
+  cancelled: { text: '已取消', color: '#888', bg: '#F0F0F0' },
+};
+const COFFEE_WILLINGNESS = {
+  // 舊資料相容：unknown 的舊紀錄會 fallback 到「邀約中」顯示
+  unknown: { text: '邀約中', color: '#A01E2E', bg: '#FCEFE3' },
+  pending: { text: '邀約中', color: '#A01E2E', bg: '#FCEFE3' },
+  confirmed: { text: '確認出席', color: '#4A6741', bg: '#EDF3E8' },
+  declined: { text: '拒絕', color: '#6C6C6C', bg: '#F0F0F0' },
+};
+const COFFEE_CONVERSION = {
+  none: { text: '—', color: '#AAA', bg: '#F5F5F5' },
+  following: { text: '跟進中', color: '#8B6F47', bg: '#FFF8E1' },
+  signed: { text: '已簽單', color: '#A01E2E', bg: '#FCEFE3' },
+  paid: { text: '已繳費', color: '#2D5A27', bg: '#EDF3E8' },
+  sworn: { text: '已宣誓🎉', color: '#1A6B1A', bg: '#D4EDDA' },
+};
+
+function CoffeeMeetingPage({ data, saveData, showToast }) {
+  // 預設只看「待進行」的咖啡會議；3 個多選 + 1 個 inviterId 單選 + search
+  const [filter, setFilter] = useState({ inviterId: '', statuses: ['scheduled'], willingnesses: [], conversions: [], search: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [groupMeetings, setGroupMeetings] = useState([]);       // 從運營台讀組聚
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
+  const [selectedOffers, setSelectedOffers] = useState(new Set());
+
+  // 逐筆確認流程：reviewQueue=待確認的 offer 列表；reviewIdx=當前處理到第幾筆；reviewDraft=當前可編輯的草稿；confirmedDrafts=已確認待儲存的
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const [reviewIdx, setReviewIdx] = useState(0);
+  const [reviewDraft, setReviewDraft] = useState(null);
+  const [confirmedDrafts, setConfirmedDrafts] = useState([]);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false); // 防止 finalize 重入（連點「確認此筆並完成」會多次寫入）
+
+  const memberById = useMemo(() => {
+    const map = {};
+    data.members.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [data.members]);
+
+  // 首次載入：讀運營台組聚資料，抓所有 pending 的引薦意向
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get('bni_group_meetings_v1', true);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          if (Array.isArray(parsed)) setGroupMeetings(parsed);
+        }
+      } catch (e) { console.error('[load group meetings]', e); }
+    })();
+  }, []);
+
+  // 從 groupMeetings 計算所有可匯入的 offer
+  // 兼容兩種 schema：
+  //   - 舊版（單主講）：gm.speaker.memberId + gm.neededConnections[]
+  //   - 新版（多主講）：gm.speakers[].memberId + gm.speakers[].neededConnections[]
+  const importableOffers = useMemo(() => {
+    const results = [];
+    const collectFromSpeaker = (gm, speakerId, neededConnections) => {
+      if (!speakerId) return;            // 沒主講人的跳過
+      (neededConnections || []).forEach(nc => {
+        (nc.offers || []).forEach(of => {
+          if (of.status === 'imported') return;  // 已匯入跳過
+          if (of.wantImport === false) return;    // 使用者勾選「不匯入」跳過（舊資料 undefined 視為 true）
+          if (!of.contactName?.trim()) return;    // 沒填姓名跳過
+          results.push({
+            // compositeId 加上 speakerId，避免新版多主講人時 nc.id 跨 speaker 衝突
+            compositeId: gm.id + ':' + speakerId + ':' + nc.id + ':' + of.id,
+            meetingId: gm.id,
+            speakerId,                     // 咖啡會議的 inviterId + write-back 找 speaker 用
+            ncId: nc.id,
+            offerId: of.id,
+            meetingDate: gm.date,
+            introducerId: of.introducerId,
+            contactName: of.contactName,
+            contactProfession: of.contactProfession || '',
+            profileWanted: nc.profileWanted || '',
+          });
+        });
+      });
+    };
+    (groupMeetings || []).forEach(gm => {
+      // 新版：speakers[] 陣列
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        gm.speakers.forEach(sp => collectFromSpeaker(gm, sp.memberId, sp.neededConnections));
+      } else {
+        // 舊版：單一 speaker 結構
+        collectFromSpeaker(gm, gm.speaker?.memberId, gm.neededConnections);
+      }
+    });
+    return results;
+  }, [groupMeetings]);
+
+  const allMeetings = data.coffeeMeetings || [];
+
+  const filtered = useMemo(() => {
+    let result = [...allMeetings];
+    if (filter.inviterId) result = result.filter(cm => cm.inviterId === filter.inviterId);
+    if (filter.statuses && filter.statuses.length > 0) result = result.filter(cm => filter.statuses.includes(cm.meetingStatus || 'pending'));
+    if (filter.willingnesses && filter.willingnesses.length > 0) result = result.filter(cm => filter.willingnesses.includes(cm.attendanceWillingness || 'pending'));
+    if (filter.conversions && filter.conversions.length > 0) result = result.filter(cm => filter.conversions.includes(cm.conversionStatus || 'none'));
+    if (filter.search) {
+      const q = filter.search.toLowerCase();
+      result = result.filter(cm =>
+        (cm.guestName || '').toLowerCase().includes(q) ||
+        (cm.guestIndustry || '').toLowerCase().includes(q)
+      );
+    }
+    return result.sort((a, b) => new Date(b.meetingTime || b.createdAt || 0) - new Date(a.meetingTime || a.createdAt || 0));
+  }, [allMeetings, filter]);
+
+  // 統計
+  const stats = useMemo(() => ({
+    total: allMeetings.length,
+    done: allMeetings.filter(cm => cm.meetingStatus === 'done').length,
+    pending: allMeetings.filter(cm => cm.meetingStatus === 'pending').length,
+    scheduled: allMeetings.filter(cm => cm.meetingStatus === 'scheduled').length,
+    confirmed: allMeetings.filter(cm => cm.attendanceWillingness === 'confirmed').length,
+    following: allMeetings.filter(cm => cm.conversionStatus === 'following').length,
+    signed: allMeetings.filter(cm => cm.conversionStatus === 'signed').length,
+    sworn: allMeetings.filter(cm => cm.conversionStatus === 'sworn').length,
+  }), [allMeetings]);
+
+  // 近期 6 週演講人名單（方便快速建立咖啡會議）
+  const upcomingSpeakers = useMemo(() => {
+    const today = new Date();
+    const ids = new Set();
+    data.meetings
+      .filter(m => daysBetween(today, new Date(m.date)) >= -1)
+      .forEach(m => {
+        if (m.slotA.speakerId) ids.add(m.slotA.speakerId);
+        if (m.slotB.speakerId) ids.add(m.slotB.speakerId);
+      });
+    return [...ids].map(id => memberById[id]).filter(Boolean);
+  }, [data.meetings, memberById]);
+
+  const openNew = (presetInviterId) => {
+    setFormData({
+      guestName: '',
+      guestIndustry: '',
+      inviterId: presetInviterId || '',
+      presenterId: '',           // 主講人（選填）
+      participantIds: [],        // 參與者（多選，記錄分會夥伴實際到場名單）
+      meetingTime: '',
+      location: '',              // 地點（選填）
+      meetingStatus: 'pending',
+      attendanceWillingness: 'pending',
+      attendanceTime: '',
+      conversionStatus: 'none',
+      notes: '',
+      minutes: '',               // 會議記錄（事後撰寫實際會談內容、行動項目）
+    });
+    setEditingId('new');
+  };
+
+  const openEdit = (cm) => {
+    setFormData({ ...cm });
+    setEditingId(cm.id);
+  };
+
+  const saveMeeting = () => {
+    if (!formData.guestName?.trim()) {
+      showToast('請填寫來賓姓名', 'error');
+      return;
+    }
+    let next;
+    if (editingId === 'new') {
+      const newCm = { ...formData, id: `cm_${Date.now()}`, createdAt: new Date().toISOString() };
+      next = { ...data, coffeeMeetings: [...allMeetings, newCm] };
+    } else {
+      next = {
+        ...data,
+        coffeeMeetings: allMeetings.map(cm => cm.id === editingId ? { ...cm, ...formData } : cm)
+      };
+    }
+    saveData(next);
+    setEditingId(null);
+    showToast('儲存完成');
+  };
+
+  const deleteMeeting = (id) => {
+    if (!confirm('確定刪除這筆咖啡會議？')) return;
+    saveData({ ...data, coffeeMeetings: allMeetings.filter(cm => cm.id !== id) });
+    showToast('已刪除');
+  };
+
+  // 從 offer 建立可編輯草稿（review 階段每筆都會初始化一份）
+  const makeDraftFromOffer = (o) => {
+    const introducer = o.introducerId ? memberById[o.introducerId] : null;
+    const speaker = o.speakerId ? memberById[o.speakerId] : null;
+    const note = `由 ${introducer?.name || '組員'} 引薦給 ${speaker?.name || '主講人'}（${formatDate(o.meetingDate)} 組聚）`
+      + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
+    return {
+      __offerCompositeId: o.compositeId, // 用來最終回寫 imported 狀態
+      guestName: o.contactName || '',
+      guestIndustry: o.contactProfession || '',
+      // 邀約人：引薦這個人脈的組員（誰跟這位來賓熟，誰負責約咖啡），沒填引薦人才 fallback 主講人
+      inviterId: o.introducerId || o.speakerId,
+      // 主講人：這場咖啡會議要把這位來賓帶來聽誰的演講
+      presenterId: o.speakerId,
+      meetingTime: '',                   // 留空讓使用者填
+      location: '',
+      meetingStatus: 'pending',          // 預設邀約中
+      attendanceWillingness: 'pending',
+      attendanceTime: '',
+      conversionStatus: 'none',
+      notes: note,
+    };
+  };
+
+  // 開始逐筆確認流程
+  const startReview = () => {
+    const selected = importableOffers.filter(o => selectedOffers.has(o.compositeId));
+    if (selected.length === 0) { showToast('請先勾選要匯入的項目', 'error'); return; }
+    setReviewQueue(selected);
+    setReviewIdx(0);
+    setReviewDraft(makeDraftFromOffer(selected[0]));
+    setConfirmedDrafts([]);
+    setImportPanelOpen(false); // 關掉勾選面板，切到逐筆確認
+  };
+
+  // 確認此筆：把 draft 加入 confirmedDrafts；最後一筆 → 觸發 finalize
+  const reviewConfirmCurrent = () => {
+    if (reviewSubmitting) return;  // 防重入
+    const newConfirmed = [...confirmedDrafts, reviewDraft];
+    advanceReview(newConfirmed);
+  };
+  // 跳過此筆：不加入 confirmedDrafts，直接 advance
+  const reviewSkipCurrent = () => {
+    if (reviewSubmitting) return;
+    advanceReview(confirmedDrafts);
+  };
+  // 推進到下一筆，或結束
+  const advanceReview = (currentConfirmed) => {
+    const nextIdx = reviewIdx + 1;
+    if (nextIdx >= reviewQueue.length) {
+      // 已到最後 → 收尾儲存
+      finalizeReview(currentConfirmed);
+    } else {
+      setConfirmedDrafts(currentConfirmed);
+      setReviewIdx(nextIdx);
+      setReviewDraft(makeDraftFromOffer(reviewQueue[nextIdx]));
+    }
+  };
+  // 取消整個逐筆確認流程（已確認的依使用者選擇是否保留）
+  const cancelReview = () => {
+    if (reviewSubmitting) return;
+    if (confirmedDrafts.length === 0) {
+      // 沒確認過任何 → 直接清空
+      resetReviewState();
+      return;
+    }
+    if (confirm(`已確認 ${confirmedDrafts.length} 筆，是否儲存這些已確認的，或全部放棄？\n\n按「確定」儲存已確認的，按「取消」全部放棄。`)) {
+      finalizeReview(confirmedDrafts);
+    } else {
+      resetReviewState();
+    }
+  };
+  const resetReviewState = () => {
+    setReviewQueue([]);
+    setReviewIdx(0);
+    setReviewDraft(null);
+    setConfirmedDrafts([]);
+    setSelectedOffers(new Set());
+    setReviewSubmitting(false);
+  };
+
+  // 收尾：把所有已確認的 draft 寫進 coffeeMeetings + 對應 group meeting offer 標記 imported
+  const finalizeReview = async (allConfirmed) => {
+    if (reviewSubmitting) return;          // 防重入：finalize 還在跑就再呼叫直接 ignore
+    setReviewSubmitting(true);             // 鎖 — 防止連點 modal 多次觸發 finalize
+    // 立刻清掉 modal 顯示（reviewDraft=null 會讓 modal unmount），即使 await 還在跑也按不到了
+    setReviewDraft(null);
+    if (allConfirmed.length === 0) {
+      showToast('沒有要儲存的項目');
+      resetReviewState();
+      return;
+    }
+    const now = new Date().toISOString();
+    const newCms = allConfirmed.map((d, i) => ({
+      id: `cm_${Date.now()}_${i}`,
+      guestName: d.guestName,
+      guestIndustry: d.guestIndustry,
+      inviterId: d.inviterId,
+      presenterId: d.presenterId || '',
+      meetingTime: d.meetingTime || '',
+      location: d.location || '',
+      meetingStatus: d.meetingStatus || 'pending',
+      attendanceWillingness: d.attendanceWillingness || 'pending',
+      attendanceTime: d.attendanceTime || '',
+      conversionStatus: d.conversionStatus || 'none',
+      notes: d.notes || '',
+      sourceGroupMeetingCompositeId: d.__offerCompositeId,
+      createdAt: now,
+    }));
+    saveData({ ...data, coffeeMeetings: [...allMeetings, ...newCms] });
+
+    // 回寫組聚：把對應 offer 標 imported（兼容新舊 schema，跟原本 doImport 一樣）
+    const confirmedKeys = new Set(allConfirmed.map(d => d.__offerCompositeId));
+    const markOffer = (gm, speakerId, of, ncId) => {
+      const key = gm.id + ':' + speakerId + ':' + ncId + ':' + of.id;
+      if (!confirmedKeys.has(key)) return of;
+      return { ...of, status: 'imported', importedAt: now };
+    };
+    const updatedGroupMeetings = groupMeetings.map(gm => {
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        return {
+          ...gm,
+          speakers: gm.speakers.map(sp => ({
+            ...sp,
+            neededConnections: (sp.neededConnections || []).map(nc => ({
+              ...nc,
+              offers: (nc.offers || []).map(of => markOffer(gm, sp.memberId, of, nc.id)),
+            })),
+          })),
+        };
+      }
+      const oldSpeakerId = gm.speaker?.memberId || '';
+      return {
+        ...gm,
+        neededConnections: (gm.neededConnections || []).map(nc => ({
+          ...nc,
+          offers: (nc.offers || []).map(of => markOffer(gm, oldSpeakerId, of, nc.id)),
+        })),
+      };
+    });
+    try {
+      await apiClient.set('bni_group_meetings_v1', JSON.stringify(updatedGroupMeetings), true);
+      setGroupMeetings(updatedGroupMeetings);
+      showToast(`已匯入 ${allConfirmed.length} 筆引薦為咖啡會議`);
+    } catch (e) {
+      showToast('匯入成功但回寫組聚失敗，下次可能會重複顯示：' + e.message, 'error');
+    }
+    resetReviewState();
+  };
+
+  // 將勾選的組聚 offer 直接匯入（保留舊邏輯，但目前 UI 已改用 startReview，這個函式僅作備用）
+  const doImport = async () => {
+    const selected = importableOffers.filter(o => selectedOffers.has(o.compositeId));
+    if (selected.length === 0) { showToast('請先勾選要匯入的項目', 'error'); return; }
+
+    // 1. 新增 coffee meetings
+    const now = new Date().toISOString();
+    const newCms = selected.map(o => {
+      const introducer = o.introducerId ? memberById[o.introducerId] : null;
+      const note = `由 ${introducer?.name || '組員'} 引薦（${formatDate(o.meetingDate)} 組聚）`
+        + (o.profileWanted ? `\n原需求：${o.profileWanted}` : '');
+      return {
+        id: `cm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        guestName: o.contactName,
+        guestIndustry: o.contactProfession || '',
+        inviterId: o.speakerId,
+        meetingTime: '',
+        meetingStatus: 'pending',               // 邀約中
+        attendanceWillingness: 'pending',
+        conversionStatus: 'none',
+        notes: note,
+        sourceGroupMeetingId: o.meetingId,      // 追溯來源
+        sourceOfferId: o.offerId,
+        createdAt: now,
+      };
+    });
+
+    // 2. 更新主站 coffeeMeetings
+    saveData({ ...data, coffeeMeetings: [...allMeetings, ...newCms] });
+
+    // 3. 回寫組聚：把對應的 offer 標為 imported（兼容新舊 schema）
+    // selectedKeys 用 meetingId:speakerId:ncId:offerId（與 compositeId 一致）
+    const selectedKeys = new Set(selected.map(o => o.meetingId + ':' + o.speakerId + ':' + o.ncId + ':' + o.offerId));
+    const markOffer = (gm, speakerId, of, ncId) => {
+      const key = gm.id + ':' + speakerId + ':' + ncId + ':' + of.id;
+      if (!selectedKeys.has(key)) return of;
+      return { ...of, status: 'imported', importedAt: now };
+    };
+    const updatedGroupMeetings = groupMeetings.map(gm => {
+      // 新版：speakers[]
+      if (Array.isArray(gm.speakers) && gm.speakers.length) {
+        return {
+          ...gm,
+          speakers: gm.speakers.map(sp => ({
+            ...sp,
+            neededConnections: (sp.neededConnections || []).map(nc => ({
+              ...nc,
+              offers: (nc.offers || []).map(of => markOffer(gm, sp.memberId, of, nc.id)),
+            })),
+          })),
+        };
+      }
+      // 舊版：meeting.neededConnections
+      const oldSpeakerId = gm.speaker?.memberId || '';
+      return {
+        ...gm,
+        neededConnections: (gm.neededConnections || []).map(nc => ({
+          ...nc,
+          offers: (nc.offers || []).map(of => markOffer(gm, oldSpeakerId, of, nc.id)),
+        })),
+      };
+    });
+    try {
+      await apiClient.set('bni_group_meetings_v1', JSON.stringify(updatedGroupMeetings), true);
+      setGroupMeetings(updatedGroupMeetings);
+      showToast(`已匯入 ${selected.length} 筆引薦為咖啡會議`);
+    } catch (e) {
+      showToast('匯入成功但回寫組聚失敗，下次可能會重複顯示：' + e.message, 'error');
+    }
+
+    // 4. 關閉 modal
+    setImportPanelOpen(false);
+    setSelectedOffers(new Set());
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">COFFEE MEETING TRACKER</div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+            咖啡會議 <span style={{ color: '#8B6F47' }}>追蹤</span>
+          </h2>
+          <div className="text-sm text-stone-500">記錄每場 121，邀約嘉賓來聽主題演講、開啟簽單機會</div>
+        </div>
+        {importableOffers.length > 0 && (
+          <button
+            onClick={() => { setImportPanelOpen(true); setSelectedOffers(new Set(importableOffers.map(o => o.compositeId))); }}
+            className="relative px-4 py-2.5 text-sm font-semibold text-white rounded-md shadow-sm hover:shadow-md transition-all flex items-center gap-2"
+            style={{ background: '#B8860B' }}
+            title="將組聚中的引薦意向轉為咖啡會議"
+          >
+            <Megaphone className="w-4 h-4" />
+            從組聚匯入引薦
+            <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+              {importableOffers.length}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* 統計（每張卡可點 → 套用對應篩選；同一張再點一次取消篩選）*/}
+      <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-5">
+        <StatCard label="總場次" value={stats.total} color="#1A1414"
+          active={
+            !filter.statuses?.length && !filter.willingnesses?.length && !filter.conversions?.length && !filter.inviterId && !filter.search
+          }
+          onClick={() => setFilter({ inviterId: '', statuses: [], willingnesses: [], conversions: [], search: '' })} />
+        <StatCard label="邀約中" value={stats.pending} color="#A01E2E"
+          active={filter.statuses?.length === 1 && filter.statuses[0] === 'pending'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'pending') ? [] : ['pending'],
+            willingnesses: [], conversions: [],
+          })} />
+        <StatCard label="待進行" value={stats.scheduled} color="#B8860B"
+          active={filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled') ? [] : ['scheduled'],
+            willingnesses: [], conversions: [],
+          })} />
+        <StatCard label="已完成" value={stats.done} color="#8B6F47"
+          active={filter.statuses?.length === 1 && filter.statuses[0] === 'done'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'done') ? [] : ['done'],
+            willingnesses: [], conversions: [],
+          })} />
+        <StatCard label="確認出席" value={stats.confirmed} color="#4A6741"
+          active={filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: [],
+            willingnesses: (filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed') ? [] : ['confirmed'],
+            conversions: [],
+          })} />
+        <StatCard label="跟進中" value={stats.following} color="#8B6F47"
+          active={filter.conversions?.length === 1 && filter.conversions[0] === 'following'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: [], willingnesses: [],
+            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'following') ? [] : ['following'],
+          })} />
+        <StatCard label="已簽單" value={stats.signed} color="#A01E2E"
+          active={filter.conversions?.length === 1 && filter.conversions[0] === 'signed'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: [], willingnesses: [],
+            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'signed') ? [] : ['signed'],
+          })} />
+        <StatCard label="已宣誓" value={stats.sworn} color="#1A6B1A"
+          active={filter.conversions?.length === 1 && filter.conversions[0] === 'sworn'}
+          onClick={() => setFilter({
+            ...filter,
+            statuses: [], willingnesses: [],
+            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'sworn') ? [] : ['sworn'],
+          })} />
+      </div>
+
+      {/* 近期演講人快速建立 */}
+      {upcomingSpeakers.length > 0 && (
+        <div className="mb-4 p-3 bg-white rounded-lg border border-stone-200">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="text-xs font-semibold text-stone-700">近期演講人快速建立：</div>
+            {upcomingSpeakers.map(m => (
+              <button
+                key={m.id}
+                onClick={() => openNew(m.id)}
+                className="px-2 py-1 text-xs bg-stone-100 hover:bg-amber-100 rounded transition-colors"
+              >
+                + {m.name} 的咖啡會議
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 篩選 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-3 mb-4 flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          placeholder="搜尋來賓 / 行業別..."
+          value={filter.search}
+          onChange={e => setFilter({ ...filter, search: e.target.value })}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md flex-1 min-w-[150px]"
+        />
+        <div className="min-w-[180px]">
+          <MemberSearchSelect
+            members={data.members}
+            value={filter.inviterId}
+            onChange={id => setFilter({ ...filter, inviterId: id || '' })}
+            placeholder="所有邀約人"
+            showIndustry={false}
+          />
+        </div>
+        <MultiSelectFilter
+          label="狀態"
+          allText="所有狀態"
+          values={filter.statuses || []}
+          onChange={vals => setFilter({ ...filter, statuses: vals })}
+          options={[
+            { value: 'pending', label: '邀約中' },
+            { value: 'scheduled', label: '待進行' },
+            { value: 'done', label: '已完成' },
+            { value: 'cancelled', label: '已取消' },
+          ]}
+        />
+        <MultiSelectFilter
+          label="出席意願"
+          allText="所有意願"
+          values={filter.willingnesses || []}
+          onChange={vals => setFilter({ ...filter, willingnesses: vals })}
+          options={[
+            { value: 'pending', label: '邀約中' },
+            { value: 'confirmed', label: '確認出席' },
+            { value: 'declined', label: '拒絕' },
+          ]}
+        />
+        <MultiSelectFilter
+          label="轉化"
+          allText="所有轉化"
+          values={filter.conversions || []}
+          onChange={vals => setFilter({ ...filter, conversions: vals })}
+          options={[
+            { value: 'none', label: '不再追蹤' },
+            { value: 'following', label: '跟進中' },
+            { value: 'signed', label: '已簽單' },
+            { value: 'paid', label: '已繳費' },
+            { value: 'sworn', label: '已宣誓' },
+          ]}
+        />
+        <button
+          onClick={() => openNew()}
+          className="px-4 py-1.5 text-sm text-white rounded-md flex items-center gap-1"
+          style={{ background: '#8B6F47' }}
+        >
+          <Plus className="w-4 h-4" />新增咖啡會議
+        </button>
+      </div>
+
+      {/* 列表 */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-lg border border-stone-200">
+            <Coffee className="w-12 h-12 text-stone-300 mx-auto mb-2" />
+            <div className="text-sm text-stone-500">沒有咖啡會議記錄</div>
+            <div className="text-xs text-stone-400 mt-1">點「新增咖啡會議」開始記錄</div>
+          </div>
+        ) : (
+          filtered.map(cm => (
+            <CoffeeCard
+              key={cm.id}
+              cm={cm}
+              inviter={memberById[cm.inviterId]}
+              presenter={cm.presenterId ? memberById[cm.presenterId] : null}
+              members={data.members}
+              onEdit={() => openEdit(cm)}
+              onDelete={() => deleteMeeting(cm.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* 編輯表單 Modal */}
+      {editingId && (
+        <CoffeeMeetingModal
+          isNew={editingId === 'new'}
+          formData={formData}
+          setFormData={setFormData}
+          members={data.members}
+          onSave={saveMeeting}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+
+      {/* 從組聚匯入引薦 Modal */}
+      {importPanelOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
+          <div className="bg-white w-full max-w-3xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sm:rounded-t-2xl flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: '#1A1414' }}>從組聚匯入引薦意向</h3>
+                <div className="text-xs text-stone-500 mt-0.5">勾選要轉為咖啡會議的引薦 → 下一步會逐筆讓你確認/修改細節</div>
+              </div>
+              <button onClick={() => setImportPanelOpen(false)} className="p-1.5 hover:bg-stone-100 rounded-lg">
+                <X className="w-5 h-5 text-stone-500" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-stone-100">
+                <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox"
+                    checked={selectedOffers.size === importableOffers.length && importableOffers.length > 0}
+                    onChange={e => setSelectedOffers(e.target.checked ? new Set(importableOffers.map(o => o.compositeId)) : new Set())} />
+                  <span>全選</span>
+                </label>
+                <div className="text-xs text-stone-500">已勾選 {selectedOffers.size} / {importableOffers.length}</div>
+              </div>
+
+              <div className="space-y-2">
+                {importableOffers.map(o => {
+                  const speaker = memberById[o.speakerId];
+                  const introducer = o.introducerId ? memberById[o.introducerId] : null;
+                  const checked = selectedOffers.has(o.compositeId);
+                  return (
+                    <label key={o.compositeId}
+                      className={`flex gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checked ? 'border-amber-400 bg-amber-50/40' : 'border-stone-200 hover:bg-stone-50'}`}>
+                      <input type="checkbox" checked={checked} className="mt-1"
+                        onChange={e => setSelectedOffers(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(o.compositeId); else next.delete(o.compositeId);
+                          return next;
+                        })} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-semibold text-stone-800">{o.contactName}</span>
+                          {o.contactProfession && <span className="text-xs text-stone-500">· {o.contactProfession}</span>}
+                        </div>
+                        <div className="text-xs text-stone-600 space-y-0.5">
+                          <div>
+                            主講人 <b>{speaker?.name || '未知'}</b> 將邀約
+                            {introducer && <span> · 由 <b>{introducer.name}</b> 引薦</span>}
+                          </div>
+                          {o.profileWanted && <div className="text-stone-500">原需求：{o.profileWanted}</div>}
+                          <div className="text-[10px] text-stone-400">組聚日期：{formatDate(o.meetingDate)}</div>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {importableOffers.length === 0 && (
+                  <div className="text-sm text-stone-400 text-center py-8">目前沒有待匯入的引薦意向</div>
+                )}
+              </div>
+            </div>
+            <div className="border-t border-stone-200 bg-stone-50 px-5 py-3 flex justify-end gap-2 flex-shrink-0 sm:rounded-b-2xl">
+              <button onClick={() => setImportPanelOpen(false)}
+                className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white">取消</button>
+              <button onClick={startReview} disabled={selectedOffers.size === 0}
+                className="px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40"
+                style={{ background: '#B8860B' }}>
+                下一步：逐筆確認 {selectedOffers.size} 筆 →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 逐筆確認 Modal — 每筆引薦獨立檢視/修改後再匯入 */}
+      {reviewDraft && reviewQueue.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
+          <div className="bg-white w-full max-w-2xl rounded-none sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sm:rounded-t-2xl flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: '#1A1414' }}>
+                  逐筆確認匯入（{reviewIdx + 1} / {reviewQueue.length}）
+                </h3>
+                <div className="text-xs text-stone-500 mt-0.5">
+                  原組聚資訊：{(() => {
+                    const o = reviewQueue[reviewIdx];
+                    const sp = memberById[o.speakerId];
+                    const intro = o.introducerId ? memberById[o.introducerId] : null;
+                    return `${formatDate(o.meetingDate)} 組聚 · 主講人 ${sp?.name || '?'}${intro ? ` · 由 ${intro.name} 引薦` : ''}`;
+                  })()}
+                </div>
+                {confirmedDrafts.length > 0 && (
+                  <div className="text-xs text-emerald-600 mt-0.5">已確認 {confirmedDrafts.length} 筆，按「跳過」可不匯入這一筆</div>
+                )}
+              </div>
+              <button onClick={cancelReview} className="p-1.5 hover:bg-stone-100 rounded-lg">
+                <X className="w-5 h-5 text-stone-500" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <CFField label="來賓姓名 *">
+                  <input type="text" value={reviewDraft.guestName}
+                    onChange={e => setReviewDraft({ ...reviewDraft, guestName: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+                </CFField>
+                <CFField label="行業別">
+                  <input type="text" value={reviewDraft.guestIndustry}
+                    onChange={e => setReviewDraft({ ...reviewDraft, guestIndustry: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+                </CFField>
+              </div>
+              <CFField label="邀約人">
+                <MemberSearchSelect
+                  members={data.members}
+                  value={reviewDraft.inviterId}
+                  onChange={id => setReviewDraft({ ...reviewDraft, inviterId: id || '' })}
+                  placeholder="— 選擇邀約人 —" />
+              </CFField>
+              <CFField label="主講人（這筆咖啡是要邀來聽誰的演講）">
+                <MemberSearchSelect
+                  members={data.members}
+                  value={reviewDraft.presenterId}
+                  onChange={id => setReviewDraft({ ...reviewDraft, presenterId: id || '' })}
+                  placeholder="（選填）" />
+              </CFField>
+              <div className="grid grid-cols-2 gap-3">
+                <CFField label="咖啡會議時間">
+                  <input type="datetime-local" value={reviewDraft.meetingTime}
+                    onChange={e => setReviewDraft({ ...reviewDraft, meetingTime: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+                </CFField>
+                <CFField label="狀態">
+                  <select value={reviewDraft.meetingStatus}
+                    onChange={e => setReviewDraft({ ...reviewDraft, meetingStatus: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white">
+                    <option value="pending">邀約中</option>
+                    <option value="scheduled">待進行</option>
+                    <option value="done">已完成</option>
+                    <option value="cancelled">已取消</option>
+                  </select>
+                </CFField>
+              </div>
+              <CFField label="地點">
+                <input type="text" value={reviewDraft.location}
+                  onChange={e => setReviewDraft({ ...reviewDraft, location: e.target.value })}
+                  placeholder="例：85度C、Zoom..."
+                  className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+              </CFField>
+              <CFField label="備註">
+                <textarea value={reviewDraft.notes} rows={3}
+                  onChange={e => setReviewDraft({ ...reviewDraft, notes: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-none" />
+              </CFField>
+            </div>
+            <div className="border-t border-stone-200 bg-stone-50 px-5 py-3 flex justify-between gap-2 flex-shrink-0 sm:rounded-b-2xl">
+              <button onClick={cancelReview} disabled={reviewSubmitting}
+                className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed">取消全部</button>
+              <div className="flex gap-2">
+                <button onClick={reviewSkipCurrent} disabled={reviewSubmitting}
+                  className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-white text-stone-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                  跳過此筆
+                </button>
+                <button onClick={reviewConfirmCurrent}
+                  disabled={!reviewDraft.guestName?.trim() || reviewSubmitting}
+                  className="px-4 py-2 text-sm font-semibold text-white rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: '#8B6F47' }}>
+                  {reviewSubmitting ? '處理中…' : (reviewIdx + 1 === reviewQueue.length ? '確認此筆並完成' : '確認此筆 →')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, color, onClick, active }) {
+  const isClickable = !!onClick;
+  return (
+    <div
+      onClick={isClickable ? onClick : undefined}
+      className={`bg-white rounded-lg border p-3 transition ${
+        isClickable ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""
+      } ${active ? "ring-2 ring-offset-1 shadow-md" : "border-stone-200"}`}
+      style={active ? { borderColor: color, boxShadow: `0 0 0 2px ${color}40` } : {}}>
+      <div className="text-xs text-stone-500 flex items-center gap-1">
+        {label}
+        {active && <span className="text-[9px] px-1 rounded text-white" style={{ background: color }}>篩選中</span>}
+      </div>
+      <div className="text-2xl md:text-3xl font-bold" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function CoffeeCard({ cm, inviter, presenter, members, onEdit, onDelete }) {
+  const [minutesExpanded, setMinutesExpanded] = useState(false);
+  const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
+  const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.pending;
+  // 時間：能 parse 成 Date 就漂亮顯示；不能（如 LINE 上傳的中文字串）就直接秀原字串
+  const fmtTime = (t) => {
+    if (!t) return '—';
+    const d = new Date(t);
+    return isNaN(d.getTime()) ? String(t) : d.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+  // 出席例會改為只存日期；顯示時切 "YYYY-MM-DD" 並轉成 "MM/DD"
+  const fmtDate = (t) => {
+    if (!t) return '—';
+    const ymd = String(t).slice(0, 10);
+    const parts = ymd.split('-');
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : ymd;
+  };
+  return (
+    <div className="bg-white rounded-lg border border-stone-200 p-4 hover:border-stone-400 transition-colors">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+            <div className="font-bold text-base" style={{ color: '#1A1414' }}>{cm.guestName || '(未填)'}</div>
+            {cm.guestIndustry && <div className="text-xs text-stone-500">· {cm.guestIndustry}</div>}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-stone-500 flex-wrap">
+            <span>邀約人：</span>
+            <span className="font-medium px-1.5 py-0.5 rounded" style={{ background: '#F5EFE6', color: '#8B6F47' }}>{inviter?.name || '—'}</span>
+            {presenter && (
+              <>
+                <span className="text-stone-400">·</span>
+                <span>主講人：</span>
+                <span className="font-medium px-1.5 py-0.5 rounded" style={{ background: '#FCEFE3', color: '#A01E2E' }}>{presenter.name}</span>
+              </>
+            )}
+            {cm.location && (
+              <>
+                <span className="text-stone-400">·</span>
+                <span>📍 {cm.location}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-1 flex-shrink-0">
+          <button onClick={onEdit} className="p-1.5 text-stone-400 hover:text-stone-800 rounded hover:bg-stone-100">
+            <Edit3 className="w-4 h-4" />
+          </button>
+          <button onClick={onDelete} className="p-1.5 text-stone-400 hover:text-red-600 rounded hover:bg-red-50">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-xs">
+        <div>
+          <div className="text-stone-400 mb-1">咖啡會議</div>
+          <div className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ color: statusInfo.color, background: statusInfo.bg }}>
+            {statusInfo.text}
+          </div>
+          <div className="text-stone-500 mt-1">{fmtTime(cm.meetingTime)}</div>
+        </div>
+        <div>
+          <div className="text-stone-400 mb-1">出席例會意願</div>
+          <div className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ color: willingnessInfo.color, background: willingnessInfo.bg }}>
+            {willingnessInfo.text}
+          </div>
+          {cm.attendanceTime && <div className="text-stone-500 mt-1">{fmtDate(cm.attendanceTime)}</div>}
+        </div>
+        <div>
+          <div className="text-stone-400 mb-1">轉化追蹤</div>
+          {(() => {
+            const ci = COFFEE_CONVERSION[cm.conversionStatus || 'none'] || COFFEE_CONVERSION.none;
+            return cm.conversionStatus && cm.conversionStatus !== 'none' ? (
+              <div className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ color: ci.color, background: ci.bg }}>{ci.text}</div>
+            ) : (
+              <div className="text-stone-400">—</div>
+            );
+          })()}
+        </div>
+      </div>
+      {/* 參與者：分會夥伴 chips */}
+      {Array.isArray(cm.participantIds) && cm.participantIds.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          <span className="text-xs text-stone-500">👥 參與者：</span>
+          {cm.participantIds.slice(0, 5).map(id => {
+            const m = (members || []).find(x => x.id === id);
+            if (!m) return null;
+            return <span key={id} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">{m.name}</span>;
+          })}
+          {cm.participantIds.length > 5 && (
+            <span className="text-xs text-stone-500">+{cm.participantIds.length - 5}</span>
+          )}
+        </div>
+      )}
+      {cm.notes && (
+        <div className="mt-3 text-xs text-stone-600 px-3 py-2 rounded bg-amber-50 border-l-2 border-amber-300">
+          💬 {cm.notes}
+        </div>
+      )}
+      {cm.minutes && (
+        <div className="mt-2 text-xs text-stone-700 px-3 py-2 rounded bg-stone-50 border-l-2 border-stone-400">
+          <div className="font-semibold text-stone-600 mb-1 flex items-center justify-between">
+            <span>📝 會議記錄</span>
+            {cm.minutes.length > 80 && (
+              <button onClick={() => setMinutesExpanded(v => !v)}
+                className="text-[11px] text-stone-500 hover:text-stone-800 underline">
+                {minutesExpanded ? "收合" : "展開"}
+              </button>
+            )}
+          </div>
+          <div className="whitespace-pre-wrap">
+            {minutesExpanded || cm.minutes.length <= 80 ? cm.minutes : cm.minutes.slice(0, 80) + "…"}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CoffeeMeetingModal({ isNew, formData, setFormData, members, onSave, onClose }) {
+  const toDatetimeLocal = (iso) => {
+    if (!iso) return '';
+    // 支援 "2025-10-17T20:00" 或完整 ISO
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      style={{ fontFamily: "'Noto Sans TC', sans-serif" }}
+    >
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-4 flex justify-between items-center z-10">
+          <div className="text-lg font-bold" style={{ color: '#1A1414' }}>
+            {isNew ? '新增咖啡會議' : '編輯咖啡會議'}
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-800">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <CFField label="來賓姓名 *">
+            <input
+              type="text"
+              value={formData.guestName || ''}
+              onChange={e => setFormData({ ...formData, guestName: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              placeholder="例：王祖德"
+            />
+          </CFField>
+          <CFField label="行業別">
+            <input
+              type="text"
+              value={formData.guestIndustry || ''}
+              onChange={e => setFormData({ ...formData, guestIndustry: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              placeholder="例：木地板、鋁門窗業"
+            />
+          </CFField>
+          <CFField label="邀約人">
+            <MemberSearchSelect
+              members={members}
+              value={formData.inviterId}
+              onChange={id => setFormData({ ...formData, inviterId: id })}
+              placeholder="— 選擇邀約人 —"
+            />
+          </CFField>
+          <div className="grid grid-cols-2 gap-3">
+            <CFField label="咖啡會議時間">
+              <input
+                type="datetime-local"
+                value={toDatetimeLocal(formData.meetingTime)}
+                onChange={e => setFormData({ ...formData, meetingTime: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              />
+              {/* 若是 LINE 上傳的舊紀錄為中文字串，下方顯示原始字串給使用者參考 */}
+              {formData.meetingTime && toDatetimeLocal(formData.meetingTime) === '' && (
+                <div className="text-[11px] text-amber-700 mt-1">⚠️ 原始輸入：{formData.meetingTime}（請手動轉成日期時間）</div>
+              )}
+            </CFField>
+            <CFField label="狀態">
+              <select
+                value={formData.meetingStatus || 'pending'}
+                onChange={e => setFormData({ ...formData, meetingStatus: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+              >
+                <option value="pending">邀約中</option>
+                <option value="scheduled">待進行</option>
+                <option value="done">已完成</option>
+                <option value="cancelled">已取消</option>
+              </select>
+            </CFField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <CFField label="地點">
+              <input
+                type="text"
+                value={formData.location || ''}
+                onChange={e => setFormData({ ...formData, location: e.target.value })}
+                placeholder="例：85度C、Zoom、事務所..."
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              />
+            </CFField>
+            <CFField label="主講人（這次咖啡是要邀來聽誰的演講）">
+              <MemberSearchSelect
+                members={members}
+                value={formData.presenterId || ''}
+                onChange={id => setFormData({ ...formData, presenterId: id || '' })}
+                placeholder="（選填）"
+                showIndustry={false}
+              />
+            </CFField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <CFField label="出席例會意願">
+              <select
+                value={formData.attendanceWillingness || 'pending'}
+                onChange={e => setFormData({ ...formData, attendanceWillingness: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+              >
+                <option value="pending">邀約中</option>
+                <option value="confirmed">確認出席</option>
+                <option value="declined">拒絕</option>
+              </select>
+            </CFField>
+            <CFField label="出席例會日期">
+              <input
+                type="date"
+                value={(formData.attendanceTime || '').slice(0, 10)}
+                onChange={e => setFormData({ ...formData, attendanceTime: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+              />
+            </CFField>
+          </div>
+          <CFField label="轉化追蹤">
+            <select
+              value={formData.conversionStatus || 'none'}
+              onChange={e => setFormData({ ...formData, conversionStatus: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md bg-white"
+            >
+              <option value="none">— 不再追蹤</option>
+              <option value="following">持續跟進中</option>
+              <option value="signed">已簽單，等待繳費</option>
+              <option value="paid">已繳費，等待訪談</option>
+              <option value="sworn">已宣誓入會</option>
+            </select>
+          </CFField>
+          <CFField label="參與者（其他到場的分會夥伴）">
+            <ParticipantPicker
+              members={members}
+              selectedIds={formData.participantIds || []}
+              onChange={ids => setFormData({ ...formData, participantIds: ids })} />
+          </CFField>
+          <CFField label="備註（短句、上下文）">
+            <textarea
+              value={formData.notes || ''}
+              onChange={e => setFormData({ ...formData, notes: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-none"
+              placeholder="關係描述、跟進狀況、簽單可能性⋯"
+            />
+          </CFField>
+          <CFField label="會議記錄（事後撰寫實際會談內容、行動項目）">
+            <textarea
+              value={formData.minutes || ''}
+              onChange={e => setFormData({ ...formData, minutes: e.target.value })}
+              rows={5}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md resize-y"
+              placeholder="例：今天聊到對方目前的痛點是 ___，下一步預計 ___，下次跟進日期 ___"
+            />
+          </CFField>
+        </div>
+        <div className="sticky bottom-0 bg-white border-t border-stone-200 px-5 py-3 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-stone-50">取消</button>
+          <button onClick={onSave} className="px-5 py-2 text-sm text-white rounded-md font-semibold" style={{ background: '#8B6F47' }}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CFField({ label, children }) {
+  return (
+    <div>
+      <div className="text-xs text-stone-500 mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// 參與者多選：以 chips 顯示已選 + 下方搜尋框可新增
+function ParticipantPicker({ members, selectedIds, onChange }) {
+  const [q, setQ] = useState("");
+  const selectedSet = new Set(selectedIds);
+  const remaining = members.filter(m =>
+    !selectedSet.has(m.id) && (!q || m.name.includes(q) || (m.industry || "").includes(q))
+  );
+  const add = (id) => { onChange([...selectedIds, id]); setQ(""); };
+  const remove = (id) => onChange(selectedIds.filter(x => x !== id));
+  return (
+    <div className="border border-stone-300 rounded-md bg-white">
+      <div className="p-2 flex flex-wrap gap-1.5 min-h-[40px]">
+        {selectedIds.length === 0 && <span className="text-stone-400 text-sm self-center">（尚未選擇）</span>}
+        {selectedIds.map(id => {
+          const m = members.find(x => x.id === id);
+          if (!m) return null;
+          return (
+            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-900">
+              {m.name}{m.industry ? ` · ${m.industry}` : ""}
+              <button type="button" onClick={() => remove(id)} className="ml-0.5 text-amber-700 hover:text-red-600 leading-none">×</button>
+            </span>
+          );
+        })}
+      </div>
+      <div className="border-t border-stone-200 p-2 flex items-center gap-2">
+        <input value={q} onChange={e => setQ(e.target.value)}
+          placeholder="搜尋姓名/行業 + 點下方加入..."
+          className="flex-1 text-sm outline-none bg-transparent" />
+        <span className="text-[11px] text-stone-400">{selectedIds.length} 位</span>
+      </div>
+      {(q || remaining.length > 0) && (
+        <div className="border-t border-stone-200 max-h-40 overflow-y-auto p-1">
+          {remaining.length === 0 && <div className="text-xs text-stone-400 px-2 py-1.5">{selectedIds.length === members.length ? "全部成員都已加入" : "無符合"}</div>}
+          {remaining.slice(0, 20).map(m => (
+            <button key={m.id} type="button" onClick={() => add(m.id)}
+              className="w-full text-left text-sm px-2 py-1 rounded hover:bg-amber-50">
+              <span className="font-medium">{m.name}</span>
+              {m.industry && <span className="text-xs text-stone-400 ml-1.5">· {m.industry}</span>}
+            </button>
+          ))}
+          {remaining.length > 20 && <div className="text-xs text-stone-400 px-2 py-1">…還有 {remaining.length - 20} 位，請輸入關鍵字過濾</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 多選下拉（checkbox 樣式）— 給篩選器用，可多選
+function MultiSelectFilter({ label, options, values, onChange, allText = "全部" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  // 點擊外部關閉
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const selectedLabels = options.filter(o => values.includes(o.value)).map(o => o.label);
+  const buttonText = values.length === 0
+    ? allText
+    : (selectedLabels.length === 1 ? selectedLabels[0] : `${label}：${selectedLabels.length} 項`);
+  const toggle = (val) => {
+    onChange(values.includes(val) ? values.filter(v => v !== val) : [...values, val]);
+  };
+  const clearAll = () => onChange([]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white hover:bg-stone-50 flex items-center gap-1.5 min-w-[120px] justify-between">
+        <span className={values.length === 0 ? "text-stone-500" : "text-stone-800 font-medium"}>{buttonText}</span>
+        <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-md shadow-lg z-30 min-w-[160px] py-1">
+          <button type="button" onClick={clearAll}
+            className="w-full px-3 py-1.5 text-left text-xs text-stone-500 hover:bg-stone-50 border-b border-stone-100">
+            清除選擇（顯示全部）
+          </button>
+          {options.map(o => {
+            const checked = values.includes(o.value);
+            return (
+              <label key={o.value}
+                className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm hover:bg-stone-50 ${checked ? "bg-amber-50/50" : ""}`}>
+                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} className="w-3.5 h-3.5 accent-[#B8860B]" />
+                <span className="text-stone-800">{o.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ KPI 紅綠燈 Dashboard ============
+const LIGHT_COLORS = {
+  green: { bg: '#EDF3E8', color: '#2D5A27', label: '綠燈', emoji: '🟢' },
+  yellow: { bg: '#FFF8E1', color: '#8B6F00', label: '黃燈', emoji: '🟡' },
+  red: { bg: '#FCEFE3', color: '#A01E2E', label: '紅燈', emoji: '🔴' },
+  grey: { bg: '#F0F0F0', color: '#666', label: '灰燈', emoji: '⚫' },
+};
+
+function getKpiLightKey(score) {
+  if (score >= 70) return 'green';
+  if (score >= 50) return 'yellow';
+  if (score >= 30) return 'red';
+  return 'grey';
+}
+
+function KpiDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [kpiData, setKpiData] = useState(null);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [expandedMember, setExpandedMember] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [viewMode, setViewMode] = useState('groups'); // 'groups' | 'all'
+
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+
+  useEffect(() => {
+    if (!proxyUrl) { setLoading(false); setError('KPI 功能僅在部署版本可用'); return; }
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/groups-overview');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        setKpiData(await res.json());
+      } catch (e) { setError('載入 KPI 資料失敗：' + e.message); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  // 彙總所有會員
+  const allMembers = useMemo(() => {
+    if (!kpiData || !kpiData.groups) return [];
+    const members = [];
+    const seen = new Set();
+    for (const [gName, g] of Object.entries(kpiData.groups)) {
+      for (const m of g.members) {
+        if (!seen.has(m.name)) {
+          seen.add(m.name);
+          members.push({ ...m, groupName: gName });
+        }
+      }
+    }
+    return members.sort((a, b) => b.totalScore - a.totalScore);
+  }, [kpiData]);
+
+  // 統計
+  const stats = useMemo(() => {
+    const s = { green: 0, yellow: 0, red: 0, grey: 0, total: 0 };
+    allMembers.forEach(m => {
+      s[getKpiLightKey(m.totalScore)]++;
+      s.total++;
+    });
+    return s;
+  }, [allMembers]);
+
+  // 搜尋過濾
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allMembers;
+    const q = search.toLowerCase();
+    return allMembers.filter(m => m.name.toLowerCase().includes(q));
+  }, [allMembers, search]);
+
+  if (loading) return (
+    <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>載入 KPI 資料中⋯</div>
+  );
+  if (error) return (
+    <div className="text-center py-20" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <AlertCircle className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+      <div className="text-stone-500">{error}</div>
+      {error.includes('HTTP') && <div className="text-xs text-stone-400 mt-2">請確認 KPI 系統是否有上傳月報資料</div>}
+    </div>
+  );
+
+  const toggleGroup = (name) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">KPI TRAFFIC LIGHT</div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          KPI <span style={{ color: '#2D5A27' }}>紅綠燈</span>
+        </h2>
+        {kpiData && kpiData.config && (
+          <div className="text-sm text-stone-500">
+            計算基準：{kpiData.totalWeeks - (kpiData.config.remainWeeks || 0)} 週已過 + {kpiData.config.remainWeeks || 0} 週剩餘
+          </div>
+        )}
+      </div>
+
+      {/* 統計卡 */}
+      <div className="grid grid-cols-4 gap-2 md:gap-3 mb-5">
+        {['green', 'yellow', 'red', 'grey'].map(key => (
+          <div key={key} className="rounded-lg p-3 text-center" style={{ background: LIGHT_COLORS[key].bg }}>
+            <div className="text-2xl md:text-3xl font-bold" style={{ color: LIGHT_COLORS[key].color }}>{stats[key]}</div>
+            <div className="text-xs text-stone-500">{LIGHT_COLORS[key].emoji} {LIGHT_COLORS[key].label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 搜尋 + 切換 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-3 mb-5 flex flex-wrap gap-2 items-center">
+        <input
+          type="text"
+          placeholder="搜尋會員姓名⋯"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="px-3 py-1.5 text-sm border border-stone-300 rounded-md flex-1 min-w-[150px]"
+        />
+        <div className="flex gap-1">
+          <button
+            onClick={() => setViewMode('groups')}
+            className={`px-3 py-1.5 text-xs rounded ${viewMode === 'groups' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'}`}
+          >按組別</button>
+          <button
+            onClick={() => setViewMode('all')}
+            className={`px-3 py-1.5 text-xs rounded ${viewMode === 'all' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'}`}
+          >全員排名</button>
+        </div>
+      </div>
+
+      {/* 搜尋結果 / 全員排名 */}
+      {(search.trim() || viewMode === 'all') && (
+        <div className="bg-white rounded-lg border border-stone-200 mb-5 overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100 text-sm font-semibold text-stone-700">
+            {search.trim() ? `搜尋結果（${filtered.length}）` : `全員排名（${allMembers.length}人）`}
+          </div>
+          <div className="divide-y divide-stone-100">
+            {(search.trim() ? filtered : allMembers).map(m => (
+              <KpiMemberRow key={m.name} member={m} expanded={expandedMember === m.name}
+                onToggle={() => setExpandedMember(expandedMember === m.name ? null : m.name)} />
+            ))}
+            {search.trim() && filtered.length === 0 && (
+              <div className="py-8 text-center text-stone-400 text-sm">找不到「{search}」</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 組別檢視 */}
+      {viewMode === 'groups' && !search.trim() && kpiData && kpiData.groups && (
+        <div className="space-y-3">
+          {Object.entries(kpiData.groups)
+            .sort((a, b) => b[1].avg - a[1].avg)
+            .map(([gName, group]) => {
+              const expanded = expandedGroups.has(gName);
+              const s = group.summary;
+              return (
+                <div key={gName} className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleGroup(gName)}
+                    className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-stone-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm font-bold" style={{ color: '#1A1414' }}>{gName}</div>
+                      <div className="text-xs text-stone-500">（{group.count}人）平均 {group.avg} 分</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 text-xs">
+                        {s.green > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>🟢{s.green}</span>}
+                        {s.yellow > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#FFF8E1', color: '#8B6F00' }}>🟡{s.yellow}</span>}
+                        {s.red > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#FCEFE3', color: '#A01E2E' }}>🔴{s.red}</span>}
+                        {s.grey > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: '#F0F0F0', color: '#666' }}>⚫{s.grey}</span>}
+                      </div>
+                      {expanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+                    </div>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-stone-100 divide-y divide-stone-50">
+                      {group.members.map(m => (
+                        <KpiMemberRow key={m.name} member={m} expanded={expandedMember === m.name}
+                          onToggle={() => setExpandedMember(expandedMember === m.name ? null : m.name)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiMemberRow({ member, expanded, onToggle }) {
+  const m = member;
+  const lk = getKpiLightKey(m.totalScore);
+  const lc = LIGHT_COLORS[lk];
+
+  const ScoreBar = ({ label, score, max }) => {
+    const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+    const barColor = score === max ? '#2D5A27' : score > 0 ? '#C9A55C' : '#E5E0D5';
+    return (
+      <div className="flex items-center gap-2 text-xs py-0.5">
+        <div className="w-12 text-stone-500 text-right">{label}</div>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: '#F0EBE3' }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+        </div>
+        <div className="w-12 text-stone-600 font-medium">{score}/{max}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <button onClick={onToggle} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-stone-50 transition-colors">
+        <div className="flex items-center gap-2.5">
+          <span className="text-lg">{lc.emoji}</span>
+          <span className="text-sm font-semibold" style={{ color: '#1A1414' }}>{m.name}</span>
+          {m.groupName && <span className="text-[10px] text-stone-400">{m.groupName}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold" style={{ color: lc.color }}>{m.totalScore}</span>
+          <span className="text-[10px] text-stone-400">/100</span>
+          {expanded ? <ChevronDown className="w-3.5 h-3.5 text-stone-400" /> : <ChevronRight className="w-3.5 h-3.5 text-stone-400" />}
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 pt-1">
+          <div className="bg-stone-50 rounded-lg p-3 mb-2">
+            <ScoreBar label="缺席" score={m.absenceScore} max={20} />
+            <ScoreBar label="引薦" score={m.referralScore} max={20} />
+            <ScoreBar label="來賓" score={m.visitorScore} max={15} />
+            <ScoreBar label="1-2-1" score={m.meetingScore} max={15} />
+            <ScoreBar label="教育" score={m.trainingScore} max={15} />
+            <ScoreBar label="交易" score={m.transactionScore} max={15} />
+          </div>
+          {m.raw && (
+            <div className="text-[10px] text-stone-400 grid grid-cols-3 gap-x-3 gap-y-0.5 mb-2">
+              <span>缺席 {m.raw.absences} 次</span>
+              <span>引薦 {(m.raw.internalRef||0)+(m.raw.externalRef||0)} 次</span>
+              <span>來賓 {m.raw.visitors} 位</span>
+              <span>1-2-1 {m.raw.oneToOne} 次</span>
+              <span>教育 {m.raw.training} 積分</span>
+              <span>交易 ${(m.raw.transactionValue||0).toLocaleString()}</span>
+            </div>
+          )}
+          {m.recommendations && m.recommendations.summary && (
+            <div className="text-xs p-2 rounded" style={{ background: lk === 'yellow' ? '#FFF8E1' : '#FCEFE3', color: lk === 'yellow' ? '#8B6F00' : '#A01E2E' }}>
+              {m.recommendations.summary}
+            </div>
+          )}
+          {!m.recommendations && m.totalScore >= 70 && (
+            <div className="text-xs p-2 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>
+              ✅ 已達綠燈標準！繼續保持💪
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 紅綠燈管理後台 ============
+function KpiAdminPanel({ showToast }) {
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+  const [adminKey, setAdminKey] = useState(() => {
+    try { return localStorage.getItem('bni_admin_key') || ''; } catch { return ''; }
+  });
+  const [verified, setVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [subTab, setSubTab] = useState('months');
+
+  if (!proxyUrl) return (
+    <div className="text-center py-12 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      紅綠燈管理功能僅在部署版本可用
+    </div>
+  );
+
+  const kpiHeaders = () => ({ 'X-Admin-Key': adminKey });
+
+  const verifyKey = async () => {
+    setVerifying(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/members', { headers: kpiHeaders() });
+      if (res.status === 401) { showToast('管理員密鑰錯誤', 'error'); return; }
+      if (res.ok) {
+        try { localStorage.setItem('bni_admin_key', adminKey); } catch {}
+        setVerified(true);
+        showToast('驗證成功');
+      } else {
+        showToast('連線失敗：HTTP ' + res.status, 'error');
+      }
+    } catch (e) { showToast('連線失敗：' + e.message, 'error'); }
+    finally { setVerifying(false); }
+  };
+
+  if (!verified) return (
+    <div className="max-w-md mx-auto py-12" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
+        <Target className="w-10 h-10 mx-auto mb-3" style={{ color: '#2D5A27' }} />
+        <h3 className="text-lg font-bold mb-1" style={{ color: '#1A1414' }}>紅綠燈管理員驗證</h3>
+        <div className="text-sm text-stone-500 mb-4">請輸入管理員密鑰（ADMIN_KEY）</div>
+        <input
+          type="password"
+          value={adminKey}
+          onChange={e => setAdminKey(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && verifyKey()}
+          placeholder="輸入管理員密鑰"
+          className="w-full px-4 py-2.5 text-sm border border-stone-300 rounded-md mb-3 text-center"
+        />
+        <button onClick={verifyKey} disabled={verifying || !adminKey}
+          className="w-full py-2.5 text-sm text-white rounded-md font-semibold disabled:opacity-50"
+          style={{ background: '#2D5A27' }}>
+          {verifying ? '驗證中⋯' : '驗證'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const subTabs = [
+    { id: 'months', label: '月報管理', icon: Upload },
+    { id: 'groups', label: '行政小組管理', icon: Users },
+    { id: 'config', label: '參數設定', icon: Settings },
+    { id: 'push', label: 'LINE 推播', icon: Megaphone },
+    { id: 'chains', label: '服務鏈', icon: ListChecks },
+  ];
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-bold" style={{ color: '#1A1414' }}>紅綠燈管理</h3>
+        <button onClick={() => { setVerified(false); setAdminKey(''); try { localStorage.removeItem('bni_admin_key'); } catch {} }}
+          className="text-xs text-stone-400 hover:text-stone-600">登出</button>
+      </div>
+      <div className="flex gap-1 mb-5 overflow-x-auto">
+        {subTabs.map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setSubTab(t.id)}
+              className={`px-3 py-1.5 text-xs rounded-md flex items-center gap-1 whitespace-nowrap ${subTab === t.id ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+              style={subTab === t.id ? { background: '#2D5A27' } : {}}>
+              <Icon className="w-3.5 h-3.5" />{t.label}
+            </button>
+          );
+        })}
+      </div>
+      {subTab === 'months' && <KpiMonthManager proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'groups' && <KpiGroupManager proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'config' && <KpiConfigEditor proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'push' && <KpiPushPanel proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+      {subTab === 'chains' && <ServiceChainEditor proxyUrl={proxyUrl} headers={kpiHeaders()} showToast={showToast} />}
+    </div>
+  );
+}
+
+// ─── 月報管理 ───
+function KpiMonthManager({ proxyUrl, headers, showToast }) {
+  const [months, setMonths] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [month, setMonth] = useState('');
+  const fileRef = useRef(null);
+
+  const fetchMonths = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/months', { headers });
+      if (res.ok) setMonths((await res.json()).months || []);
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchMonths(); }, []);
+
+  // 預設月份選項（近12個月，民國年格式）
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const rocYear = d.getFullYear() - 1911;
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      opts.push(`${rocYear}-${m}`);
+    }
+    return opts;
+  }, []);
+
+  const handleUpload = async () => {
+    if (!month) { showToast('請選擇月份', 'error'); return; }
+    if (!fileRef.current?.files?.[0]) { showToast('請選擇 Excel 檔案', 'error'); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('month', month);
+      formData.append('file', fileRef.current.files[0]);
+      const res = await fetch(proxyUrl + '/api/upload', {
+        method: 'POST', headers: { 'X-Admin-Key': headers['X-Admin-Key'] }, body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ ${month} 上傳成功（${data.memberCount} 位會員）`);
+        fileRef.current.value = '';
+        fetchMonths();
+      } else {
+        showToast(data.error || '上傳失敗', 'error');
+      }
+    } catch (e) { showToast('上傳失敗：' + e.message, 'error'); }
+    finally { setUploading(false); }
+  };
+
+  const deleteMonth = async (m) => {
+    if (!confirm(`確定刪除 ${m} 的月報資料？`)) return;
+    try {
+      const res = await fetch(proxyUrl + '/api/month/' + m, { method: 'DELETE', headers });
+      if (res.ok) { showToast('已刪除 ' + m); fetchMonths(); }
+      else showToast('刪除失敗', 'error');
+    } catch (e) { showToast('刪除失敗：' + e.message, 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">上傳月報 Excel</div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <div className="text-xs text-stone-500 mb-1">月份</div>
+            <select value={month} onChange={e => setMonth(e.target.value)}
+              className="px-3 py-2 text-sm border border-stone-300 rounded-md bg-white">
+              <option value="">— 選擇月份 —</option>
+              {monthOptions.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500 mb-1">Excel 檔案</div>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
+              className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-stone-100 file:text-stone-700 hover:file:bg-stone-200" />
+          </div>
+          <button onClick={handleUpload} disabled={uploading}
+            className="px-4 py-2 text-sm text-white rounded-md flex items-center gap-1 disabled:opacity-50"
+            style={{ background: '#2D5A27' }}>
+            <Upload className="w-4 h-4" />{uploading ? '上傳中⋯' : '上傳'}
+          </button>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-3">已上傳月份</div>
+        {loading ? <div className="text-sm text-stone-400 py-4 text-center">載入中⋯</div> :
+         months.length === 0 ? <div className="text-sm text-stone-400 py-4 text-center">尚未上傳任何月報</div> :
+         <div className="space-y-1">
+           {months.map(m => (
+             <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-stone-50">
+               <div className="text-sm"><span className="font-semibold">{m.month}</span><span className="text-stone-500 ml-2">{m.memberCount} 位會員</span></div>
+               <button onClick={() => deleteMonth(m.month)} className="text-stone-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+             </div>
+           ))}
+         </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── 小組管理 ───
+function KpiGroupManager({ proxyUrl, headers, showToast }) {
+  const [groups, setGroups] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newMember, setNewMember] = useState({});
+  const [edited, setEdited] = useState(false);
+  const fileRef = useRef(null);
+
+  const fetchGroups = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/groups', { headers });
+      if (res.ok) { setGroups(await res.json()); setEdited(false); }
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchGroups(); }, []);
+
+  const handleUpload = async () => {
+    if (!fileRef.current?.files?.[0]) { showToast('請選擇 Excel 檔案', 'error'); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileRef.current.files[0]);
+      const res = await fetch(proxyUrl + '/api/groups/upload', {
+        method: 'POST', headers: { 'X-Admin-Key': headers['X-Admin-Key'] }, body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) { showToast(`✅ 上傳成功（${data.groupCount} 組、${data.totalMembers} 人）`); fileRef.current.value = ''; fetchGroups(); }
+      else showToast(data.error || '上傳失敗', 'error');
+    } catch (e) { showToast('上傳失敗：' + e.message, 'error'); }
+    finally { setUploading(false); }
+  };
+
+  const removeMember = (groupName, memberName) => {
+    const next = { ...groups, [groupName]: groups[groupName].filter(n => n !== memberName) };
+    setGroups(next); setEdited(true);
+  };
+
+  const moveMember = (fromGroup, memberName, toGroup) => {
+    if (fromGroup === toGroup) return;
+    const next = { ...groups };
+    next[fromGroup] = next[fromGroup].filter(n => n !== memberName);
+    if (!next[toGroup]) next[toGroup] = [];
+    next[toGroup] = [...next[toGroup], memberName];
+    setGroups(next); setEdited(true);
+  };
+
+  const addMember = (groupName) => {
+    const name = (newMember[groupName] || '').trim();
+    if (!name) return;
+    const next = { ...groups, [groupName]: [...(groups[groupName] || []), name] };
+    setGroups(next); setEdited(true);
+    setNewMember({ ...newMember, [groupName]: '' });
+  };
+
+  const saveGroups = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/groups', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(groups),
+      });
+      if (res.ok) { showToast('✅ 小組儲存成功'); setEdited(false); }
+      else showToast('儲存失敗', 'error');
+    } catch (e) { showToast('儲存失敗：' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const groupEntries = Object.entries(groups);
+  const allGroupNames = Object.keys(groups);
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-2">上傳行政小組名單 Excel</div>
+        <div className="text-xs text-stone-500 mb-3">格式 A：兩欄（組別、姓名）｜格式 B：每欄一組（欄名＝組名）</div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
+            className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-stone-100 file:text-stone-700" />
+          <button onClick={handleUpload} disabled={uploading}
+            className="px-4 py-2 text-sm text-white rounded-md flex items-center gap-1 disabled:opacity-50" style={{ background: '#2D5A27' }}>
+            <Upload className="w-4 h-4" />{uploading ? '上傳中⋯' : '上傳'}
+          </button>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-semibold">行政小組編輯（{groupEntries.length} 組）</div>
+          {edited && (
+            <button onClick={saveGroups} disabled={saving}
+              className="px-4 py-1.5 text-sm text-white rounded-md font-semibold disabled:opacity-50" style={{ background: '#2D5A27' }}>
+              {saving ? '儲存中⋯' : '💾 儲存變更'}
+            </button>
+          )}
+        </div>
+        {loading ? <div className="text-sm text-stone-400 py-4 text-center">載入中⋯</div> :
+         groupEntries.length === 0 ? <div className="text-sm text-stone-400 py-4 text-center">尚未設定行政小組</div> :
+         <div className="space-y-3">
+           {groupEntries.map(([name, members]) => (
+             <div key={name} className="p-3 rounded-md bg-stone-50">
+               <div className="text-sm font-semibold mb-2">{name}（{members.length}人）</div>
+               <div className="space-y-1 mb-2">
+                 {members.map(m => (
+                   <div key={m} className="flex items-center gap-2 py-1 px-2 rounded bg-white text-sm">
+                     <span className="flex-1">{m}</span>
+                     <select defaultValue="" onChange={e => { if (e.target.value) { moveMember(name, m, e.target.value); e.target.value = ''; } }}
+                       className="text-xs border border-stone-200 rounded px-1 py-0.5 bg-white text-stone-500">
+                       <option value="" disabled>移至⋯</option>
+                       {allGroupNames.filter(g => g !== name).map(g => <option key={g} value={g}>{g}</option>)}
+                     </select>
+                     <button onClick={() => removeMember(name, m)} className="text-stone-400 hover:text-red-600" title="移除">
+                       <X className="w-3.5 h-3.5" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+               <div className="flex gap-1">
+                 <input type="text" placeholder="新增成員姓名" value={newMember[name] || ''}
+                   onChange={e => setNewMember({ ...newMember, [name]: e.target.value })}
+                   onKeyDown={e => e.key === 'Enter' && addMember(name)}
+                   className="flex-1 px-2 py-1 text-sm border border-stone-200 rounded" />
+                 <button onClick={() => addMember(name)} className="px-2 py-1 text-xs text-white rounded" style={{ background: '#2D5A27' }}>
+                   <Plus className="w-3.5 h-3.5" />
+                 </button>
+               </div>
+             </div>
+           ))}
+         </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── 參數設定 ───
+function KpiConfigEditor({ proxyUrl, headers, showToast }) {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl + '/api/config', { headers });
+        if (res.ok) setConfig(await res.json());
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/config', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks }),
+      });
+      if (res.ok) showToast('✅ 設定已儲存');
+      else showToast('儲存失敗', 'error');
+    } catch (e) { showToast('儲存失敗：' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading || !config) return <div className="text-sm text-stone-400 py-8 text-center">載入中⋯</div>;
+
+  return (
+    <div className="bg-white rounded-lg border border-stone-200 p-4">
+      <div className="text-sm font-semibold mb-4">KPI 計算參數</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <div className="text-xs text-stone-500 mb-1">本月剩餘週數</div>
+          <input type="number" min="0" max="5" value={config.remainWeeks || 0}
+            onChange={e => setConfig({ ...config, remainWeeks: parseInt(e.target.value) || 0 })}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <div className="text-xs text-stone-400 mt-1">影響目前成績計算（分母加入剩餘週數）</div>
+        </div>
+        <div>
+          <div className="text-xs text-stone-500 mb-1">下月預計週數</div>
+          <input type="number" min="1" max="6" value={config.nextMonthWeeks || 4}
+            onChange={e => setConfig({ ...config, nextMonthWeeks: parseInt(e.target.value) || 4 })}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <div className="text-xs text-stone-400 mt-1">用於 Washout 預測計算</div>
+        </div>
+      </div>
+      {config.updatedAt && (
+        <div className="text-xs text-stone-400 mb-3">上次更新：{new Date(config.updatedAt).toLocaleString('zh-TW')}</div>
+      )}
+      <button onClick={save} disabled={saving}
+        className="px-5 py-2 text-sm text-white rounded-md font-semibold disabled:opacity-50"
+        style={{ background: '#2D5A27' }}>
+        {saving ? '儲存中⋯' : '儲存設定'}
+      </button>
+    </div>
+  );
+}
+
+// ─── LINE 推播 ───
+function KpiPushPanel({ proxyUrl, headers, showToast }) {
+  const [pushing, setPushing] = useState('');
+  const [result, setResult] = useState(null);
+  const [bindings, setBindings] = useState(null);
+  const [allMemberNames, setAllMemberNames] = useState([]);
+  const [bindingsOpen, setBindingsOpen] = useState(false);
+  const [speechWeeks, setSpeechWeeks] = useState(2);
+  const [speechTarget, setSpeechTarget] = useState('both');
+
+  const fetchBindings = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/bindings', { headers });
+      if (res.ok) setBindings(await res.json());
+    } catch {}
+  };
+  const fetchMembers = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/members', { headers });
+      if (res.ok) { const data = await res.json(); setAllMemberNames((data.members || []).map(m => m.name).sort()); }
+    } catch {}
+  };
+  useEffect(() => { fetchBindings(); fetchMembers(); }, []);
+
+  const pushAction = async (url, body, label) => {
+    if (!confirm(`確定${label}？`)) return;
+    setPushing(label); setResult(null);
+    try {
+      const res = await fetch(proxyUrl + url, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) { setResult({ ok: true, ...data }); showToast(`✅ ${label}完成`); }
+      else { setResult({ ok: false, error: data.error }); showToast(data.error || '推播失敗', 'error'); }
+    } catch (e) { setResult({ ok: false, error: e.message }); showToast('推播失敗', 'error'); }
+    finally { setPushing(''); }
+  };
+
+  const unbind = async (userId, name) => {
+    if (!confirm(`確定解除「${name}」的 LINE 綁定？`)) return;
+    try {
+      const res = await fetch(proxyUrl + '/api/bindings/' + encodeURIComponent(userId), { method: 'DELETE', headers });
+      if (res.ok) { showToast(`已解除「${name}」`); fetchBindings(); }
+    } catch (e) { showToast('解除失敗', 'error'); }
+  };
+
+  const unbindAll = async () => {
+    if (!confirm('確定清除全部 LINE 綁定？所有會員需重新綁定')) return;
+    try {
+      const res = await fetch(proxyUrl + '/api/bindings-all', { method: 'DELETE', headers });
+      if (res.ok) { showToast('已清除全部綁定'); fetchBindings(); }
+    } catch (e) { showToast('清除失敗', 'error'); }
+  };
+
+  const bindingEntries = bindings ? Object.entries(bindings).sort((a, b) => a[1].localeCompare(b[1])) : [];
+  const boundNames = new Set(bindingEntries.map(([, name]) => name));
+  const unboundNames = allMemberNames.filter(n => !boundNames.has(n));
+  const targetLabel = { speaker: '演講人', helper: '小幫手', both: '演講人 + 小幫手' };
+
+  return (
+    <div>
+      {/* LINE 綁定管理（折疊） */}
+      <div className="bg-white rounded-lg border border-stone-200 mb-4 overflow-hidden">
+        <button onClick={() => setBindingsOpen(!bindingsOpen)}
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-stone-50">
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold">LINE 綁定管理</div>
+            <div className="text-xs text-stone-500">
+              已綁 <span className="font-bold" style={{ color: '#2D5A27' }}>{bindingEntries.length}</span>
+              {unboundNames.length > 0 && <> / 未綁 <span className="font-bold" style={{ color: '#A01E2E' }}>{unboundNames.length}</span></>}
+            </div>
+          </div>
+          {bindingsOpen ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+        </button>
+        {bindingsOpen && (
+          <div className="border-t border-stone-100 p-4">
+            {bindingEntries.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-stone-600">✅ 已綁定（{bindingEntries.length}人）</div>
+                  <button onClick={unbindAll} className="text-[10px] text-red-500 hover:text-red-700">清除全部</button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {bindingEntries.map(([uid, name]) => (
+                    <span key={uid} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-800 rounded">
+                      {name}
+                      <button onClick={() => unbind(uid, name)} className="text-green-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {unboundNames.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-stone-600 mb-2">❌ 未綁定（{unboundNames.length}人）</div>
+                <div className="text-xs text-stone-500 p-2 bg-red-50 rounded border border-red-100">
+                  {unboundNames.join('、')}
+                </div>
+                <div className="text-[10px] text-stone-400 mt-1">請提醒以上會員在 LINE 輸入「我是○○○」完成綁定</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* KPI 推播 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">KPI 推播</div>
+        <div className="space-y-2">
+          <button onClick={() => pushAction('/api/push', { target: 'non-green' }, '推播非綠燈會員')} disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-left hover:bg-amber-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">🟡🔴 推播非綠燈會員</div><div className="text-xs mt-0.5">發送 KPI 成績和綠燈攻略</div></div>
+            {pushing === '推播非綠燈會員' && <span className="text-xs">發送中⋯</span>}
+          </button>
+          <button onClick={() => pushAction('/api/push', { target: 'all' }, '推播全員')} disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-stone-50 text-stone-700 border border-stone-200 rounded-md text-left hover:bg-stone-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">📢 推播全員成績</div><div className="text-xs mt-0.5">發送給所有已綁定會員</div></div>
+            {pushing === '推播全員' && <span className="text-xs">發送中⋯</span>}
+          </button>
+          <button onClick={() => pushAction('/api/push-washout', { target: 'green-drop' }, '推播 Washout 警告')} disabled={!!pushing}
+            className="w-full px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 rounded-md text-left hover:bg-red-100 disabled:opacity-50 flex items-center justify-between">
+            <div><div className="font-semibold">⚠️ 推播 Washout 警告</div><div className="text-xs mt-0.5">提醒可能掉燈的會員</div></div>
+            {pushing === '推播 Washout 警告' && <span className="text-xs">發送中⋯</span>}
+          </button>
+        </div>
+      </div>
+
+      {/* 演講進度推播 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-4 mb-4">
+        <div className="text-sm font-semibold mb-3">演講進度推播</div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <div>
+            <div className="text-xs text-stone-500 mb-1">推播範圍</div>
+            <select value={speechWeeks} onChange={e => setSpeechWeeks(parseInt(e.target.value))}
+              className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white">
+              <option value={1}>未來 1 週</option><option value={2}>未來 2 週</option>
+              <option value={4}>未來 4 週</option><option value={6}>未來 6 週</option>
+            </select>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500 mb-1">推播對象</div>
+            <select value={speechTarget} onChange={e => setSpeechTarget(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-stone-300 rounded-md bg-white">
+              <option value="both">演講人 + 小幫手</option>
+              <option value="speaker">僅演講人</option><option value="helper">僅小幫手</option>
+            </select>
+          </div>
+        </div>
+        <button onClick={() => pushAction('/api/push-speech', { weeks: speechWeeks, target: speechTarget }, `推播演講進度（${targetLabel[speechTarget]}，${speechWeeks}週）`)}
+          disabled={!!pushing}
+          className="w-full px-4 py-3 text-sm border rounded-md text-left hover:bg-stone-50 disabled:opacity-50 flex items-center justify-between"
+          style={{ background: '#F0FFF0', color: '#2D5A27', borderColor: '#B8E6B8' }}>
+          <div><div className="font-semibold">🎤 推播演講準備進度</div><div className="text-xs mt-0.5">提醒{targetLabel[speechTarget]}注意未完成項目</div></div>
+          {pushing.includes('演講進度') && <span className="text-xs">發送中⋯</span>}
+        </button>
+      </div>
+
+      {/* 今日咖啡會議推播 */}
+      <div className="bg-white rounded-lg border border-stone-200 p-4">
+        <div className="text-sm font-semibold mb-3">咖啡會議推播</div>
+        <button onClick={() => pushAction('/api/push-coffee-today', {}, '推播今日咖啡行程')} disabled={!!pushing}
+          className="w-full px-4 py-3 text-sm border rounded-md text-left hover:bg-stone-50 disabled:opacity-50 flex items-center justify-between"
+          style={{ background: '#FFF8F0', color: '#8B6F47', borderColor: '#E8D5B8' }}>
+          <div><div className="font-semibold">☕ 推播今日咖啡會議行程</div><div className="text-xs mt-0.5">通知全分會今天有哪些咖啡會議</div></div>
+          {pushing === '推播今日咖啡行程' && <span className="text-xs">發送中⋯</span>}
+        </button>
+      </div>
+
+      {result && (
+        <div className={`mt-3 p-3 rounded text-sm ${result.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          {result.ok ? `✅ ${result.sent !== undefined ? '發送 ' + result.sent + ' 人' : ''}${result.coffeeCount ? '（' + result.coffeeCount + ' 場）' : ''}${result.failed ? '，失敗 ' + result.failed : ''}${result.message ? ' ' + result.message : ''}` : `❌ ${result.error}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 產業服務鏈 ============
+const CHAIN_COLORS = {
+  'ac-purple': '#6B4C8A', 'ac-blue': '#2B6CB0', 'ac-green': '#2D5A27',
+  'ac-red': '#A01E2E', 'ac-orange': '#C67A2E', 'ac-yellow': '#8B6F00',
+  'ac-teal': '#2C7A7B', 'ac-gray': '#4A5568', 'ac-pink': '#B83280', 'ac-indigo': '#4C51BF',
+};
+
+function ServiceChainView() {
+  const [loading, setLoading] = useState(true);
+  const [chains, setChains] = useState([]);
+  const [error, setError] = useState(null);
+  const [expandedChains, setExpandedChains] = useState(new Set());
+  const proxyUrl = (typeof window !== 'undefined' && window.BNI_PROXY_URL) ? window.BNI_PROXY_URL : '';
+
+  useEffect(() => {
+    if (!proxyUrl) { setLoading(false); setError('僅在部署版本可用'); return; }
+    (async () => {
+      try {
+        // SWR：有快取就瞬間顯示，背景更新
+        const data = await swrFetchRaw(proxyUrl + '/api/chains-data', (fresh) => {
+          if (fresh && Array.isArray(fresh.chains)) setChains(fresh.chains);
+        });
+        if (data && Array.isArray(data.chains)) {
+          setChains(data.chains);
+        } else if (!data) {
+          setError('載入失敗：無法連線');
+        }
+      } catch (e) { setError('載入失敗：' + e.message); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const toggleChain = (i) => {
+    setExpandedChains(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+  };
+
+  const totalMembers = chains.reduce((sum, c) => sum + (c.groups || []).reduce((s, g) => s + (g.members || []).length, 0), 0);
+
+  if (loading) return <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>載入產業服務鏈⋯</div>;
+  if (error) return <div className="text-center py-20 text-stone-500" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>{error}</div>;
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
+      <div className="mb-6">
+        <div className="text-[10px] tracking-[0.3em] text-stone-400 mb-2">SERVICE CHAINS</div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-1" style={{ color: '#1A1414' }}>
+          產業 <span style={{ color: '#6B4C8A' }}>服務鏈</span>
+        </h2>
+        <div className="text-sm text-stone-500">{chains.length} 條服務鏈 · {totalMembers} 位會員</div>
+      </div>
+      <div className="space-y-2">
+        {chains.map((chain, ci) => {
+          const color = CHAIN_COLORS[chain.ac] || '#4A5568';
+          const expanded = expandedChains.has(ci);
+          const memberCount = (chain.groups || []).reduce((s, g) => s + (g.members || []).length, 0);
+          return (
+            <div key={ci} className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+              <button onClick={() => toggleChain(ci)}
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-stone-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
+                  <div>
+                    <div className="text-sm font-bold" style={{ color: '#1A1414' }}>{chain.name}</div>
+                    {chain.aud && <div className="text-[11px] text-stone-500">{chain.aud}</div>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-stone-500">{memberCount}人</span>
+                  {expanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
+                </div>
+              </button>
+              {expanded && (
+                <div className="border-t border-stone-100 px-4 py-3">
+                  {(chain.groups || []).map((group, gi) => (
+                    <div key={gi} className="mb-3 last:mb-0">
+                      <div className="text-xs font-semibold mb-1.5" style={{ color }}>{group.label}（{(group.members || []).length}人）</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(group.members || []).map(([name, industry], mi) => (
+                          <span key={mi} className="inline-flex items-baseline gap-1 px-2 py-1 text-xs rounded" style={{ background: color + '10', color }}>
+                            <span className="font-medium">{name}</span>
+                            <span className="text-[10px] opacity-70">{industry}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── 服務鏈管理（Admin） ───
+function ServiceChainEditor({ proxyUrl, headers, showToast }) {
+  const [loading, setLoading] = useState(true);
+  const [chainsData, setChainsData] = useState(null);
+  const [edited, setEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newMember, setNewMember] = useState({});
+
+  const fetchChains = async () => {
+    try {
+      const res = await fetch(proxyUrl + '/api/chains-data');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      setChainsData(await res.json());
+      setEdited(false);
+    } catch (e) { showToast('載入失敗：' + e.message, 'error'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchChains(); }, []);
+
+  const saveChains = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(proxyUrl + '/api/chains-data', {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(chainsData),
+      });
+      if (res.ok) { showToast('✅ 服務鏈已儲存（同步至服務鏈網站）'); setEdited(false); }
+      else showToast('儲存失敗', 'error');
+    } catch (e) { showToast('儲存失敗：' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const removeMember = (chainIdx, groupIdx, memberIdx) => {
+    const next = JSON.parse(JSON.stringify(chainsData));
+    next.chains[chainIdx].groups[groupIdx].members.splice(memberIdx, 1);
+    setChainsData(next); setEdited(true);
+  };
+
+  const addMember = (chainIdx, groupIdx) => {
+    const key = `${chainIdx}-${groupIdx}`;
+    const val = (newMember[key] || '').trim();
+    if (!val) return;
+    const parts = val.split(/[,，/／]/).map(s => s.trim()).filter(s => s);
+    const name = parts[0] || val;
+    const industry = parts[1] || '';
+    const next = JSON.parse(JSON.stringify(chainsData));
+    next.chains[chainIdx].groups[groupIdx].members.push([name, industry]);
+    setChainsData(next); setEdited(true);
+    setNewMember({ ...newMember, [key]: '' });
+  };
+
+  const moveMember = (fromChain, fromGroup, memberIdx, toChain, toGroup) => {
+    const next = JSON.parse(JSON.stringify(chainsData));
+    const member = next.chains[fromChain].groups[fromGroup].members.splice(memberIdx, 1)[0];
+    next.chains[toChain].groups[toGroup].members.push(member);
+    setChainsData(next); setEdited(true);
+  };
+
+  if (loading) return <div className="text-sm text-stone-400 py-8 text-center">載入中⋯</div>;
+  if (!chainsData || !chainsData.chains) return <div className="text-sm text-stone-400 py-8 text-center">無服務鏈資料</div>;
+
+  // Build move targets
+  const moveTargets = [];
+  chainsData.chains.forEach((c, ci) => {
+    (c.groups || []).forEach((g, gi) => {
+      moveTargets.push({ ci, gi, label: `${c.name} → ${g.label}` });
+    });
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-stone-500">編輯後自動同步至 <a href="https://arthurkuo42-star.github.io/futding-chains/" target="_blank" className="underline">服務鏈網站</a></div>
+        {edited && (
+          <button onClick={saveChains} disabled={saving}
+            className="px-4 py-1.5 text-sm text-white rounded-md font-semibold disabled:opacity-50" style={{ background: '#6B4C8A' }}>
+            {saving ? '儲存中⋯' : '💾 儲存變更'}
+          </button>
+        )}
+      </div>
+      <div className="space-y-3">
+        {chainsData.chains.map((chain, ci) => {
+          const color = CHAIN_COLORS[chain.ac] || '#4A5568';
+          return (
+            <div key={ci} className="bg-white rounded-lg border border-stone-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-3 h-3 rounded-full" style={{ background: color }} />
+                <div className="text-sm font-bold">{chain.name}</div>
+              </div>
+              {(chain.groups || []).map((group, gi) => (
+                <div key={gi} className="mb-3 last:mb-0 pl-2 border-l-2" style={{ borderColor: color + '40' }}>
+                  <div className="text-xs font-semibold mb-1.5" style={{ color }}>{group.label}（{(group.members || []).length}人）</div>
+                  <div className="space-y-1 mb-2">
+                    {(group.members || []).map(([name, industry], mi) => (
+                      <div key={mi} className="flex items-center gap-2 py-1 px-2 rounded bg-stone-50 text-sm">
+                        <span className="flex-1">{name} <span className="text-xs text-stone-400">{industry}</span></span>
+                        <select defaultValue="" onChange={e => {
+                          if (!e.target.value) return;
+                          const [tc, tg] = e.target.value.split('-').map(Number);
+                          moveMember(ci, gi, mi, tc, tg);
+                          e.target.value = '';
+                        }} className="text-[10px] border border-stone-200 rounded px-1 py-0.5 bg-white text-stone-500 max-w-[120px]">
+                          <option value="" disabled>移至⋯</option>
+                          {moveTargets.filter(t => !(t.ci === ci && t.gi === gi)).map(t => (
+                            <option key={`${t.ci}-${t.gi}`} value={`${t.ci}-${t.gi}`}>{t.label}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => removeMember(ci, gi, mi)} className="text-stone-400 hover:text-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" placeholder="新增：姓名，行業" value={newMember[`${ci}-${gi}`] || ''}
+                      onChange={e => setNewMember({ ...newMember, [`${ci}-${gi}`]: e.target.value })}
+                      onKeyDown={e => e.key === 'Enter' && addMember(ci, gi)}
+                      className="flex-1 px-2 py-1 text-xs border border-stone-200 rounded" />
+                    <button onClick={() => addMember(ci, gi)} className="px-2 py-1 text-xs text-white rounded" style={{ background: color }}>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// 渲染
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+
+<!-- Service Worker：快取 CDN 資產與本頁，二次進站近乎瞬開 -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => { /* 靜默失敗，不影響主流程 */ });
+    });
+  }
+</script>
+</body>
+</html>

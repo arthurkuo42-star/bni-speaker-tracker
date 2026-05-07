@@ -387,49 +387,43 @@ const PIN_KEY = 'bni_speaker_tracker_pin_v1';
 // 咖啡會議軌由 coffeeMeetings 資料動態計算，不走任務勾選
 const DEFAULT_TASKS = [{
   id: 't_topic',
-  name: '確認演講主題',
+  name: '提供 EDM 內容/簡報架構給主講人；主講人提供來賓名單',
   weekBefore: 6,
   icon: 'Lightbulb',
   track: 'content'
 }, {
   id: 't_outline',
-  name: '完成講稿大綱',
+  name: '交 EDM 內容',
   weekBefore: 5,
   icon: 'FileText',
   track: 'content'
 }, {
   id: 't_slides_draft',
-  name: '投影片架構初稿',
+  name: '交簡報初稿',
   weekBefore: 4,
   icon: 'Presentation',
   track: 'content'
 }, {
-  id: 't_edm',
-  name: 'EDM 宣傳圖發布',
+  id: 't_rehearsal_helper',
+  name: '跟小幫手試講',
   weekBefore: 3,
-  icon: 'Megaphone',
+  icon: 'Mic',
   track: 'content'
 }, {
   id: 't_slides_final',
-  name: '投影片定稿',
+  name: '修正簡報',
   weekBefore: 2,
   icon: 'Image',
   track: 'content'
 }, {
-  id: 't_rehearsal',
-  name: '彩排 / 試講',
-  weekBefore: 1,
-  icon: 'Mic',
-  track: 'content'
-}, {
-  id: 't_equipment',
-  name: '演講器材 / 流程確認',
+  id: 't_guest_gift',
+  name: '再次確認來賓、禮物',
   weekBefore: 1,
   icon: 'CheckCircle2',
   track: 'content'
 }, {
   id: 't_speech',
-  name: '正式演講',
+  name: '八核試講',
   weekBefore: 0,
   icon: 'Target',
   track: 'content'
@@ -1540,11 +1534,26 @@ function ScheduleManager({
 // ============ 進度更新 ============
 function ProgressManager({
   data,
-  saveData
+  saveData,
+  showToast
 }) {
   const [selectedMeetingId, setSelectedMeetingId] = useState(null);
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [edmModal, setEdmModal] = useState(null); // null | { text, speakerName }
+
+  // ── 產生 EDM 草稿（依現有 slot 資料填入範本）──
+  const generateEdmDraft = (slot, speaker, dateStr) => {
+    const d = new Date(dateStr);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const fullDate = `${yyyy}.${mm}.${dd}(${weekdayZh(d)})`;
+    const shortDate = `${mm}/${dd}`;
+    const slogan = (slot.slogan || '').trim() || '[請填 Slogan]';
+    const industries = [slot.desiredPartner1, slot.desiredPartner2, slot.desiredPartner3].map((s, i) => `行業${i + 1}：${(s || '').trim() || '（未填）'}`).join('\n');
+    return ['富鼎鈦金名人堂專題簡報', `📆 ${fullDate}`, '⏰ 早上06:30-09:30', `📑${slogan}`, '', '[此處主講人自填本文]', '', `✨${slogan}✨`, '', `本週富鼎分會將由${speaker.industry || ''}代表-${speaker.name}分享「${slogan}」心動不如馬上行動，趕快手刀報名「${shortDate}」專題簡報！`, '', `💯 ${slogan}`, '🗣 積極邀請行業別：', industries].join('\n');
+  };
   const sorted = [...data.meetings].sort((a, b) => new Date(a.date) - new Date(b.date));
   const meetingsWithSpeakers = sorted.filter(m => m.slotA.speakerId || m.slotB.speakerId);
 
@@ -1681,7 +1690,69 @@ function ProgressManager({
     }, "\xB7 \u672C\u9031"));
   }), displayMeetings.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-stone-400"
-  }, "\u672A\u4F86 6 \u9031\u5C1A\u672A\u5B89\u6392\u6F14\u8B1B\u4EBA\uFF0C\u8ACB\u5148\u5230\u300C\u9031\u6B21\u5B89\u6392\u300D\u6307\u6D3E")), /*#__PURE__*/React.createElement("div", {
+  }, "\u672A\u4F86 6 \u9031\u5C1A\u672A\u5B89\u6392\u6F14\u8B1B\u4EBA\uFF0C\u8ACB\u5148\u5230\u300C\u9031\u6B21\u5B89\u6392\u300D\u6307\u6D3E")), edmModal && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-50 flex items-center justify-center p-4",
+    style: {
+      background: 'rgba(0,0,0,0.4)'
+    },
+    onClick: () => setEdmModal(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col",
+    style: {
+      maxHeight: '90vh'
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between px-5 py-3 border-b border-stone-200"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Megaphone, {
+    className: "w-5 h-5",
+    style: {
+      color: '#8B6F47'
+    }
+  }), /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-stone-800"
+  }, "EDM \u8349\u7A3F \u2014 ", edmModal.speakerName)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEdmModal(null),
+    className: "p-1 rounded hover:bg-stone-100"
+  }, /*#__PURE__*/React.createElement(X, {
+    className: "w-5 h-5 text-stone-500"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "p-5 flex-1 overflow-y-auto"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mb-2"
+  }, "\u5DF2\u81EA\u52D5\u5E36\u5165\uFF1A\u65E5\u671F\u3001Slogan\u3001\u4E3B\u8B1B\u4EBA\u3001\u60F3\u5408\u4F5C\u7684\u4E09\u7A2E\u5C08\u696D\u5225\u3002\u672C\u6587\u6BB5\u8ACB\u4E3B\u8B1B\u4EBA\u81EA\u586B\u5F8C\u518D\u5BC4\u51FA\u3002\u53EF\u5728\u4E0B\u65B9\u6587\u5B57\u6846\u76F4\u63A5\u7DE8\u8F2F\u3002"), /*#__PURE__*/React.createElement("textarea", {
+    value: edmModal.text,
+    onChange: e => setEdmModal({
+      ...edmModal,
+      text: e.target.value
+    }),
+    rows: 20,
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md focus:border-stone-500 focus:outline-none",
+    style: {
+      fontFamily: "'Noto Sans TC', sans-serif",
+      whiteSpace: 'pre'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-3 border-t border-stone-200 flex justify-end gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEdmModal(null),
+    className: "px-4 py-2 text-sm border border-stone-300 rounded-md hover:bg-stone-50"
+  }, "\u95DC\u9589"), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      try {
+        await navigator.clipboard.writeText(edmModal.text);
+        showToast?.('已複製到剪貼簿', 'success');
+      } catch {
+        showToast?.('複製失敗，請手動選取再 Ctrl+C', 'error');
+      }
+    },
+    className: "px-4 py-2 text-sm text-white rounded-md hover:opacity-90",
+    style: {
+      background: '#A01E2E'
+    }
+  }, "\uD83D\uDCCB \u8907\u88FD\u5230\u526A\u8CBC\u7C3F")))), /*#__PURE__*/React.createElement("div", {
     className: "grid md:grid-cols-2 gap-4"
   }, ['slotA', 'slotB'].map(slotKey => {
     const slot = selected[slotKey];
@@ -1761,6 +1832,14 @@ function ProgressManager({
       }
     }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       className: "text-[10px] text-stone-500 tracking-wider"
+    }, "Slogan\uFF08EDM \u4E3B\u6A19\u3001\u5BA3\u50B3\u91D1\u53E5\uFF09"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: slot.slogan || '',
+      onChange: e => updateSlotField(selected.id, slotKey, 'slogan', e.target.value),
+      placeholder: "\u4F8B\uFF1A\u8B93\u8CA1\u5BCC\uFF0C\u4E0D\u53EA\u5B58\u5728\uFF0C\u800C\u662F\u6301\u7E8C\u6D41\u52D5",
+      className: "w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      className: "text-[10px] text-stone-500 tracking-wider"
     }, "\u6F14\u8B1B\u4E3B\u984C"), /*#__PURE__*/React.createElement("input", {
       type: "text",
       value: slot.topic || '',
@@ -1777,13 +1856,29 @@ function ProgressManager({
       className: "w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
       className: "text-[10px] text-stone-500 tracking-wider"
-    }, "\u60F3\u8981\u5408\u4F5C\u7684\u5C0D\u8C61"), /*#__PURE__*/React.createElement("input", {
+    }, "\u60F3\u8981\u5408\u4F5C\u7684\u5C0D\u8C61\uFF08\u696D\u52D9\u4EBA\u8108\u5708\u4E2D\u4E09\u7A2E\u5C08\u696D\u5225\uFF09"), slot.desiredPartners && !slot.desiredPartner1 && !slot.desiredPartner2 && !slot.desiredPartner3 && /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-0.5 mb-1"
+    }, "\u820A\u8CC7\u6599\u5408\u4F75\u6B04\u4F4D\uFF1A\u300C", slot.desiredPartners, "\u300D \u2192 \u8ACB\u62C6\u5230\u4E0B\u65B9\u4E09\u683C"), /*#__PURE__*/React.createElement("div", {
+      className: "grid grid-cols-3 gap-1 mt-0.5"
+    }, /*#__PURE__*/React.createElement("input", {
       type: "text",
-      value: slot.desiredPartners || '',
-      onChange: e => updateSlotField(selected.id, slotKey, 'desiredPartners', e.target.value),
-      placeholder: "\u4F8B\uFF1A\u6578\u4F4D\u884C\u92B7\u9867\u554F\u3001\u5546\u6A19\u4E8B\u52D9\u6240",
-      className: "w-full mt-0.5 px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
-    })), /*#__PURE__*/React.createElement("div", {
+      value: slot.desiredPartner1 || '',
+      onChange: e => updateSlotField(selected.id, slotKey, 'desiredPartner1', e.target.value),
+      placeholder: "\u884C\u696D 1",
+      className: "px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
+    }), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: slot.desiredPartner2 || '',
+      onChange: e => updateSlotField(selected.id, slotKey, 'desiredPartner2', e.target.value),
+      placeholder: "\u884C\u696D 2",
+      className: "px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
+    }), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: slot.desiredPartner3 || '',
+      onChange: e => updateSlotField(selected.id, slotKey, 'desiredPartner3', e.target.value),
+      placeholder: "\u884C\u696D 3",
+      className: "px-2 py-1.5 text-sm border border-stone-200 rounded bg-white focus:border-stone-500 focus:outline-none"
+    }))), /*#__PURE__*/React.createElement("div", {
       className: "pt-1 border-t border-stone-200/60"
     }, /*#__PURE__*/React.createElement("div", {
       className: "text-[10px] text-amber-700 tracking-wider mb-1 flex items-center gap-1"
@@ -1890,7 +1985,19 @@ function ProgressManager({
           className: "mt-2 w-full px-3 py-1.5 text-xs border border-stone-200 rounded bg-white resize-none focus:border-stone-500 focus:outline-none"
         }));
       })));
-    })) : /*#__PURE__*/React.createElement("div", {
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setEdmModal({
+        text: generateEdmDraft(slot, speaker, selected.date),
+        speakerName: speaker.name
+      }),
+      className: "w-full mt-2 px-3 py-2 text-sm rounded-md text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5",
+      style: {
+        background: '#8B6F47',
+        fontFamily: "'Noto Sans TC', sans-serif"
+      }
+    }, /*#__PURE__*/React.createElement(Megaphone, {
+      className: "w-4 h-4"
+    }), "\uD83D\uDCCB \u7522\u751F EDM \u8349\u7A3F")) : /*#__PURE__*/React.createElement("div", {
       className: "text-sm text-stone-400 py-8 text-center"
     }, "\u5C1A\u672A\u5B89\u6392\u6F14\u8B1B\u4EBA"));
   })));
