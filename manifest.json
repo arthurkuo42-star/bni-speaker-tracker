@@ -2,7 +2,7 @@
   "name": "BNI 富鼎分會 · 分會助理",
   "short_name": "富鼎分會",
   "description": "BNI 高雄富鼎分會數位助理：紅綠燈 KPI、咖啡會議、組聚記錄、導生計畫、服務鏈",
-  "start_url": "./index.html",
+  "start_url": "./index.html?view=kpi",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -11,28 +11,29 @@
   "lang": "zh-Hant",
   "categories": ["productivity", "business"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "favicon-96x96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "web-app-manifest-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "web-app-manifest-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "maskable_icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
     {
       "name": "紅綠燈 KPI",
       "short_name": "紅綠燈",
       "url": "./index.html?view=kpi",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "web-app-manifest-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "咖啡會議",
       "short_name": "咖啡",
       "url": "./index.html?view=coffee",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "web-app-manifest-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "組聚記錄",
       "short_name": "組聚",
       "url": "./operations.html?tab=meetings",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "web-app-manifest-192x192.png", "sizes": "192x192" }]
     }
   ]
 }
