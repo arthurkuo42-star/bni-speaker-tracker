@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BNI 富鼎分會 PWA Icon — 1024×1024 source
+  風格：紅底（#8B1A1A）+ 金色內框（#B8860B）+「富鼎」直書白字
+  匯出時：用 https://realfavicongenerator.net 或 https://www.pwabuilder.com
+  上傳這個 SVG → 自動產 192/512/180/maskable 等所有尺寸
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- 紅色圓角底 -->
+  <rect width="1024" height="1024" rx="180" ry="180" fill="#8B1A1A"/>
+
+  <!-- 金色內框（雙線） -->
+  <rect x="80" y="80" width="864" height="864" rx="120" ry="120"
+        fill="none" stroke="#B8860B" stroke-width="14"/>
+  <rect x="115" y="115" width="794" height="794" rx="100" ry="100"
+        fill="none" stroke="#B8860B" stroke-width="4" opacity="0.7"/>
+
+  <!-- 「富」字 -->
+  <text x="512" y="430"
+        font-family="'Noto Serif TC', 'PingFang TC', 'Microsoft JhengHei', serif"
+        font-size="380"
+        font-weight="900"
+        fill="#FFFFFF"
+        text-anchor="middle"
+        dominant-baseline="middle">富</text>
+
+  <!-- 「鼎」字 -->
+  <text x="512" y="780"
+        font-family="'Noto Serif TC', 'PingFang TC', 'Microsoft JhengHei', serif"
+        font-size="380"
+        font-weight="900"
+        fill="#FFFFFF"
+        text-anchor="middle"
+        dominant-baseline="middle">鼎</text>
+
+  <!-- 底部分會標識小字 -->
+  <text x="512" y="970"
+        font-family="'Noto Sans TC', sans-serif"
+        font-size="56"
+        font-weight="600"
+        fill="#FFD700"
+        text-anchor="middle"
+        letter-spacing="20">BNI 富鼎分會</text>
+</svg>
