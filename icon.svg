@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="#8B1A1A"></rect>
+  <rect x="60" y="60" width="904" height="904" rx="130" ry="130" fill="none" stroke="#B8860B" stroke-width="14"></rect>
+  <rect x="92" y="92" width="840" height="840" rx="108" ry="108" fill="none" stroke="#B8860B" stroke-width="4"></rect>
+  <text x="512" y="380" font-family="&#39;Noto Serif TC&#39;,&#39;標楷體&#39;,&#39;DFKai-SB&#39;,serif" font-size="240" font-weight="700" fill="#FFFFFF" text-anchor="middle">富</text>
+  <g fill="#FFFFFF">
+    <path d="M 392 490 L 392 432 Q 392 412 412 412 L 458 412 Q 478 412 478 432 L 478 490 L 462 490 L 462 436 Q 462 428 454 428 L 416 428 Q 408 428 408 436 L 408 490 Z"></path>
+    <path d="M 546 490 L 546 432 Q 546 412 566 412 L 612 412 Q 632 412 632 432 L 632 490 L 616 490 L 616 436 Q 616 428 608 428 L 570 428 Q 562 428 562 436 L 562 490 Z"></path>
+    <rect x="370" y="486" width="284" height="180"></rect>
+    <rect x="396" y="666" width="40" height="78"></rect>
+    <rect x="492" y="666" width="40" height="78"></rect>
+    <rect x="588" y="666" width="40" height="78"></rect>
+  </g>
+  <g fill="none" stroke="#8B1A1A" stroke-width="4">
+    <line x1="384" y1="512" x2="640" y2="512"></line>
+    <line x1="384" y1="576" x2="640" y2="576"></line>
+    <line x1="384" y1="640" x2="640" y2="640"></line>
+  </g>
+  <g fill="#8B1A1A">
+    <circle cx="436" cy="544" r="7"></circle>
+    <circle cx="512" cy="544" r="7"></circle>
+    <circle cx="588" cy="544" r="7"></circle>
+    <circle cx="436" cy="608" r="7"></circle>
+    <circle cx="512" cy="608" r="7"></circle>
+    <circle cx="588" cy="608" r="7"></circle>
+  </g>
+  <text x="512" y="838" font-family="&#39;Noto Sans TC&#39;,&#39;PingFang TC&#39;,&#39;微軟正黑體&#39;,sans-serif" font-size="46" font-weight="600" fill="#B8860B" text-anchor="middle" letter-spacing="20">BNI 富鼎分會</text>
+</svg>
