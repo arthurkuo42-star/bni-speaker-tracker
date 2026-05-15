@@ -289,6 +289,60 @@
     font-family: var(--font-sans);
   }
   .edit-mode-banner button:hover { background: rgba(255,255,255,0.25); }
+
+  /* === 桌機「⋯ 更多」下拉選單（次要功能：演講/服務鏈/後台/導生）=== */
+  .more-menu-container {
+    position: relative;
+    display: inline-block;
+  }
+  .more-menu-btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: #F5EFE7;
+    border: 1px solid transparent;
+    color: var(--c-text);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: background 0.15s;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .more-menu-btn:hover { background: #ECE3D5; }
+  .more-menu-btn.open { background: var(--c-text); color: #fff; }
+  .more-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 160px;
+    background: var(--c-card);
+    border: 1px solid #E7E0D2;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    padding: 4px;
+    z-index: 40;
+    font-family: var(--font-sans);
+    animation: dropdownIn 0.12s ease;
+  }
+  .more-dropdown a, .more-dropdown button {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    background: none; border: none;
+    text-decoration: none;
+    text-align: left;
+    color: var(--c-text);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .more-dropdown a:hover, .more-dropdown button:hover { background: #F5EFE7; }
+  .more-dropdown .active { background: #FCEFE3; color: var(--c-kpi); font-weight: 600; }
+  .more-dropdown .item-icon { font-size: 16px; width: 20px; text-align: center; }
+  @keyframes dropdownIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
@@ -934,6 +988,8 @@ const defaultData = () => ({
 // ============ 主導航設定（Session 3）============
 // 把 9 個 nav 入口的 metadata 集中：手機 bottom-tab 只顯示 PRIMARY、漢堡選單顯示全部。
 // 順序就是會員實際使用頻率：首頁 > 紅綠燈 > 咖啡 > 演講 > 服務鏈/後台 > 外連的組聚/導生/競賽。
+// 主要快捷 5 個：按使用頻率排（首頁/紅綠燈/組聚/競賽/咖啡）
+// 桌機顯示為 nav 按鈕，手機顯示為底部 tab；組聚和競賽是外連到 operations.html
 const PRIMARY_NAVS = [{
   id: 'home',
   label: '首頁',
@@ -945,17 +1001,36 @@ const PRIMARY_NAVS = [{
   emoji: '🚦',
   color: 'var(--c-kpi-green)'
 }, {
+  id: 'meetings',
+  label: '組聚',
+  emoji: '📄',
+  color: '#1A1414',
+  href: 'operations.html?tab=meetings'
+}, {
+  id: 'challenge',
+  label: '競賽',
+  emoji: '🏆',
+  color: '#A01E2E',
+  href: 'operations.html?tab=challenge'
+}, {
   id: 'coffee',
   label: '咖啡',
   emoji: '☕',
   color: 'var(--c-coffee)'
+}];
+// 次要功能 4 個：收進桌機右上「⋯ 更多」下拉、手機漢堡選單
+const SECONDARY_NAVS = [{
+  id: 'mentorship',
+  label: '導生',
+  emoji: '🎓',
+  href: 'operations.html?tab=mentorship'
 }, {
   id: 'dashboard',
   label: '演講',
   emoji: '📣',
-  color: '#1A1414'
-}];
-const SECONDARY_NAVS = [{
+  color: '#1A1414',
+  type: 'view'
+}, {
   id: 'chains',
   label: '服務鏈',
   emoji: '📋',
@@ -967,21 +1042,6 @@ const SECONDARY_NAVS = [{
   emoji: '⚙️',
   color: 'var(--c-kpi)',
   type: 'view'
-}, {
-  id: 'meetings',
-  label: '組聚',
-  emoji: '📄',
-  href: 'operations.html?tab=meetings'
-}, {
-  id: 'mentorship',
-  label: '導生',
-  emoji: '🎓',
-  href: 'operations.html?tab=mentorship'
-}, {
-  id: 'challenge',
-  label: '競賽',
-  emoji: '🏆',
-  href: 'operations.html?tab=challenge'
 }];
 
 // ============ 主元件 ============
@@ -1244,13 +1304,28 @@ function App() {
 }
 
 // ============ Header（Session 3 大改：手機只剩 hamburger + identity，桌機完整 nav）============
+// NavBtn 同時支援 view 切換（button）和外連（anchor）；外連永遠 unactive
 function NavBtn({
   nav,
   view,
   setView
 }) {
-  const isActive = view === nav.id;
   const base = "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5";
+  if (nav.href) {
+    return /*#__PURE__*/React.createElement("a", {
+      href: nav.href,
+      className: `${base} bg-stone-100 text-stone-600 hover:bg-stone-200`,
+      style: {
+        fontFamily: 'var(--font-sans)'
+      },
+      title: nav.label
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "w-4 h-4 flex items-center justify-center text-base leading-none"
+    }, nav.emoji), /*#__PURE__*/React.createElement("span", {
+      className: "hidden lg:inline"
+    }, nav.label));
+  }
+  const isActive = view === nav.id;
   return /*#__PURE__*/React.createElement("button", {
     onClick: () => setView(nav.id),
     className: `${base} ${isActive ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
@@ -1265,21 +1340,50 @@ function NavBtn({
     className: "hidden lg:inline"
   }, nav.label));
 }
-function NavLink({
-  nav
+
+// 桌機「⋯ 更多」下拉：收 4 個次要功能（演講/服務鏈/後台/導生）
+function MoreMenu({
+  view,
+  setView,
+  secondaryHasActive
 }) {
-  return /*#__PURE__*/React.createElement("a", {
-    href: nav.href,
-    className: "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200",
-    style: {
-      fontFamily: 'var(--font-sans)'
-    },
-    title: nav.label
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "more-menu-container",
+    ref: ref
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `more-menu-btn ${open || secondaryHasActive ? 'open' : ''}`,
+    onClick: () => setOpen(!open),
+    "aria-haspopup": "menu",
+    "aria-expanded": open
+  }, "\u22EF \u66F4\u591A"), open && /*#__PURE__*/React.createElement("div", {
+    className: "more-dropdown",
+    role: "menu"
+  }, SECONDARY_NAVS.map(n => n.type === 'view' ? /*#__PURE__*/React.createElement("button", {
+    key: n.id,
+    className: view === n.id ? 'active' : '',
+    onClick: () => {
+      setView(n.id);
+      setOpen(false);
+    }
   }, /*#__PURE__*/React.createElement("span", {
-    className: "w-4 h-4 flex items-center justify-center text-base leading-none"
-  }, nav.emoji), /*#__PURE__*/React.createElement("span", {
-    className: "hidden lg:inline"
-  }, nav.label));
+    className: "item-icon"
+  }, n.emoji), n.label) : /*#__PURE__*/React.createElement("a", {
+    key: n.id,
+    href: n.href,
+    onClick: () => setOpen(false)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "item-icon"
+  }, n.emoji), n.label))));
 }
 function Header({
   view,
@@ -1336,17 +1440,11 @@ function Header({
     nav: n,
     view: view,
     setView: setView
-  })), /*#__PURE__*/React.createElement("span", {
-    className: "w-px h-6 bg-stone-200 mx-1"
-  }), SECONDARY_NAVS.map(n => n.type === 'view' ? /*#__PURE__*/React.createElement(NavBtn, {
-    key: n.id,
-    nav: n,
+  })), /*#__PURE__*/React.createElement(MoreMenu, {
     view: view,
-    setView: setView
-  }) : /*#__PURE__*/React.createElement(NavLink, {
-    key: n.id,
-    nav: n
-  })), adminAuth && /*#__PURE__*/React.createElement("button", {
+    setView: setView,
+    secondaryHasActive: SECONDARY_NAVS.some(n => n.type === 'view' && n.id === view)
+  }), adminAuth && /*#__PURE__*/React.createElement("button", {
     onClick: () => setAdminAuth(false),
     className: "px-2 py-2 text-sm text-stone-500 hover:text-stone-800",
     title: "\u767B\u51FA\u5F8C\u53F0"
@@ -1383,7 +1481,7 @@ function Header({
   })))));
 }
 
-// ============ 手機底部 tab bar（4 個主要入口）============
+// ============ 手機底部 tab bar（5 個主要入口，含外連）============
 function BottomTabBar({
   view,
   setView
@@ -1391,16 +1489,28 @@ function BottomTabBar({
   return /*#__PURE__*/React.createElement("nav", {
     className: "bottom-tab-bar md:hidden",
     "aria-label": "\u4E3B\u8981\u5C0E\u822A"
-  }, PRIMARY_NAVS.map(n => /*#__PURE__*/React.createElement("button", {
-    key: n.id,
-    className: `bottom-tab ${view === n.id ? 'active' : ''}`,
-    onClick: () => setView(n.id),
-    style: view === n.id ? {
-      color: n.color
-    } : undefined
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "icon"
-  }, n.emoji), /*#__PURE__*/React.createElement("span", null, n.label))));
+  }, PRIMARY_NAVS.map(n => {
+    const isActive = !n.href && view === n.id;
+    if (n.href) {
+      return /*#__PURE__*/React.createElement("a", {
+        key: n.id,
+        href: n.href,
+        className: "bottom-tab"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "icon"
+      }, n.emoji), /*#__PURE__*/React.createElement("span", null, n.label));
+    }
+    return /*#__PURE__*/React.createElement("button", {
+      key: n.id,
+      className: `bottom-tab ${isActive ? 'active' : ''}`,
+      onClick: () => setView(n.id),
+      style: isActive ? {
+        color: n.color
+      } : undefined
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "icon"
+    }, n.emoji), /*#__PURE__*/React.createElement("span", null, n.label));
+  }));
 }
 
 // ============ 手機漢堡選單抽屜（次要功能 + 工具）============
@@ -1574,7 +1684,8 @@ function MyKpiCard({
   onMore
 }) {
   const [loading, setLoading] = useState(true);
-  const [myKpi, setMyKpi] = useState(null); // { totalScore, groupName }
+  const [myKpi, setMyKpi] = useState(null); // { totalScore, groupName, ...raw fields }
+  const [remainWeeks, setRemainWeeks] = useState(0);
   const [err, setErr] = useState(null);
   useEffect(() => {
     if (!me) {
@@ -1607,6 +1718,7 @@ function MyKpiCard({
           }
         }
         setMyKpi(hit);
+        setRemainWeeks(json.config && json.config.remainWeeks || 0);
       } catch (e) {
         if (!cancelled) setErr('資料載入失敗');
       } finally {
@@ -1633,29 +1745,52 @@ function MyKpiCard({
   }), me && !loading && !err && myKpi && (() => {
     const lk = getKpiLightKey(myKpi.totalScore);
     const c = LIGHT_COLORS[lk];
-    const advice = lk === 'green' ? '保持下去 🎉' : lk === 'yellow' ? '再衝一點，下個月翻綠' : lk === 'red' ? '本月還有時間，加油' : '尚未起跑，先約一場咖啡吧';
-    return /*#__PURE__*/React.createElement("div", {
-      className: "text-center"
+    const recs = getKpiRecommendations(myKpi, remainWeeks);
+    // 最多顯示 2 條建議避免卡片爆滿，再多的話會員可以點「更多」進完整 KPI 頁
+    const shownPrimary = recs && recs.primary ? recs.primary.slice(0, 2) : [];
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-3 mb-3"
     }, /*#__PURE__*/React.createElement("div", {
-      className: "inline-block px-4 py-3 rounded-xl mb-2",
+      className: "px-3 py-2 rounded-xl flex-shrink-0 text-center",
       style: {
-        background: c.bg
+        background: c.bg,
+        minWidth: 72
       }
     }, /*#__PURE__*/React.createElement("div", {
-      className: "text-4xl font-bold",
+      className: "text-3xl font-bold leading-none",
       style: {
         color: c.color
       }
     }, Math.round(myKpi.totalScore)), /*#__PURE__*/React.createElement("div", {
-      className: "text-xs mt-0.5",
+      className: "text-[10px] mt-1",
       style: {
         color: c.color
       }
     }, c.emoji, " ", c.label)), /*#__PURE__*/React.createElement("div", {
-      className: "text-xs text-stone-500 mt-2"
-    }, myKpi.groupName), /*#__PURE__*/React.createElement("div", {
-      className: "text-xs text-stone-600 mt-1"
-    }, advice));
+      className: "flex-1 min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] tracking-widest text-stone-400"
+    }, myKpi.groupName || ''), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-medium mt-0.5",
+      style: {
+        color: 'var(--c-text)'
+      }
+    }, recs ? recs.headline : ''))), recs && recs.status === 'perfect' && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-600 text-center py-1"
+    }, "\u7E7C\u7E8C\u4FDD\u6301\uFF0C\u5E74\u5E95\u62FF\u69AE\u8B7D\u6703\u54E1 \uD83D\uDCAA"), recs && shownPrimary.length > 0 && /*#__PURE__*/React.createElement("ul", {
+      className: "space-y-1 text-xs text-stone-700 border-t border-stone-100 pt-2"
+    }, shownPrimary.map((u, i) => /*#__PURE__*/React.createElement("li", {
+      key: i,
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400 flex-shrink-0"
+    }, "\u25B8"), /*#__PURE__*/React.createElement("span", null, u.action, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400 ml-1"
+    }, "+", u.gain, " \u5206")))), recs.primary.length > 2 && /*#__PURE__*/React.createElement("li", {
+      className: "text-[11px] text-stone-400 pl-3"
+    }, "\u9084\u6709 ", recs.primary.length - 2, " \u9805\u5EFA\u8B70\uFF0C\u53EF\u9EDE\u300C\u66F4\u591A\u300D\u67E5\u770B")), recs && recs.status !== 'perfect' && shownPrimary.length === 0 && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 text-center py-1"
+    }, "\u5C1A\u672A\u8D77\u8DD1\uFF0C\u5148\u7D04\u4E00\u5834\u5496\u5561 \u2615"));
   })());
 }
 
@@ -1665,80 +1800,71 @@ function MyCoffeeCard({
   me,
   onMore
 }) {
-  const coffeeStats = useMemo(() => {
-    if (!me) return null;
+  // 7 日內：從今天到未來 7 天（含今天剩餘時間）我相關的咖啡會議
+  const sevenDayList = useMemo(() => {
+    if (!me) return [];
     const all = data.coffeeMeetings || [];
-    const mine = all.filter(cm => cm.inviterId === me.id || Array.isArray(cm.participantIds) && cm.participantIds.includes(me.id));
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonth = mine.filter(cm => cm.date && new Date(cm.date) >= monthStart);
-    const done = mine.filter(cm => cm.status === 'done').length;
-    const upcoming = mine.filter(cm => cm.status === 'scheduled' && cm.date && new Date(cm.date) >= now).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
-    return {
-      total: mine.length,
-      thisMonth: thisMonth.length,
-      done,
-      upcoming
-    };
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const sevenDayEnd = new Date(todayStart);
+    sevenDayEnd.setDate(todayStart.getDate() + 7);
+    sevenDayEnd.setHours(23, 59, 59, 999);
+    return all.filter(cm => {
+      const isMine = cm.inviterId === me.id || Array.isArray(cm.participantIds) && cm.participantIds.includes(me.id);
+      if (!isMine) return false;
+      const t = cm.meetingTime || cm.date;
+      if (!t) return false;
+      const d = new Date(t);
+      if (isNaN(d.getTime())) return false;
+      return d >= todayStart && d <= sevenDayEnd;
+    }).sort((a, b) => new Date(a.meetingTime || a.date) - new Date(b.meetingTime || b.date));
   }, [data.coffeeMeetings, me?.id]);
   return /*#__PURE__*/React.createElement(HomeCard, {
-    title: "\u6211\u7684\u5496\u5561",
+    title: "\u6211\u7684\u5496\u5561 \xB7 7 \u65E5\u5167",
     accent: "var(--c-coffee)",
     emoji: "\u2615",
     onMore: me ? onMore : null
   }, !me && /*#__PURE__*/React.createElement(CardPlaceholder, {
     text: "\u9078\u64C7\u8EAB\u4EFD\u5F8C\u67E5\u770B\u4F60\u7684\u5496\u5561"
-  }), me && coffeeStats && coffeeStats.total === 0 && /*#__PURE__*/React.createElement("div", {
+  }), me && sevenDayList.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "text-center"
   }, /*#__PURE__*/React.createElement(CardPlaceholder, {
-    text: "\u9084\u6C92\u6709\u4F60\u7684\u5496\u5561\u7D00\u9304"
+    text: "\u672A\u4F86 7 \u65E5\u6C92\u6709\u5496\u5561\u5B89\u6392"
   }), /*#__PURE__*/React.createElement("button", {
     onClick: onMore,
-    className: "mt-2 px-3 py-1.5 text-xs rounded-md text-white",
+    className: "mt-1 px-3 py-1.5 text-xs rounded-md text-white",
     style: {
       background: 'var(--c-coffee)'
     }
-  }, "\uFF0B \u65B0\u589E\u4E00\u5834")), me && coffeeStats && coffeeStats.total > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-3 text-center"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-stone-50 rounded-lg py-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold",
-    style: {
-      color: 'var(--c-coffee)'
-    }
-  }, coffeeStats.thisMonth), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-500"
-  }, "\u672C\u6708")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-stone-50 rounded-lg py-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold",
-    style: {
-      color: 'var(--c-kpi-green)'
-    }
-  }, coffeeStats.done), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-500"
-  }, "\u5DF2\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-stone-50 rounded-lg py-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-stone-600"
-  }, coffeeStats.total), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-500"
-  }, "\u7E3D\u5834\u6578"))), coffeeStats.upcoming.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] tracking-widest text-stone-400 mb-1"
-  }, "\u5373\u5C07\u9032\u884C"), /*#__PURE__*/React.createElement("ul", {
-    className: "space-y-1 text-xs"
-  }, coffeeStats.upcoming.map(cm => {
-    const partner = (data.members || []).find(m => m.id === (cm.inviterId === me.id ? cm.participantIds && cm.participantIds[0] : cm.inviterId));
+  }, "\uFF0B \u7D04\u4E00\u5834")), me && sevenDayList.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] tracking-widest text-stone-400 mb-2"
+  }, "\u672A\u4F86 7 \u65E5 \xB7 ", sevenDayList.length, " \u5834"), /*#__PURE__*/React.createElement("ul", {
+    className: "space-y-1.5 text-xs"
+  }, sevenDayList.slice(0, 5).map(cm => {
+    const partnerId = cm.inviterId === me.id ? cm.participantIds && cm.participantIds[0] : cm.inviterId;
+    const partner = (data.members || []).find(m => m.id === partnerId);
+    const t = cm.meetingTime || cm.date;
+    const d = new Date(t);
+    const dateStr = isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()}（週${['日', '一', '二', '三', '四', '五', '六'][d.getDay()]}）`;
+    const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
     return /*#__PURE__*/React.createElement("li", {
       key: cm.id,
-      className: "flex justify-between gap-2 text-stone-600"
+      className: "flex items-center justify-between gap-2"
     }, /*#__PURE__*/React.createElement("span", {
-      className: "truncate"
-    }, partner?.name || '—'), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-400 whitespace-nowrap"
-    }, formatDate(cm.date)));
-  })))));
+      className: "font-medium text-stone-800 truncate flex-1"
+    }, cm.guestName || partner?.name || '—'), /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0",
+      style: {
+        color: statusInfo.color,
+        background: statusInfo.bg
+      }
+    }, statusInfo.text), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400 whitespace-nowrap text-[11px]"
+    }, dateStr));
+  }), sevenDayList.length > 5 && /*#__PURE__*/React.createElement("li", {
+    className: "text-[11px] text-stone-400 pl-1"
+  }, "\u9084\u6709 ", sevenDayList.length - 5, " \u5834\uFF0C\u53EF\u9EDE\u300C\u66F4\u591A\u300D\u67E5\u770B"))));
 }
 
 // 卡片 3：本週要關注
@@ -5006,6 +5132,231 @@ function getKpiLightKey(score) {
   if (score >= 50) return 'yellow';
   if (score >= 30) return 'red';
   return 'grey';
+}
+
+// ============ 紅綠燈：具體建議（port 自後端 scoring.js getRecommendations）============
+// 後端 /api/groups-overview 只對 < 70 分的會員回傳 recommendations，
+// 為了讓綠燈會員也看到「衝上滿分」建議，整個邏輯前端再算一次。
+// 邏輯保持與 scoring.js 同步 —— 若後端規則改了，這裡也要跟著改。
+function _calcKpiUpgrades(member, remainWeeks, targetScore) {
+  const tw = member.totalWeeks || (member.pastWeeks || 0) + (remainWeeks || 0);
+  const gap = targetScore - member.totalScore;
+  if (gap <= 0) return {
+    primary: [],
+    backup: [],
+    warnings: [],
+    gap: 0,
+    canReach: true
+  };
+  const warnings = [];
+  const upgrades = [];
+  const raw = member.raw || {};
+  if ((member.absenceScore || 0) < 20) {
+    warnings.push(`⚠️ 缺席 ${raw.absences || 0} 次（得 ${member.absenceScore || 0}/20）→ 不要再缺席`);
+  }
+
+  // 引薦（priority 1）
+  const currentRefTotal = (raw.internalRef || 0) + (raw.externalRef || 0);
+  for (const t of [{
+    rate: 1.5,
+    score: 20
+  }, {
+    rate: 1.2,
+    score: 15
+  }, {
+    rate: 1.0,
+    score: 10
+  }, {
+    rate: 0.75,
+    score: 5
+  }]) {
+    if (t.score > (member.referralScore || 0)) {
+      const needed = Math.ceil(t.rate * tw) - currentRefTotal;
+      if (needed > 0) {
+        const perWeek = remainWeeks > 0 ? Math.ceil(needed / remainWeeks) : needed;
+        upgrades.push({
+          category: "引薦",
+          priority: 1,
+          gain: t.score - (member.referralScore || 0),
+          targetScore: t.score,
+          needed,
+          action: `再提供 ${needed} 個引薦（每週 ${perWeek} 個）`,
+          shortAction: `+${needed} 引薦`
+        });
+      }
+    }
+  }
+  // 1-2-1（priority 1）
+  for (const t of [{
+    rate: 2.001,
+    score: 15
+  }, {
+    rate: 1.0,
+    score: 10
+  }, {
+    rate: 0.5,
+    score: 5
+  }]) {
+    if (t.score > (member.meetingScore || 0)) {
+      const needed = Math.ceil(t.rate * tw) - (raw.oneToOne || 0);
+      if (needed > 0) {
+        const perWeek = remainWeeks > 0 ? Math.ceil(needed / remainWeeks) : needed;
+        upgrades.push({
+          category: "1-2-1",
+          priority: 1,
+          gain: t.score - (member.meetingScore || 0),
+          targetScore: t.score,
+          needed,
+          action: `再約 ${needed} 次 1-2-1（每週 ${perWeek} 次）`,
+          shortAction: `+${needed} 次 1-2-1`
+        });
+      }
+    }
+  }
+  // 教育積分（priority 2）
+  for (const t of [{
+    units: 6,
+    score: 15
+  }, {
+    units: 4,
+    score: 10
+  }, {
+    units: 2,
+    score: 5
+  }]) {
+    if (t.score > (member.trainingScore || 0)) {
+      const needed = t.units - (raw.training || 0);
+      if (needed > 0) {
+        upgrades.push({
+          category: "教育積分",
+          priority: 2,
+          gain: t.score - (member.trainingScore || 0),
+          targetScore: t.score,
+          needed,
+          action: `再完成 ${needed} 個教育積分`,
+          shortAction: `+${needed} 教育積分`
+        });
+      }
+    }
+  }
+  // 來賓（priority 3）
+  for (const t of [{
+    per4: 2,
+    score: 15
+  }, {
+    per4: 1,
+    score: 10
+  }]) {
+    if (t.score > (member.visitorScore || 0)) {
+      const needed = Math.ceil(t.per4 * (tw / 4)) - (raw.visitors || 0);
+      if (needed > 0) {
+        upgrades.push({
+          category: "來賓",
+          priority: 3,
+          gain: t.score - (member.visitorScore || 0),
+          targetScore: t.score,
+          needed,
+          action: `再帶 ${needed} 位來賓`,
+          shortAction: `+${needed} 位來賓`
+        });
+      }
+    }
+  }
+  // 交易（priority 3）
+  for (const t of [{
+    val: 2000000,
+    score: 15
+  }, {
+    val: 800000,
+    score: 10
+  }, {
+    val: 400000,
+    score: 5
+  }]) {
+    if (t.score > (member.transactionScore || 0)) {
+      const needed = t.val - (raw.transactionValue || 0);
+      if (needed > 0) {
+        upgrades.push({
+          category: "交易價值",
+          priority: 3,
+          gain: t.score - (member.transactionScore || 0),
+          targetScore: t.score,
+          needed,
+          action: `再增加 ${needed.toLocaleString()} 交易金額`,
+          shortAction: `+${(needed / 10000).toFixed(0)}萬交易`
+        });
+      }
+    }
+  }
+  upgrades.sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.gain - a.gain);
+  const primary = [],
+    backup = [];
+  let remaining = gap;
+  const used = new Set();
+  for (const u of upgrades) {
+    if (u.priority <= 2 && remaining > 0 && !used.has(u.category)) {
+      primary.push(u);
+      remaining -= u.gain;
+      used.add(u.category);
+    }
+  }
+  for (const u of upgrades) {
+    if (u.priority === 3 && remaining > 0 && !used.has(u.category)) {
+      primary.push(u);
+      remaining -= u.gain;
+      used.add(u.category);
+    }
+  }
+  for (const u of upgrades) {
+    if (u.priority === 3 && !used.has(u.category)) {
+      backup.push(u);
+      used.add(u.category);
+    }
+  }
+  const primaryGain = primary.reduce((s, u) => s + u.gain, 0);
+  return {
+    primary,
+    backup,
+    warnings,
+    gap,
+    canReach: primaryGain >= gap
+  };
+}
+function getKpiRecommendations(member, remainWeeks) {
+  if (!member) return null;
+  const score = member.totalScore;
+  if (score >= 100) {
+    return {
+      status: 'perfect',
+      gap: 0,
+      primary: [],
+      warnings: [],
+      headline: '🏆 滿分！完美表現'
+    };
+  }
+  if (score >= 70) {
+    const perfect = _calcKpiUpgrades(member, remainWeeks, 100);
+    return {
+      status: 'green',
+      gap: 100 - score,
+      primary: perfect.primary,
+      backup: perfect.backup,
+      warnings: perfect.warnings,
+      headline: `✅ 已達綠燈，再 ${100 - score} 分到滿分`,
+      tierLabel: '🏆 衝上滿分'
+    };
+  }
+  // 黃 / 紅 / 灰：先給「衝綠燈」
+  const green = _calcKpiUpgrades(member, remainWeeks, 70);
+  return {
+    status: green.canReach ? 'reachable' : 'stretch',
+    gap: green.gap,
+    primary: green.primary,
+    backup: green.backup,
+    warnings: green.warnings,
+    headline: `🎯 距離綠燈差 ${green.gap} 分`,
+    tierLabel: '🟢 衝上綠燈'
+  };
 }
 function KpiDashboard() {
   const [loading, setLoading] = useState(true);
