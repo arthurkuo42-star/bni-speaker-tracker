@@ -254,6 +254,41 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+
+  /* === 閱讀/編輯模式切換按鈕（Session 4）=== */
+  .mode-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #F5EFE7;
+    border: 1px solid transparent;
+    color: var(--c-text);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .mode-toggle:hover { background: #ECE3D5; }
+  .mode-toggle.edit { background: var(--c-kpi); color: #fff; }
+  .mode-toggle.edit:hover { background: var(--c-brand-deep); }
+  /* 編輯模式條（提示目前可以動資料） */
+  .edit-mode-banner {
+    background: linear-gradient(90deg, var(--c-kpi) 0%, #C5371A 100%);
+    color: #fff;
+    font-size: 12px;
+    font-family: var(--font-sans);
+    text-align: center;
+    padding: 6px 12px;
+    letter-spacing: 0.05em;
+  }
+  .edit-mode-banner button {
+    background: rgba(255,255,255,0.15); border: none;
+    color: #fff; cursor: pointer;
+    padding: 2px 10px; border-radius: 4px;
+    margin-left: 12px; font-size: 11px;
+    font-family: var(--font-sans);
+  }
+  .edit-mode-banner button:hover { background: rgba(255,255,255,0.25); }
 </style>
 </head>
 <body>
@@ -607,6 +642,18 @@ const IdentityContext = React.createContext({
   setIdentity: () => {},
   clearIdentity: () => {}
 });
+
+// 閱讀 / 編輯 雙模式（Session 4）：預設閱讀模式，畫面乾淨；切編輯模式才會看到「新增/編輯/刪除」UI。
+// 切換到編輯模式時要先解 WRITE_PIN，避免閒雜路人切下去亂改。
+const EDITMODE_KEY = 'bni_edit_mode';
+const EditModeContext = React.createContext({
+  editMode: false,
+  setEditMode: () => {},
+  requestEditMode: () => {}
+});
+function useEditMode() {
+  return React.useContext(EditModeContext).editMode;
+}
 
 // 預設任務模板（BNI 主題演講提前 6 週準備流程，每週一次咖啡會議）
 // 預設任務模板：只管演講內容準備（content 軌）
@@ -964,6 +1011,52 @@ function App() {
   });
   const [identityPrompt, setIdentityPrompt] = useState(false); // 顯式打開選身份面板
   const [drawerOpen, setDrawerOpen] = useState(false); // 手機漢堡選單
+
+  // 閱讀/編輯雙模式（Session 4）：預設閱讀，切編輯要先解 WRITE_PIN
+  const [editMode, setEditMode] = useState(() => {
+    try {
+      return localStorage.getItem(EDITMODE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const persistEditMode = next => {
+    setEditMode(next);
+    try {
+      if (next) localStorage.setItem(EDITMODE_KEY, '1');else localStorage.removeItem(EDITMODE_KEY);
+    } catch {}
+  };
+  // 要切換到「編輯模式」前先解 PIN —— 沿用 obtainWritePin 邏輯，PIN 對才放行
+  const requestEditMode = async () => {
+    if (editMode) {
+      persistEditMode(false);
+      return;
+    } // 切回閱讀，不需驗證
+    try {
+      const cachedPin = localStorage.getItem('bni_write_pin');
+      if (cachedPin) {
+        // 已經有 PIN 在身上 → 直接進入編輯
+        persistEditMode(true);
+        showToast('已切換到編輯模式', 'success');
+        return;
+      }
+      // 沒有 PIN → 跟使用者要
+      const pin = await obtainWritePin();
+      if (!pin) return;
+      // 驗證 PIN：嘗試一個 noop 寫入確認 PIN 對
+      // 簡化做法：直接存 PIN 並切換，下次真要寫入時若 PIN 錯 obtainWritePin 會重問
+      localStorage.setItem('bni_write_pin', pin);
+      persistEditMode(true);
+      showToast('已切換到編輯模式', 'success');
+    } catch {
+      // 使用者取消
+    }
+  };
+  const editCtxValue = useMemo(() => ({
+    editMode,
+    setEditMode: persistEditMode,
+    requestEditMode
+  }), [editMode]);
   const setIdentity = id => {
     try {
       if (id) {
@@ -1070,6 +1163,8 @@ function App() {
   })();
   return /*#__PURE__*/React.createElement(IdentityContext.Provider, {
     value: identityCtxValue
+  }, /*#__PURE__*/React.createElement(EditModeContext.Provider, {
+    value: editCtxValue
   }, /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen",
     style: {
@@ -1083,7 +1178,11 @@ function App() {
     members: data.members,
     onPick: setIdentity,
     onSkip: skipIdentity
-  }), /*#__PURE__*/React.createElement(Header, {
+  }), editMode && /*#__PURE__*/React.createElement("div", {
+    className: "edit-mode-banner"
+  }, "\u270F\uFE0F \u7DE8\u8F2F\u6A21\u5F0F \u2014 \u4F60\u53EF\u4EE5\u65B0\u589E/\u7DE8\u8F2F/\u522A\u9664", /*#__PURE__*/React.createElement("button", {
+    onClick: () => persistEditMode(false)
+  }, "\u5207\u56DE\u95B1\u8B80\u6A21\u5F0F")), /*#__PURE__*/React.createElement(Header, {
     view: view,
     setView: setView,
     adminAuth: adminAuth,
@@ -1091,7 +1190,9 @@ function App() {
     chapterName: data.chapterName,
     identityMember: identityMember,
     onIdentityClick: () => setIdentityPrompt(true),
-    onOpenDrawer: () => setDrawerOpen(true)
+    onOpenDrawer: () => setDrawerOpen(true),
+    editMode: editMode,
+    onToggleEditMode: requestEditMode
   }), /*#__PURE__*/React.createElement("main", {
     className: "max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10"
   }, view === 'home' && /*#__PURE__*/React.createElement(HomeView, {
@@ -1139,7 +1240,7 @@ function App() {
     setView: setView,
     adminAuth: adminAuth,
     setAdminAuth: setAdminAuth
-  })));
+  }))));
 }
 
 // ============ Header（Session 3 大改：手機只剩 hamburger + identity，桌機完整 nav）============
@@ -1188,7 +1289,9 @@ function Header({
   chapterName,
   identityMember,
   onIdentityClick,
-  onOpenDrawer
+  onOpenDrawer,
+  editMode,
+  onToggleEditMode
 }) {
   return /*#__PURE__*/React.createElement("header", {
     className: "border-b-2",
@@ -1201,7 +1304,7 @@ function Header({
   }, /*#__PURE__*/React.createElement("div", {
     className: "min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-2 mb-1"
+    className: "flex items-center gap-2 mb-1 flex-wrap"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-[10px] tracking-[0.3em] text-stone-500 hidden md:block",
     style: {
@@ -1210,7 +1313,12 @@ function Header({
   }, "BNI \xB7 CHAPTER ASSISTANT"), /*#__PURE__*/React.createElement(IdentityChip, {
     member: identityMember,
     onClick: onIdentityClick
-  })), /*#__PURE__*/React.createElement("h1", {
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `mode-toggle ${editMode ? 'edit' : ''}`,
+    onClick: onToggleEditMode,
+    title: editMode ? '目前是編輯模式，點此切回閱讀' : '目前是閱讀模式，點此切到編輯（要 PIN）'
+  }, editMode ? '✏️ 編輯中' : '👁️ 閱讀')), /*#__PURE__*/React.createElement("h1", {
     className: "text-lg md:text-2xl font-bold",
     style: {
       color: 'var(--c-text)'
@@ -3353,6 +3461,7 @@ function CoffeeMeetingPage({
   saveData,
   showToast
 }) {
+  const editMode = useEditMode();
   // 預設只看「待進行」的咖啡會議；3 個多選 + 1 個 inviterId 單選 + search
   const [filter, setFilter] = useState({
     inviterId: '',
@@ -3805,7 +3914,7 @@ function CoffeeMeetingPage({
     }
   }, "\u8FFD\u8E64")), /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-stone-500"
-  }, "\u8A18\u9304\u6BCF\u5834 121\uFF0C\u9080\u7D04\u5609\u8CD3\u4F86\u807D\u4E3B\u984C\u6F14\u8B1B\u3001\u958B\u555F\u7C3D\u55AE\u6A5F\u6703")), importableOffers.length > 0 && /*#__PURE__*/React.createElement("button", {
+  }, "\u8A18\u9304\u6BCF\u5834 121\uFF0C\u9080\u7D04\u5609\u8CD3\u4F86\u807D\u4E3B\u984C\u6F14\u8B1B\u3001\u958B\u555F\u7C3D\u55AE\u6A5F\u6703")), editMode && importableOffers.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setImportPanelOpen(true);
       setSelectedOffers(new Set(importableOffers.map(o => o.compositeId)));
@@ -4005,7 +4114,7 @@ function CoffeeMeetingPage({
       value: 'sworn',
       label: '已宣誓'
     }]
-  }), /*#__PURE__*/React.createElement("button", {
+  }), editMode && /*#__PURE__*/React.createElement("button", {
     onClick: () => openNew(),
     className: "px-4 py-1.5 text-sm text-white rounded-md flex items-center gap-1",
     style: {
@@ -4023,7 +4132,7 @@ function CoffeeMeetingPage({
     className: "text-sm text-stone-500"
   }, "\u6C92\u6709\u5496\u5561\u6703\u8B70\u8A18\u9304"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-400 mt-1"
-  }, "\u9EDE\u300C\u65B0\u589E\u5496\u5561\u6703\u8B70\u300D\u958B\u59CB\u8A18\u9304")) : filtered.map(cm => /*#__PURE__*/React.createElement(CoffeeCard, {
+  }, editMode ? '點「新增咖啡會議」開始記錄' : '切到右上角「✏️ 編輯」模式才能新增')) : filtered.map(cm => /*#__PURE__*/React.createElement(CoffeeCard, {
     key: cm.id,
     cm: cm,
     inviter: memberById[cm.inviterId],
@@ -4292,6 +4401,7 @@ function CoffeeCard({
   onEdit,
   onDelete
 }) {
+  const editMode = useEditMode();
   const [minutesExpanded, setMinutesExpanded] = useState(false);
   const statusInfo = COFFEE_STATUS[cm.meetingStatus] || COFFEE_STATUS.pending;
   const willingnessInfo = COFFEE_WILLINGNESS[cm.attendanceWillingness] || COFFEE_WILLINGNESS.pending;
@@ -4346,7 +4456,7 @@ function CoffeeCard({
     }
   }, presenter.name)), cm.location && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     className: "text-stone-400"
-  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCCD ", cm.location)))), /*#__PURE__*/React.createElement("div", {
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCCD ", cm.location)))), editMode && /*#__PURE__*/React.createElement("div", {
     className: "flex gap-1 flex-shrink-0"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onEdit,
