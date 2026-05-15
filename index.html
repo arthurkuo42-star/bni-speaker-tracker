@@ -151,6 +151,109 @@
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 11px; font-weight: 600;
   }
+  /* === 手機底部 tab bar（Session 3）=== */
+  .bottom-tab-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    background: var(--c-card);
+    border-top: 1px solid #E7E0D2;
+    z-index: 50;
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.04);
+  }
+  .bottom-tab {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 2px;
+    padding: 4px;
+    font-size: 11px;
+    color: var(--c-muted);
+    background: none; border: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: color 0.15s;
+  }
+  .bottom-tab.active { color: var(--c-kpi); font-weight: 600; }
+  .bottom-tab .icon { font-size: 22px; line-height: 1; }
+  .bottom-tab.active .icon { transform: translateY(-1px); transition: transform 0.15s; }
+  @media (min-width: 768px) {
+    .bottom-tab-bar { display: none; }
+  }
+  @media (max-width: 767px) {
+    body { padding-bottom: 68px; }  /* 推開內容、避免被 bottom tab 蓋住 */
+  }
+
+  /* === 手機漢堡選單 drawer（Session 3）=== */
+  .hamburger-btn {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    border: 1px solid #E7E0D2;
+    background: var(--c-card);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--c-text);
+  }
+  .hamburger-btn:hover { background: #F5EFE7; }
+  .drawer-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(26,20,20,0.4);
+    backdrop-filter: blur(2px);
+    animation: drawerFade 0.18s ease;
+  }
+  .drawer-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 280px; max-width: 85vw;
+    background: var(--c-card);
+    z-index: 70;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.15);
+    padding: 16px;
+    display: flex; flex-direction: column;
+    gap: 4px;
+    font-family: var(--font-sans);
+    animation: drawerSlide 0.22s ease;
+    overflow-y: auto;
+  }
+  .drawer-panel .drawer-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #F0E6D2;
+  }
+  .drawer-panel .drawer-head .label {
+    font-size: 10px; letter-spacing: 0.3em; color: var(--c-muted);
+  }
+  .drawer-panel .drawer-close {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    border: none; background: transparent;
+    color: var(--c-muted); cursor: pointer;
+    font-size: 18px; line-height: 1;
+  }
+  .drawer-panel .drawer-close:hover { background: #F5EFE7; }
+  .drawer-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--c-text);
+    text-decoration: none;
+    border: none; background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+  .drawer-item:hover { background: #F5EFE7; }
+  .drawer-item .item-icon { font-size: 18px; width: 24px; text-align: center; }
+  .drawer-item.active { background: #FCEFE3; color: var(--c-kpi); font-weight: 600; }
+  @keyframes drawerSlide {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes drawerFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -781,6 +884,59 @@ const defaultData = () => ({
   updatedAt: new Date().toISOString()
 });
 
+// ============ 主導航設定（Session 3）============
+// 把 9 個 nav 入口的 metadata 集中：手機 bottom-tab 只顯示 PRIMARY、漢堡選單顯示全部。
+// 順序就是會員實際使用頻率：首頁 > 紅綠燈 > 咖啡 > 演講 > 服務鏈/後台 > 外連的組聚/導生/競賽。
+const PRIMARY_NAVS = [{
+  id: 'home',
+  label: '首頁',
+  emoji: '🏠',
+  color: 'var(--c-kpi)'
+}, {
+  id: 'kpi',
+  label: '紅綠燈',
+  emoji: '🚦',
+  color: 'var(--c-kpi-green)'
+}, {
+  id: 'coffee',
+  label: '咖啡',
+  emoji: '☕',
+  color: 'var(--c-coffee)'
+}, {
+  id: 'dashboard',
+  label: '演講',
+  emoji: '📣',
+  color: '#1A1414'
+}];
+const SECONDARY_NAVS = [{
+  id: 'chains',
+  label: '服務鏈',
+  emoji: '📋',
+  color: 'var(--c-chain)',
+  type: 'view'
+}, {
+  id: 'admin',
+  label: '後台',
+  emoji: '⚙️',
+  color: 'var(--c-kpi)',
+  type: 'view'
+}, {
+  id: 'meetings',
+  label: '組聚',
+  emoji: '📄',
+  href: 'operations.html?tab=meetings'
+}, {
+  id: 'mentorship',
+  label: '導生',
+  emoji: '🎓',
+  href: 'operations.html?tab=mentorship'
+}, {
+  id: 'challenge',
+  label: '競賽',
+  emoji: '🏆',
+  href: 'operations.html?tab=challenge'
+}];
+
 // ============ 主元件 ============
 function App() {
   const [data, setData] = useState(null);
@@ -807,6 +963,7 @@ function App() {
     }
   });
   const [identityPrompt, setIdentityPrompt] = useState(false); // 顯式打開選身份面板
+  const [drawerOpen, setDrawerOpen] = useState(false); // 手機漢堡選單
   const setIdentity = id => {
     try {
       if (id) {
@@ -933,7 +1090,8 @@ function App() {
     setAdminAuth: setAdminAuth,
     chapterName: data.chapterName,
     identityMember: identityMember,
-    onIdentityClick: () => setIdentityPrompt(true)
+    onIdentityClick: () => setIdentityPrompt(true),
+    onOpenDrawer: () => setDrawerOpen(true)
   }), /*#__PURE__*/React.createElement("main", {
     className: "max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10"
   }, view === 'home' && /*#__PURE__*/React.createElement(HomeView, {
@@ -971,10 +1129,57 @@ function App() {
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
     }
-  }, "\u6700\u5F8C\u66F4\u65B0\uFF1A", new Date(data.updatedAt).toLocaleString('zh-TW'))));
+  }, "\u6700\u5F8C\u66F4\u65B0\uFF1A", new Date(data.updatedAt).toLocaleString('zh-TW')), /*#__PURE__*/React.createElement(BottomTabBar, {
+    view: view,
+    setView: setView
+  }), /*#__PURE__*/React.createElement(MobileDrawer, {
+    open: drawerOpen,
+    onClose: () => setDrawerOpen(false),
+    view: view,
+    setView: setView,
+    adminAuth: adminAuth,
+    setAdminAuth: setAdminAuth
+  })));
 }
 
-// ============ Header ============
+// ============ Header（Session 3 大改：手機只剩 hamburger + identity，桌機完整 nav）============
+function NavBtn({
+  nav,
+  view,
+  setView
+}) {
+  const isActive = view === nav.id;
+  const base = "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5";
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: () => setView(nav.id),
+    className: `${base} ${isActive ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
+    style: {
+      fontFamily: 'var(--font-sans)',
+      background: isActive ? nav.color : undefined
+    },
+    title: nav.label
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-4 h-4 flex items-center justify-center text-base leading-none"
+  }, nav.emoji), /*#__PURE__*/React.createElement("span", {
+    className: "hidden lg:inline"
+  }, nav.label));
+}
+function NavLink({
+  nav
+}) {
+  return /*#__PURE__*/React.createElement("a", {
+    href: nav.href,
+    className: "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200",
+    style: {
+      fontFamily: 'var(--font-sans)'
+    },
+    title: nav.label
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-4 h-4 flex items-center justify-center text-base leading-none"
+  }, nav.emoji), /*#__PURE__*/React.createElement("span", {
+    className: "hidden lg:inline"
+  }, nav.label));
+}
 function Header({
   view,
   setView,
@@ -982,7 +1187,8 @@ function Header({
   setAdminAuth,
   chapterName,
   identityMember,
-  onIdentityClick
+  onIdentityClick,
+  onOpenDrawer
 }) {
   return /*#__PURE__*/React.createElement("header", {
     className: "border-b-2",
@@ -991,21 +1197,21 @@ function Header({
       background: 'white'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between gap-3"
+    className: "max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center justify-between gap-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2 mb-1"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] tracking-[0.3em] text-stone-500",
+    className: "text-[10px] tracking-[0.3em] text-stone-500 hidden md:block",
     style: {
-      fontFamily: "'Noto Sans TC', sans-serif"
+      fontFamily: 'var(--font-sans)'
     }
   }, "BNI \xB7 CHAPTER ASSISTANT"), /*#__PURE__*/React.createElement(IdentityChip, {
     member: identityMember,
     onClick: onIdentityClick
   })), /*#__PURE__*/React.createElement("h1", {
-    className: "text-xl md:text-2xl font-bold",
+    className: "text-lg md:text-2xl font-bold",
     style: {
       color: 'var(--c-text)'
     }
@@ -1016,126 +1222,142 @@ function Header({
       color: 'var(--c-kpi)'
     }
   }, "\u5206\u6703\u52A9\u7406"))), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-1 md:gap-2 flex-wrap justify-end"
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('home');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'home' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: 'var(--font-sans)',
-      background: view === 'home' ? 'var(--c-kpi)' : undefined
-    },
-    title: "\u9996\u9801\uFF08\u6211\u7684\u5100\u8868\u677F\uFF09"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "w-4 h-4 flex items-center justify-center text-base leading-none"
-  }, "\uD83C\uDFE0"), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u9996\u9801")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('kpi');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'kpi' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif",
-      background: view === 'kpi' ? '#2D5A27' : undefined
-    },
-    title: "\u7D05\u7DA0\u71C8\uFF08\u539F KPI\uFF09"
-  }, /*#__PURE__*/React.createElement(Target, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u7D05\u7DA0\u71C8")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('dashboard');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'dashboard' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif"
-    }
-  }, /*#__PURE__*/React.createElement(Eye, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u6F14\u8B1B")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('coffee');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'coffee' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif",
-      background: view === 'coffee' ? '#8B6F47' : undefined
-    }
-  }, /*#__PURE__*/React.createElement(Coffee, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u5496\u5561")), /*#__PURE__*/React.createElement("a", {
-    href: "operations.html?tab=meetings",
-    className: "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200",
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif"
-    },
-    title: "\u7D44\u805A\uFF08\u6703\u8B70\u8A18\u9304\uFF09"
-  }, /*#__PURE__*/React.createElement(FileText, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u7D44\u805A")), /*#__PURE__*/React.createElement("a", {
-    href: "operations.html?tab=mentorship",
-    className: "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200",
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif"
-    },
-    title: "\u5C0E\u751F\u8A08\u756B"
-  }, /*#__PURE__*/React.createElement(GraduationCap, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u5C0E\u751F")), /*#__PURE__*/React.createElement("a", {
-    href: "operations.html?tab=challenge",
-    className: "px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200",
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif"
-    },
-    title: "\u5C0F\u7D44\u7AF6\u8CFD 5\u20136 \u6708"
-  }, /*#__PURE__*/React.createElement(Target, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u7AF6\u8CFD")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('chains');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'chains' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif",
-      background: view === 'chains' ? '#6B4C8A' : undefined
-    }
-  }, /*#__PURE__*/React.createElement(ListChecks, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u670D\u52D9\u93C8")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setView('admin');
-    },
-    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'admin' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
-    style: {
-      fontFamily: "'Noto Sans TC', sans-serif",
-      background: view === 'admin' ? '#A01E2E' : undefined
-    }
-  }, /*#__PURE__*/React.createElement(Settings, {
-    className: "w-4 h-4"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "hidden md:inline"
-  }, "\u5F8C\u53F0")), adminAuth && /*#__PURE__*/React.createElement("button", {
+    className: "hidden md:flex items-center gap-1 lg:gap-2 flex-wrap justify-end"
+  }, PRIMARY_NAVS.map(n => /*#__PURE__*/React.createElement(NavBtn, {
+    key: n.id,
+    nav: n,
+    view: view,
+    setView: setView
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "w-px h-6 bg-stone-200 mx-1"
+  }), SECONDARY_NAVS.map(n => n.type === 'view' ? /*#__PURE__*/React.createElement(NavBtn, {
+    key: n.id,
+    nav: n,
+    view: view,
+    setView: setView
+  }) : /*#__PURE__*/React.createElement(NavLink, {
+    key: n.id,
+    nav: n
+  })), adminAuth && /*#__PURE__*/React.createElement("button", {
     onClick: () => setAdminAuth(false),
     className: "px-2 py-2 text-sm text-stone-500 hover:text-stone-800",
     title: "\u767B\u51FA\u5F8C\u53F0"
   }, /*#__PURE__*/React.createElement(LogOut, {
     className: "w-4 h-4"
+  }))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "hamburger-btn md:hidden",
+    onClick: onOpenDrawer,
+    "aria-label": "\u958B\u555F\u9078\u55AE"
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "20",
+    height: "20",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2.2",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "6",
+    x2: "21",
+    y2: "6"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "12",
+    x2: "21",
+    y2: "12"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "18",
+    x2: "21",
+    y2: "18"
   })))));
+}
+
+// ============ 手機底部 tab bar（4 個主要入口）============
+function BottomTabBar({
+  view,
+  setView
+}) {
+  return /*#__PURE__*/React.createElement("nav", {
+    className: "bottom-tab-bar md:hidden",
+    "aria-label": "\u4E3B\u8981\u5C0E\u822A"
+  }, PRIMARY_NAVS.map(n => /*#__PURE__*/React.createElement("button", {
+    key: n.id,
+    className: `bottom-tab ${view === n.id ? 'active' : ''}`,
+    onClick: () => setView(n.id),
+    style: view === n.id ? {
+      color: n.color
+    } : undefined
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "icon"
+  }, n.emoji), /*#__PURE__*/React.createElement("span", null, n.label))));
+}
+
+// ============ 手機漢堡選單抽屜（次要功能 + 工具）============
+function MobileDrawer({
+  open,
+  onClose,
+  view,
+  setView,
+  adminAuth,
+  setAdminAuth
+}) {
+  if (!open) return null;
+  const go = id => {
+    setView(id);
+    onClose();
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "drawer-overlay md:hidden",
+    onClick: onClose
+  }), /*#__PURE__*/React.createElement("aside", {
+    className: "drawer-panel md:hidden",
+    role: "dialog",
+    "aria-label": "\u6B21\u8981\u9078\u55AE"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "drawer-head"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "label"
+  }, "MORE"), /*#__PURE__*/React.createElement("button", {
+    className: "drawer-close",
+    onClick: onClose,
+    "aria-label": "\u95DC\u9589"
+  }, "\u2715")), PRIMARY_NAVS.map(n => /*#__PURE__*/React.createElement("button", {
+    key: n.id,
+    className: `drawer-item ${view === n.id ? 'active' : ''}`,
+    onClick: () => go(n.id)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "item-icon"
+  }, n.emoji), n.label)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 1,
+      background: '#F0E6D2',
+      margin: '8px 0'
+    }
+  }), SECONDARY_NAVS.map(n => n.type === 'view' ? /*#__PURE__*/React.createElement("button", {
+    key: n.id,
+    className: `drawer-item ${view === n.id ? 'active' : ''}`,
+    onClick: () => go(n.id)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "item-icon"
+  }, n.emoji), n.label) : /*#__PURE__*/React.createElement("a", {
+    key: n.id,
+    href: n.href,
+    className: "drawer-item",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "item-icon"
+  }, n.emoji), n.label)), adminAuth && /*#__PURE__*/React.createElement("button", {
+    className: "drawer-item",
+    onClick: () => {
+      setAdminAuth(false);
+      onClose();
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "item-icon"
+  }, "\uD83D\uDEAA"), "\u767B\u51FA\u5F8C\u53F0")));
 }
 
 // ============ 個人化首頁（Session 2）============
