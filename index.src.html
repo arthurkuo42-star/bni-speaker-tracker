@@ -2800,6 +2800,8 @@ const COFFEE_CONVERSION = {
 
 function CoffeeMeetingPage({ data, saveData, showToast }) {
   const editMode = useEditMode();
+  const { member: me } = React.useContext(IdentityContext);
+  const [chapterStatsOpen, setChapterStatsOpen] = useState(false); // 分會 8 顆統計卡預設摺疊
   // 預設只看「待進行」的咖啡會議；3 個多選 + 1 個 inviterId 單選 + search
   const [filter, setFilter] = useState({ inviterId: '', statuses: ['scheduled'], willingnesses: [], conversions: [], search: '' });
   const [editingId, setEditingId] = useState(null);
@@ -2904,6 +2906,30 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
     signed: allMeetings.filter(cm => cm.conversionStatus === 'signed').length,
     sworn: allMeetings.filter(cm => cm.conversionStatus === 'sworn').length,
   }), [allMeetings]);
+
+  // Session 5：「我的咖啡」三件事 —— 即將進行 / 待跟進 / 本月已完成
+  // 篩選邏輯：邀約人是我，或我在參與者名單裡。
+  const myStats = useMemo(() => {
+    if (!me) return null;
+    const isMine = (cm) =>
+      cm.inviterId === me.id ||
+      (Array.isArray(cm.participantIds) && cm.participantIds.includes(me.id));
+    const mine = allMeetings.filter(isMine);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      scheduled: mine.filter(cm =>
+        cm.meetingStatus === 'scheduled' &&
+        cm.meetingTime && new Date(cm.meetingTime) >= now
+      ).length,
+      following: mine.filter(cm => cm.conversionStatus === 'following').length,
+      doneThisMonth: mine.filter(cm =>
+        cm.meetingStatus === 'done' &&
+        cm.meetingTime && new Date(cm.meetingTime) >= monthStart
+      ).length,
+      total: mine.length,
+    };
+  }, [me, allMeetings]);
 
   // 近期 6 週演講人名單（方便快速建立咖啡會議）
   const upcomingSpeakers = useMemo(() => {
@@ -3219,64 +3245,126 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
         )}
       </div>
 
-      {/* 統計（每張卡可點 → 套用對應篩選；同一張再點一次取消篩選）*/}
-      <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-5">
-        <StatCard label="總場次" value={stats.total} color="#1A1414"
-          active={
-            !filter.statuses?.length && !filter.willingnesses?.length && !filter.conversions?.length && !filter.inviterId && !filter.search
-          }
-          onClick={() => setFilter({ inviterId: '', statuses: [], willingnesses: [], conversions: [], search: '' })} />
-        <StatCard label="邀約中" value={stats.pending} color="#A01E2E"
-          active={filter.statuses?.length === 1 && filter.statuses[0] === 'pending'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'pending') ? [] : ['pending'],
-            willingnesses: [], conversions: [],
-          })} />
-        <StatCard label="待進行" value={stats.scheduled} color="#B8860B"
-          active={filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled') ? [] : ['scheduled'],
-            willingnesses: [], conversions: [],
-          })} />
-        <StatCard label="已完成" value={stats.done} color="#8B6F47"
-          active={filter.statuses?.length === 1 && filter.statuses[0] === 'done'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'done') ? [] : ['done'],
-            willingnesses: [], conversions: [],
-          })} />
-        <StatCard label="確認出席" value={stats.confirmed} color="#4A6741"
-          active={filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: [],
-            willingnesses: (filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed') ? [] : ['confirmed'],
-            conversions: [],
-          })} />
-        <StatCard label="跟進中" value={stats.following} color="#8B6F47"
-          active={filter.conversions?.length === 1 && filter.conversions[0] === 'following'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: [], willingnesses: [],
-            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'following') ? [] : ['following'],
-          })} />
-        <StatCard label="已簽單" value={stats.signed} color="#A01E2E"
-          active={filter.conversions?.length === 1 && filter.conversions[0] === 'signed'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: [], willingnesses: [],
-            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'signed') ? [] : ['signed'],
-          })} />
-        <StatCard label="已宣誓" value={stats.sworn} color="#1A6B1A"
-          active={filter.conversions?.length === 1 && filter.conversions[0] === 'sworn'}
-          onClick={() => setFilter({
-            ...filter,
-            statuses: [], willingnesses: [],
-            conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'sworn') ? [] : ['sworn'],
-          })} />
-      </div>
+      {/* Session 5：我的咖啡（個人化區塊，識別過身份才顯示）*/}
+      {me && myStats && (
+        <div className="mb-5 p-4 rounded-xl border border-stone-200" style={{ background: 'linear-gradient(135deg, #FFF8EE 0%, #FAF3E5 100%)' }}>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">☕</span>
+              <span className="text-sm font-bold" style={{ color: 'var(--c-coffee)' }}>我的咖啡 · {me.name}</span>
+            </div>
+            {myStats.total === 0 && (
+              <span className="text-xs text-stone-500">還沒有你的紀錄{editMode ? '，可點下方「+ 新增」開始' : '，切到右上角「✏️ 編輯」模式新增'}</span>
+            )}
+          </div>
+          {myStats.total > 0 && (
+            <div className="grid grid-cols-3 gap-2 md:gap-3">
+              <button
+                type="button"
+                onClick={() => setFilter({
+                  inviterId: me.id, statuses: ['scheduled'], willingnesses: [], conversions: [], search: '',
+                })}
+                className="bg-white rounded-lg p-3 text-left hover:shadow-md transition-shadow border border-transparent hover:border-amber-300"
+                title="點此只看自己的待進行"
+              >
+                <div className="text-[10px] tracking-widest text-stone-400">即將進行</div>
+                <div className="text-2xl md:text-3xl font-bold" style={{ color: '#B8860B' }}>{myStats.scheduled}</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter({
+                  inviterId: me.id, statuses: [], willingnesses: [], conversions: ['following'], search: '',
+                })}
+                className="bg-white rounded-lg p-3 text-left hover:shadow-md transition-shadow border border-transparent hover:border-amber-300"
+                title="點此只看自己的跟進中"
+              >
+                <div className="text-[10px] tracking-widest text-stone-400">待跟進</div>
+                <div className="text-2xl md:text-3xl font-bold" style={{ color: 'var(--c-coffee)' }}>{myStats.following}</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter({
+                  inviterId: me.id, statuses: ['done'], willingnesses: [], conversions: [], search: '',
+                })}
+                className="bg-white rounded-lg p-3 text-left hover:shadow-md transition-shadow border border-transparent hover:border-amber-300"
+                title="點此只看自己本月已完成"
+              >
+                <div className="text-[10px] tracking-widest text-stone-400">本月已完成</div>
+                <div className="text-2xl md:text-3xl font-bold" style={{ color: 'var(--c-kpi-green)' }}>{myStats.doneThisMonth}</div>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 分會統計（8 卡）—— Session 5 改為預設摺疊，會員平常用不到 */}
+      <details
+        open={chapterStatsOpen}
+        onToggle={(e) => setChapterStatsOpen(e.currentTarget.open)}
+        className="mb-5 bg-white rounded-lg border border-stone-200"
+      >
+        <summary className="cursor-pointer px-3 py-2 text-xs text-stone-500 select-none flex items-center gap-1.5">
+          <span>查看分會統計（8 項）</span>
+          <ChevronRight className="w-3 h-3" style={{ transform: chapterStatsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        </summary>
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 p-3 pt-0">
+          <StatCard label="總場次" value={stats.total} color="#1A1414"
+            active={
+              !filter.statuses?.length && !filter.willingnesses?.length && !filter.conversions?.length && !filter.inviterId && !filter.search
+            }
+            onClick={() => setFilter({ inviterId: '', statuses: [], willingnesses: [], conversions: [], search: '' })} />
+          <StatCard label="邀約中" value={stats.pending} color="#A01E2E"
+            active={filter.statuses?.length === 1 && filter.statuses[0] === 'pending'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'pending') ? [] : ['pending'],
+              willingnesses: [], conversions: [],
+            })} />
+          <StatCard label="待進行" value={stats.scheduled} color="#B8860B"
+            active={filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'scheduled') ? [] : ['scheduled'],
+              willingnesses: [], conversions: [],
+            })} />
+          <StatCard label="已完成" value={stats.done} color="#8B6F47"
+            active={filter.statuses?.length === 1 && filter.statuses[0] === 'done'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: (filter.statuses?.length === 1 && filter.statuses[0] === 'done') ? [] : ['done'],
+              willingnesses: [], conversions: [],
+            })} />
+          <StatCard label="確認出席" value={stats.confirmed} color="#4A6741"
+            active={filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: [],
+              willingnesses: (filter.willingnesses?.length === 1 && filter.willingnesses[0] === 'confirmed') ? [] : ['confirmed'],
+              conversions: [],
+            })} />
+          <StatCard label="跟進中" value={stats.following} color="#8B6F47"
+            active={filter.conversions?.length === 1 && filter.conversions[0] === 'following'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: [], willingnesses: [],
+              conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'following') ? [] : ['following'],
+            })} />
+          <StatCard label="已簽單" value={stats.signed} color="#A01E2E"
+            active={filter.conversions?.length === 1 && filter.conversions[0] === 'signed'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: [], willingnesses: [],
+              conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'signed') ? [] : ['signed'],
+            })} />
+          <StatCard label="已宣誓" value={stats.sworn} color="#1A6B1A"
+            active={filter.conversions?.length === 1 && filter.conversions[0] === 'sworn'}
+            onClick={() => setFilter({
+              ...filter,
+              statuses: [], willingnesses: [],
+              conversions: (filter.conversions?.length === 1 && filter.conversions[0] === 'sworn') ? [] : ['sworn'],
+            })} />
+        </div>
+      </details>
 
       {/* 近期演講人快速建立 */}
       {upcomingSpeakers.length > 0 && (
