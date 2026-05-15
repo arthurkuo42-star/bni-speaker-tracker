@@ -11,9 +11,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="富鼎分會">
-<link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
-<link rel="icon" type="image/png" sizes="32x32" href="./icon-32.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./web-app-manifest-192x192.png">
+<link rel="icon" type="image/png" sizes="96x96" href="./favicon-96x96.png">
 
 <!-- Railway Proxy URL（請改成您的 Railway domain） -->
 <script>
@@ -37,16 +37,119 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <!-- 注意：xlsx (~900KB) 改為按需動態載入（匯入/下載範本時才抓）-->
 <style>
+  /* ============================================================
+   * BNI 富鼎品牌色票（設計 token）
+   * 任何要改色的地方，直接改這裡的 CSS 變數即可全站套用。
+   * 對應原本散落的硬寫色碼：
+   *   #F5F0E8 / #FAF7F2  → 背景
+   *   #8B1A1A             → BNI 主紅（瀏覽器標題列、主標題）
+   *   #A01E2E             → 紅綠燈/演講/後台 強調色
+   *   #2D5A27             → 紅綠燈綠
+   *   #8B6F47             → 咖啡棕
+   *   #6B4C8A             → 服務鏈紫
+   *   #1A1414             → 深色文字
+   * ============================================================ */
+  :root {
+    --c-bg: #F5F0E8;
+    --c-surface: #FAF7F2;
+    --c-card: #FFFFFF;
+    --c-text: #1A1414;
+    --c-muted: #78716C;
+
+    --c-brand: #8B1A1A;
+    --c-brand-deep: #6B0E0E;
+
+    --c-kpi: #A01E2E;
+    --c-kpi-green: #2D5A27;
+    --c-kpi-yellow: #C99B2E;
+    --c-coffee: #8B6F47;
+    --c-chain: #6B4C8A;
+
+    /* 字體 stack（避免每元件都寫一次 fontFamily） */
+    --font-sans: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', 'Apple LiGothic', sans-serif;
+    --font-serif: 'Noto Serif TC', 'Playfair Display', serif;
+  }
   body {
     /* 優先用系統內建 CJK 字型繪出首頁，等 Noto Sans TC 下載完才切換 —— 減少 FOIT */
-    font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', 'Apple LiGothic', sans-serif;
-    background: #F5F0E8;
+    font-family: var(--font-sans);
+    background: var(--c-bg);
+    color: var(--c-text);
     margin: 0;
   }
   .loading-screen {
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    background: #F5F0E8; color: #8B6F47; font-size: 14px;
+    background: var(--c-bg); color: var(--c-coffee); font-size: 14px;
+  }
+  /* === 身份識別歡迎畫面 === */
+  .identity-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(26, 20, 20, 0.45);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .identity-card {
+    background: var(--c-card);
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    width: 100%; max-width: 420px;
+    padding: 28px 24px;
+    font-family: var(--font-sans);
+  }
+  .identity-card h2 {
+    font-family: var(--font-serif);
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--c-text);
+    margin: 0 0 6px;
+  }
+  .identity-card .hint {
+    font-size: 13px;
+    color: var(--c-muted);
+    margin-bottom: 18px;
+    line-height: 1.6;
+  }
+  .identity-card .badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--c-kpi);
+    margin-bottom: 8px;
+  }
+  .identity-card .skip {
+    margin-top: 14px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--c-muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 8px;
+  }
+  .identity-card .skip:hover { color: var(--c-text); }
+  /* === 頂部身份小卡 === */
+  .identity-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 999px;
+    background: #F5EFE7;
+    color: var(--c-text);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+  }
+  .identity-chip:hover { background: #ECE3D5; }
+  .identity-chip.unset { background: transparent; border-color: #E7E0D2; color: var(--c-muted); padding-left: 10px; }
+  .identity-chip .avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--c-kpi);
+    color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
   }
 </style>
 </head>
@@ -391,6 +494,16 @@ async function swrFetchRaw(url, onFresh) {
 }
 const STORAGE_KEY = 'bni_speaker_tracker_v5';
 const PIN_KEY = 'bni_speaker_tracker_pin_v1';
+// 會員身份識別（首次進站選一次，存 localStorage，用於個人化首頁）
+// 不是真正的認證 —— 只是「你是誰」的偏好設定；寫入仍需 WRITE_PIN
+const IDENTITY_KEY = 'bni_member_id';
+const IDENTITY_SKIP_KEY = 'bni_member_skip';
+const IdentityContext = React.createContext({
+  memberId: null,
+  member: null,
+  setIdentity: () => {},
+  clearIdentity: () => {}
+});
 
 // 預設任務模板（BNI 主題演講提前 6 週準備流程，每週一次咖啡會議）
 // 預設任務模板：只管演講內容準備（content 軌）
@@ -534,6 +647,77 @@ function MemberSearchSelect({
   }, m.industry, m.industry && m.company ? ' · ' : '', m.company))))));
 }
 
+// ============ 身份識別：歡迎畫面 ============
+// 首次進站、且分會已有會員資料時，跳出讓使用者選「我是誰」。
+// 純前端偏好設定，沒有密碼。寫入仍走 WRITE_PIN（不影響資料安全）。
+function IdentitySelect({
+  members,
+  onPick,
+  onSkip
+}) {
+  const [chosen, setChosen] = useState('');
+  return /*#__PURE__*/React.createElement("div", {
+    className: "identity-overlay"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "identity-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "badge"
+  }, "WELCOME"), /*#__PURE__*/React.createElement("h2", null, "\u6B61\u8FCE\u4F86\u5230\u5BCC\u9F0E\u5206\u6703"), /*#__PURE__*/React.createElement("div", {
+    className: "hint"
+  }, "\u8ACB\u9078\u64C7\u4F60\u662F\u8AB0\uFF0C\u6211\u6703\u628A\u9996\u9801\u8ABF\u6574\u6210\u300C\u8DDF\u4F60\u6709\u95DC\u300D\u7684\u5167\u5BB9\uFF08\u7D05\u7DA0\u71C8\u3001\u5496\u5561\u3001\u672C\u9031\u6F14\u8B1B\u22EF\uFF09\u3002", /*#__PURE__*/React.createElement("br", null), "\u96A8\u6642\u53EF\u4EE5\u5F9E\u53F3\u4E0A\u89D2\u5207\u63DB\u3002"), /*#__PURE__*/React.createElement(MemberSearchSelect, {
+    members: members,
+    value: chosen,
+    onChange: setChosen,
+    placeholder: "\u2014 \u9EDE\u6B64\u641C\u5C0B\u4F60\u7684\u540D\u5B57 \u2014",
+    allowClear: false
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    disabled: !chosen,
+    onClick: () => chosen && onPick(chosen),
+    style: {
+      marginTop: 16,
+      width: '100%',
+      padding: '10px 16px',
+      borderRadius: 10,
+      border: 'none',
+      background: chosen ? 'var(--c-kpi)' : '#E7E0D2',
+      color: chosen ? '#fff' : '#A8A29E',
+      fontSize: 14,
+      fontWeight: 600,
+      cursor: chosen ? 'pointer' : 'not-allowed',
+      transition: 'background 0.15s'
+    }
+  }, "\u958B\u59CB\u4F7F\u7528"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "skip",
+    onClick: onSkip
+  }, "\u5148\u4E0D\u9078\uFF0C\u6211\u53EA\u662F\u4F86\u770B\u770B")));
+}
+
+// ============ 身份識別：頂部小卡（顯示在 Header 右上） ============
+function IdentityChip({
+  member,
+  onClick
+}) {
+  if (!member) {
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "identity-chip unset",
+      onClick: onClick,
+      title: "\u9EDE\u6B64\u9078\u64C7\u4F60\u662F\u8AB0"
+    }, "\uD83D\uDC64 \u9078\u64C7\u8EAB\u4EFD");
+  }
+  const initial = (member.name || '?').slice(0, 1);
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "identity-chip",
+    onClick: onClick,
+    title: "\u9EDE\u6B64\u5207\u63DB\u8EAB\u4EFD"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "avatar"
+  }, initial), /*#__PURE__*/React.createElement("span", null, member.name));
+}
+
 // 取得 ISO 週一的日期
 const getMonday = d => {
   const date = new Date(d);
@@ -613,6 +797,45 @@ function App() {
   const [adminTab, setAdminTab] = useState('schedule');
   const [pinSet, setPinSet] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // 會員身份識別（個人化首頁的依據）
+  const [identityId, setIdentityId] = useState(() => {
+    try {
+      return localStorage.getItem(IDENTITY_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+  const [identityPrompt, setIdentityPrompt] = useState(false); // 顯式打開選身份面板
+  const setIdentity = id => {
+    try {
+      if (id) {
+        localStorage.setItem(IDENTITY_KEY, id);
+        localStorage.removeItem(IDENTITY_SKIP_KEY);
+      } else {
+        localStorage.removeItem(IDENTITY_KEY);
+      }
+    } catch {}
+    setIdentityId(id);
+    setIdentityPrompt(false);
+  };
+  const clearIdentity = () => setIdentity(null);
+  const skipIdentity = () => {
+    try {
+      localStorage.setItem(IDENTITY_SKIP_KEY, '1');
+    } catch {}
+    setIdentityPrompt(false);
+  };
+  const identityMember = useMemo(() => {
+    if (!identityId || !data?.members) return null;
+    return data.members.find(m => m.id === identityId) || null;
+  }, [identityId, data?.members]);
+  const identityCtxValue = useMemo(() => ({
+    memberId: identityId,
+    member: identityMember,
+    setIdentity,
+    clearIdentity
+  }), [identityId, identityMember]);
   const showToast = (msg, type = 'success') => {
     setToast({
       msg,
@@ -678,7 +901,19 @@ function App() {
       className: "text-stone-500"
     }, "\u8F09\u5165\u4E2D\u22EF"));
   }
-  return /*#__PURE__*/React.createElement("div", {
+
+  // 首次進站且分會已有會員 → 跳「請選擇你是誰」歡迎畫面
+  // （已選過、或按過「先不選」、或還沒有會員資料 → 不擋）
+  const shouldShowIdentityWelcome = !identityId && (data.members?.length || 0) > 0 && (() => {
+    try {
+      return !localStorage.getItem(IDENTITY_SKIP_KEY);
+    } catch {
+      return true;
+    }
+  })();
+  return /*#__PURE__*/React.createElement(IdentityContext.Provider, {
+    value: identityCtxValue
+  }, /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen",
     style: {
       background: '#FAF7F2',
@@ -687,12 +922,18 @@ function App() {
   }, /*#__PURE__*/React.createElement("link", {
     href: "https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Playfair+Display:wght@600;700;900&display=swap",
     rel: "stylesheet"
+  }), (shouldShowIdentityWelcome || identityPrompt) && /*#__PURE__*/React.createElement(IdentitySelect, {
+    members: data.members,
+    onPick: setIdentity,
+    onSkip: skipIdentity
   }), /*#__PURE__*/React.createElement(Header, {
     view: view,
     setView: setView,
     adminAuth: adminAuth,
     setAdminAuth: setAdminAuth,
-    chapterName: data.chapterName
+    chapterName: data.chapterName,
+    identityMember: identityMember,
+    onIdentityClick: () => setIdentityPrompt(true)
   }), /*#__PURE__*/React.createElement("main", {
     className: "max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10"
   }, view === 'kpi' && /*#__PURE__*/React.createElement(KpiDashboard, null), view === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
@@ -726,7 +967,7 @@ function App() {
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
     }
-  }, "\u6700\u5F8C\u66F4\u65B0\uFF1A", new Date(data.updatedAt).toLocaleString('zh-TW')));
+  }, "\u6700\u5F8C\u66F4\u65B0\uFF1A", new Date(data.updatedAt).toLocaleString('zh-TW'))));
 }
 
 // ============ Header ============
@@ -735,31 +976,40 @@ function Header({
   setView,
   adminAuth,
   setAdminAuth,
-  chapterName
+  chapterName,
+  identityMember,
+  onIdentityClick
 }) {
   return /*#__PURE__*/React.createElement("header", {
     className: "border-b-2",
     style: {
-      borderColor: '#A01E2E',
+      borderColor: 'var(--c-kpi)',
       background: 'white'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] tracking-[0.3em] text-stone-500 mb-1",
+    className: "max-w-7xl mx-auto px-4 md:px-6 py-5 flex items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] tracking-[0.3em] text-stone-500",
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
     }
-  }, "BNI \xB7 CHAPTER ASSISTANT"), /*#__PURE__*/React.createElement("h1", {
+  }, "BNI \xB7 CHAPTER ASSISTANT"), /*#__PURE__*/React.createElement(IdentityChip, {
+    member: identityMember,
+    onClick: onIdentityClick
+  })), /*#__PURE__*/React.createElement("h1", {
     className: "text-xl md:text-2xl font-bold",
     style: {
-      color: '#1A1414'
+      color: 'var(--c-text)'
     }
   }, chapterName, " ", /*#__PURE__*/React.createElement("span", {
     className: "text-stone-400 mx-1"
   }, "\xB7"), " ", /*#__PURE__*/React.createElement("span", {
     style: {
-      color: '#A01E2E'
+      color: 'var(--c-kpi)'
     }
   }, "\u5206\u6703\u52A9\u7406"))), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-1 md:gap-2 flex-wrap justify-end"
@@ -5058,6 +5308,18 @@ function KpiPushPanel({
     className: "text-xs"
   }, "\u767C\u9001\u4E2D\u22EF")), /*#__PURE__*/React.createElement("button", {
     onClick: () => pushAction('/api/push', {
+      target: 'green-only'
+    }, '推播綠燈會員'),
+    disabled: !!pushing,
+    className: "w-full px-4 py-3 text-sm bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md text-left hover:bg-emerald-100 disabled:opacity-50 flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "font-semibold"
+  }, "\uD83D\uDFE2 \u63A8\u64AD\u7DA0\u71C8\u6703\u54E1\uFF08\u885D\u4E0A\u6EFF\u5206\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-0.5"
+  }, "\u7D66\u7DA0\u71C8\u6703\u54E1\u300C100 \u5206\u653B\u7565\u300D\u8A0A\u606F")), pushing === '推播綠燈會員' && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs"
+  }, "\u767C\u9001\u4E2D\u22EF")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => pushAction('/api/push', {
       target: 'all'
     }, '推播全員'),
     disabled: !!pushing,
@@ -5066,7 +5328,7 @@ function KpiPushPanel({
     className: "font-semibold"
   }, "\uD83D\uDCE2 \u63A8\u64AD\u5168\u54E1\u6210\u7E3E"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs mt-0.5"
-  }, "\u767C\u9001\u7D66\u6240\u6709\u5DF2\u7D81\u5B9A\u6703\u54E1")), pushing === '推播全員' && /*#__PURE__*/React.createElement("span", {
+  }, "\u7DA0\u71C8/\u975E\u7DA0\u71C8\u6703\u81EA\u52D5\u767C\u5C0D\u61C9\u5167\u5BB9")), pushing === '推播全員' && /*#__PURE__*/React.createElement("span", {
     className: "text-xs"
   }, "\u767C\u9001\u4E2D\u22EF")), /*#__PURE__*/React.createElement("button", {
     onClick: () => pushAction('/api/push-washout', {
