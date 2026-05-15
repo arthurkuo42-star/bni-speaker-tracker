@@ -44,6 +44,37 @@
     display: flex; align-items: center; justify-content: center;
     background: #F5F0E8; color: #8B6F47; font-size: 14px;
   }
+  /* === 手機底部 tab bar（與主站 index.html 設計一致）=== */
+  .bottom-tab-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    background: #FFFFFF;
+    border-top: 1px solid #E7E0D2;
+    z-index: 50;
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.04);
+  }
+  .bottom-tab {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 2px;
+    padding: 4px;
+    font-size: 11px;
+    color: #78716C;
+    background: none; border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .bottom-tab.active { color: #A01E2E; font-weight: 600; }
+  .bottom-tab .icon { font-size: 22px; line-height: 1; }
+  @media (min-width: 768px) {
+    .bottom-tab-bar { display: none; }
+  }
+  @media (max-width: 767px) {
+    body { padding-bottom: 68px; }
+  }
 </style>
 </head>
 <body>
@@ -6964,9 +6995,66 @@ function getInitialTab() {
   try {
     const params = new URLSearchParams(window.location.search);
     const t = params.get("tab");
-    if (t === "meetings" || t === "mentorship" || t === "groups") return t;
+    // 主站底部 tab 會帶 ?tab=challenge 過來，這裡白名單要列進去否則都 fallback 到 meetings
+    if (t === "meetings" || t === "mentorship" || t === "groups" || t === "challenge") return t;
   } catch {}
   return "meetings";
+}
+
+// ============ 手機底部 tab bar（與主站 index.html 一致的 5 個入口）============
+// 「組聚」「競賽」是運營台內部 tab；其餘三個外連回主站
+function BottomTabBar({
+  tab,
+  setTab
+}) {
+  const items = [{
+    id: 'home',
+    label: '首頁',
+    emoji: '🏠',
+    href: 'index.html'
+  }, {
+    id: 'kpi',
+    label: '紅綠燈',
+    emoji: '🚦',
+    href: 'index.html?view=kpi'
+  }, {
+    id: 'meetings',
+    label: '組聚',
+    emoji: '📄',
+    internal: true
+  }, {
+    id: 'challenge',
+    label: '競賽',
+    emoji: '🏆',
+    internal: true
+  }, {
+    id: 'coffee',
+    label: '咖啡',
+    emoji: '☕',
+    href: 'index.html?view=coffee'
+  }];
+  return /*#__PURE__*/React.createElement("nav", {
+    className: "bottom-tab-bar md:hidden",
+    "aria-label": "\u4E3B\u8981\u5C0E\u822A"
+  }, items.map(it => {
+    if (it.internal) {
+      const isActive = tab === it.id;
+      return /*#__PURE__*/React.createElement("button", {
+        key: it.id,
+        className: `bottom-tab ${isActive ? 'active' : ''}`,
+        onClick: () => setTab(it.id)
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "icon"
+      }, it.emoji), /*#__PURE__*/React.createElement("span", null, it.label));
+    }
+    return /*#__PURE__*/React.createElement("a", {
+      key: it.id,
+      href: it.href,
+      className: "bottom-tab"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "icon"
+    }, it.emoji), /*#__PURE__*/React.createElement("span", null, it.label));
+  }));
 }
 function App() {
   const [loaded, setLoaded] = useState(false);
@@ -7562,7 +7650,10 @@ function App() {
     className: "text-center text-sm text-stone-500 py-2"
   }, /*#__PURE__*/React.createElement(RefreshCw, {
     className: "w-4 h-4 animate-spin inline-block mr-1"
-  }), "\u532F\u51FA\u4E2D\uFF0C\u8ACB\u7A0D\u5019\u22EF"))));
+  }), "\u532F\u51FA\u4E2D\uFF0C\u8ACB\u7A0D\u5019\u22EF"))), /*#__PURE__*/React.createElement(BottomTabBar, {
+    tab: tab,
+    setTab: setTab
+  }));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 </script>
