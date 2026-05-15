@@ -789,10 +789,10 @@ function App() {
     try {
       const p = new URLSearchParams(window.location.search);
       const v = p.get('view');
-      if (['kpi', 'dashboard', 'coffee', 'chains', 'admin'].includes(v)) return v;
+      if (['home', 'kpi', 'dashboard', 'coffee', 'chains', 'admin'].includes(v)) return v;
     } catch {}
-    return 'dashboard';
-  }); // kpi | dashboard | coffee | chains | admin
+    return 'home';
+  }); // home | kpi | dashboard | coffee | chains | admin
   const [adminAuth, setAdminAuth] = useState(false);
   const [adminTab, setAdminTab] = useState('schedule');
   const [pinSet, setPinSet] = useState(false);
@@ -936,7 +936,11 @@ function App() {
     onIdentityClick: () => setIdentityPrompt(true)
   }), /*#__PURE__*/React.createElement("main", {
     className: "max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10"
-  }, view === 'kpi' && /*#__PURE__*/React.createElement(KpiDashboard, null), view === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
+  }, view === 'home' && /*#__PURE__*/React.createElement(HomeView, {
+    data: data,
+    setView: setView,
+    setAdminTab: setAdminTab
+  }), view === 'kpi' && /*#__PURE__*/React.createElement(KpiDashboard, null), view === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
     data: data,
     onGoProgress: () => {
       setAdminTab('progress');
@@ -1014,6 +1018,20 @@ function Header({
   }, "\u5206\u6703\u52A9\u7406"))), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-1 md:gap-2 flex-wrap justify-end"
   }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setView('home');
+    },
+    className: `px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${view === 'home' ? 'text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`,
+    style: {
+      fontFamily: 'var(--font-sans)',
+      background: view === 'home' ? 'var(--c-kpi)' : undefined
+    },
+    title: "\u9996\u9801\uFF08\u6211\u7684\u5100\u8868\u677F\uFF09"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "w-4 h-4 flex items-center justify-center text-base leading-none"
+  }, "\uD83C\uDFE0"), /*#__PURE__*/React.createElement("span", {
+    className: "hidden md:inline"
+  }, "\u9996\u9801")), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setView('kpi');
     },
@@ -1118,6 +1136,367 @@ function Header({
   }, /*#__PURE__*/React.createElement(LogOut, {
     className: "w-4 h-4"
   })))));
+}
+
+// ============ 個人化首頁（Session 2）============
+// 設計目標：會員一打開網站，第一眼看到「跟我有關的」三張卡 ——
+//   1) 我的紅綠燈    2) 我的咖啡    3) 本週要關注的演講
+// 沒選身份的人，這頁變成「歡迎卡 + 選身份引導」。
+function HomeView({
+  data,
+  setView,
+  setAdminTab
+}) {
+  const {
+    member: me
+  } = React.useContext(IdentityContext);
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 11) return '早安';
+    if (h >= 11 && h < 14) return '午安';
+    if (h >= 14 && h < 18) return '下午好';
+    return '晚安';
+  })();
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--font-sans)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-6 md:mb-8"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] tracking-[0.3em] mb-2",
+    style: {
+      color: 'var(--c-kpi)'
+    }
+  }, "HOME"), /*#__PURE__*/React.createElement("h2", {
+    className: "text-2xl md:text-4xl font-bold",
+    style: {
+      color: 'var(--c-text)',
+      fontFamily: 'var(--font-serif)'
+    }
+  }, greeting, me ? /*#__PURE__*/React.createElement(React.Fragment, null, "\uFF0C", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--c-kpi)'
+    }
+  }, me.name)) : ''), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-stone-500 mt-1"
+  }, me ? '今天有這些事跟你有關' : '請先從右上角選擇你是誰，這頁會變成你的專屬儀表板')), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-1 md:grid-cols-3 gap-4"
+  }, /*#__PURE__*/React.createElement(MyKpiCard, {
+    me: me,
+    onMore: () => setView('kpi')
+  }), /*#__PURE__*/React.createElement(MyCoffeeCard, {
+    data: data,
+    me: me,
+    onMore: () => setView('coffee')
+  }), /*#__PURE__*/React.createElement(ThisWeekCard, {
+    data: data,
+    me: me,
+    onMore: () => setView('dashboard')
+  })));
+}
+
+// 共用卡片殼
+function HomeCard({
+  title,
+  accent,
+  emoji,
+  onMore,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "bg-white rounded-xl border border-stone-200 p-4 md:p-5 flex flex-col",
+    style: {
+      minHeight: 200
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xl"
+  }, emoji), /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-sm md:text-base",
+    style: {
+      color: accent || 'var(--c-text)'
+    }
+  }, title)), onMore && /*#__PURE__*/React.createElement("button", {
+    onClick: onMore,
+    className: "text-xs text-stone-400 hover:text-stone-700 flex items-center gap-0.5",
+    title: "\u67E5\u770B\u5B8C\u6574\u9801\u9762"
+  }, "\u66F4\u591A ", /*#__PURE__*/React.createElement(ChevronRight, {
+    className: "w-3 h-3"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 flex flex-col justify-center"
+  }, children));
+}
+function CardPlaceholder({
+  text
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-400 text-sm py-4"
+  }, text);
+}
+
+// 卡片 1：我的紅綠燈
+function MyKpiCard({
+  me,
+  onMore
+}) {
+  const [loading, setLoading] = useState(true);
+  const [myKpi, setMyKpi] = useState(null); // { totalScore, groupName }
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    if (!me) {
+      setLoading(false);
+      return;
+    }
+    const proxy = typeof window !== 'undefined' && window.BNI_PROXY_URL ? window.BNI_PROXY_URL : '';
+    if (!proxy) {
+      setLoading(false);
+      setErr('需部署後查看');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(proxy + '/api/groups-overview');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        if (cancelled) return;
+        // 在 groups 裡找名字
+        let hit = null;
+        for (const [gName, g] of Object.entries(json.groups || {})) {
+          const m = (g.members || []).find(x => x.name === me.name);
+          if (m) {
+            hit = {
+              ...m,
+              groupName: gName
+            };
+            break;
+          }
+        }
+        setMyKpi(hit);
+      } catch (e) {
+        if (!cancelled) setErr('資料載入失敗');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [me?.name]);
+  return /*#__PURE__*/React.createElement(HomeCard, {
+    title: "\u6211\u7684\u7D05\u7DA0\u71C8",
+    accent: "var(--c-kpi-green)",
+    emoji: "\uD83D\uDEA6",
+    onMore: me ? onMore : null
+  }, !me && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u9078\u64C7\u8EAB\u4EFD\u5F8C\u67E5\u770B\u672C\u4EBA\u5206\u6578"
+  }), me && loading && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u8F09\u5165\u4E2D\u22EF"
+  }), me && !loading && err && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: err
+  }), me && !loading && !err && !myKpi && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u9019\u500B\u6708\u9084\u6C92\u6709\u4F60\u7684\u7D00\u9304"
+  }), me && !loading && !err && myKpi && (() => {
+    const lk = getKpiLightKey(myKpi.totalScore);
+    const c = LIGHT_COLORS[lk];
+    const advice = lk === 'green' ? '保持下去 🎉' : lk === 'yellow' ? '再衝一點，下個月翻綠' : lk === 'red' ? '本月還有時間，加油' : '尚未起跑，先約一場咖啡吧';
+    return /*#__PURE__*/React.createElement("div", {
+      className: "text-center"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "inline-block px-4 py-3 rounded-xl mb-2",
+      style: {
+        background: c.bg
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-4xl font-bold",
+      style: {
+        color: c.color
+      }
+    }, Math.round(myKpi.totalScore)), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs mt-0.5",
+      style: {
+        color: c.color
+      }
+    }, c.emoji, " ", c.label)), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 mt-2"
+    }, myKpi.groupName), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-600 mt-1"
+    }, advice));
+  })());
+}
+
+// 卡片 2：我的咖啡
+function MyCoffeeCard({
+  data,
+  me,
+  onMore
+}) {
+  const coffeeStats = useMemo(() => {
+    if (!me) return null;
+    const all = data.coffeeMeetings || [];
+    const mine = all.filter(cm => cm.inviterId === me.id || Array.isArray(cm.participantIds) && cm.participantIds.includes(me.id));
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonth = mine.filter(cm => cm.date && new Date(cm.date) >= monthStart);
+    const done = mine.filter(cm => cm.status === 'done').length;
+    const upcoming = mine.filter(cm => cm.status === 'scheduled' && cm.date && new Date(cm.date) >= now).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+    return {
+      total: mine.length,
+      thisMonth: thisMonth.length,
+      done,
+      upcoming
+    };
+  }, [data.coffeeMeetings, me?.id]);
+  return /*#__PURE__*/React.createElement(HomeCard, {
+    title: "\u6211\u7684\u5496\u5561",
+    accent: "var(--c-coffee)",
+    emoji: "\u2615",
+    onMore: me ? onMore : null
+  }, !me && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u9078\u64C7\u8EAB\u4EFD\u5F8C\u67E5\u770B\u4F60\u7684\u5496\u5561"
+  }), me && coffeeStats && coffeeStats.total === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u9084\u6C92\u6709\u4F60\u7684\u5496\u5561\u7D00\u9304"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onMore,
+    className: "mt-2 px-3 py-1.5 text-xs rounded-md text-white",
+    style: {
+      background: 'var(--c-coffee)'
+    }
+  }, "\uFF0B \u65B0\u589E\u4E00\u5834")), me && coffeeStats && coffeeStats.total > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-2 mb-3 text-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg py-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-bold",
+    style: {
+      color: 'var(--c-coffee)'
+    }
+  }, coffeeStats.thisMonth), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-500"
+  }, "\u672C\u6708")), /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg py-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-bold",
+    style: {
+      color: 'var(--c-kpi-green)'
+    }
+  }, coffeeStats.done), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-500"
+  }, "\u5DF2\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-lg py-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-bold text-stone-600"
+  }, coffeeStats.total), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-500"
+  }, "\u7E3D\u5834\u6578"))), coffeeStats.upcoming.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] tracking-widest text-stone-400 mb-1"
+  }, "\u5373\u5C07\u9032\u884C"), /*#__PURE__*/React.createElement("ul", {
+    className: "space-y-1 text-xs"
+  }, coffeeStats.upcoming.map(cm => {
+    const partner = (data.members || []).find(m => m.id === (cm.inviterId === me.id ? cm.participantIds && cm.participantIds[0] : cm.inviterId));
+    return /*#__PURE__*/React.createElement("li", {
+      key: cm.id,
+      className: "flex justify-between gap-2 text-stone-600"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "truncate"
+    }, partner?.name || '—'), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400 whitespace-nowrap"
+    }, formatDate(cm.date)));
+  })))));
+}
+
+// 卡片 3：本週要關注
+function ThisWeekCard({
+  data,
+  me,
+  onMore
+}) {
+  const weekly = useMemo(() => {
+    const now = new Date();
+    const monday = getMonday(now);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    const thisWeekMeetings = (data.meetings || []).filter(m => {
+      const d = new Date(m.date);
+      return d >= monday && d <= sunday;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    let myRole = null;
+    let pendingTaskCount = 0;
+    if (me) {
+      thisWeekMeetings.forEach(m => {
+        ['slotA', 'slotB'].forEach(k => {
+          const slot = m[k];
+          if (slot.speakerId === me.id) myRole = 'speaker';else if (slot.helperId === me.id && !myRole) myRole = 'helper';
+          if (slot.speakerId === me.id || slot.helperId === me.id) {
+            (data.taskTemplate || []).forEach(t => {
+              if (!slot.tasks?.[t.id]?.done) pendingTaskCount++;
+            });
+          }
+        });
+      });
+    }
+    return {
+      meetings: thisWeekMeetings,
+      myRole,
+      pendingTaskCount
+    };
+  }, [data.meetings, data.taskTemplate, me?.id]);
+  const memberById = useMemo(() => {
+    const map = {};
+    (data.members || []).forEach(m => {
+      map[m.id] = m;
+    });
+    return map;
+  }, [data.members]);
+  return /*#__PURE__*/React.createElement(HomeCard, {
+    title: "\u672C\u9031\u8981\u95DC\u6CE8",
+    accent: "var(--c-kpi)",
+    emoji: "\uD83D\uDCC5",
+    onMore: onMore
+  }, weekly.meetings.length === 0 && /*#__PURE__*/React.createElement(CardPlaceholder, {
+    text: "\u9019\u9031\u6C92\u6709\u5B89\u6392\u6F14\u8B1B"
+  }), weekly.meetings.length > 0 && /*#__PURE__*/React.createElement("div", null, me && weekly.myRole && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 p-2 rounded-lg text-center font-medium text-sm",
+    style: {
+      background: '#FFF1E0',
+      color: 'var(--c-kpi)'
+    }
+  }, "\u26A1 \u672C\u9031\u8F2A\u5230\u4F60\uFF08", weekly.myRole === 'speaker' ? '主講' : '小幫手', "\uFF09"), weekly.meetings.map(m => /*#__PURE__*/React.createElement("div", {
+    key: m.id,
+    className: "mb-2 last:mb-0 text-xs"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-400 mb-1"
+  }, formatFullDate(m.date), "\uFF08\u9031", weekdayZh(m.date), "\uFF09"), ['slotA', 'slotB'].map(k => {
+    const slot = m[k];
+    if (!slot.speakerId) return null;
+    const speaker = memberById[slot.speakerId];
+    const isMe = me && slot.speakerId === me.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: k,
+      className: "flex justify-between gap-2 py-0.5"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: isMe ? 'font-bold' : 'text-stone-700',
+      style: {
+        color: isMe ? 'var(--c-kpi)' : undefined
+      }
+    }, isMe ? '👉 ' : '', speaker?.name || '—'), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-500 truncate ml-2"
+    }, slot.topic || '（未填講題）'));
+  }))), me && weekly.pendingTaskCount > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 pt-3 border-t border-stone-100 text-xs text-stone-600"
+  }, "\u4F60\u9084\u6709 ", /*#__PURE__*/React.createElement("span", {
+    className: "font-bold",
+    style: {
+      color: 'var(--c-kpi)'
+    }
+  }, weekly.pendingTaskCount), " \u500B\u4EFB\u52D9\u672A\u5B8C\u6210")));
 }
 
 // ============ 前台 Dashboard ============
