@@ -4125,7 +4125,7 @@ function CoffeeMeetingPage({
       willingnesses: [],
       conversions: filter.conversions?.length === 1 && filter.conversions[0] === 'sworn' ? [] : ['sworn']
     })
-  }))), upcomingSpeakers.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }))), editMode && upcomingSpeakers.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "mb-4 p-3 bg-white rounded-lg border border-stone-200"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2 mb-2 flex-wrap"

@@ -3366,8 +3366,8 @@ function CoffeeMeetingPage({ data, saveData, showToast }) {
         </div>
       </details>
 
-      {/* 近期演講人快速建立 */}
-      {upcomingSpeakers.length > 0 && (
+      {/* 近期演講人快速建立 —— 編輯模式才顯示（新增動作）*/}
+      {editMode && upcomingSpeakers.length > 0 && (
         <div className="mb-4 p-3 bg-white rounded-lg border border-stone-200">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <div className="text-xs font-semibold text-stone-700">近期演講人快速建立：</div>
