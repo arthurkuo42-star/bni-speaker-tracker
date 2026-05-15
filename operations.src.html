@@ -1468,7 +1468,8 @@ const daysDiff = (a, b) => Math.floor((new Date(a) - new Date(b)) / 86400000);
 function Modal({ open, onClose, title, children, footer = null, maxWidth = "max-w-2xl" }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
+    // z-[60] 是要蓋過 bottom-tab-bar（z-50）；否則手機編輯時下方儲存按鈕會被擋
+    <div className="fixed inset-0 z-[60] flex items-start justify-center p-0 sm:py-8 sm:px-4 bg-black/50">
       <div
         className={`bg-white w-full ${maxWidth} rounded-none sm:rounded-2xl shadow-2xl animate-in fade-in flex flex-col max-h-screen sm:max-h-[calc(100vh-4rem)]`}
       >

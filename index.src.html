@@ -4250,6 +4250,16 @@ function getKpiLightKey(score) {
   return 'grey';
 }
 
+// 把「第一組」「第二組」...解析成數字以利排序；解析不出來的丟到最後
+const CHINESE_ORDINAL_MAP = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '十一': 11, '十二': 12 };
+function groupOrdinal(name) {
+  if (!name) return 999;
+  const m = String(name).match(/^第(.+?)組/);
+  if (!m) return 999;
+  const v = CHINESE_ORDINAL_MAP[m[1]];
+  return typeof v === 'number' ? v : 999;
+}
+
 // ============ 紅綠燈：具體建議（port 自後端 scoring.js getRecommendations）============
 // 後端 /api/groups-overview 只對 < 70 分的會員回傳 recommendations，
 // 為了讓綠燈會員也看到「衝上滿分」建議，整個邏輯前端再算一次。
@@ -4513,7 +4523,7 @@ function KpiDashboard() {
       {viewMode === 'groups' && !search.trim() && kpiData && kpiData.groups && (
         <div className="space-y-3">
           {Object.entries(kpiData.groups)
-            .sort((a, b) => b[1].avg - a[1].avg)
+            .sort((a, b) => groupOrdinal(a[0]) - groupOrdinal(b[0]))
             .map(([gName, group]) => {
               const expanded = expandedGroups.has(gName);
               const s = group.summary;
