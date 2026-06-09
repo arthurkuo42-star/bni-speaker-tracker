@@ -111,6 +111,7 @@ const Edit2 = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M
 const Save = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>' });
 const Search = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' });
 const Filter = (p) => React.createElement(IconWrap, { ...p, children: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' });
+const Home = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>' });
 const Settings = (p) => React.createElement(IconWrap, { ...p, children: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' });
 const Sparkles = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M12 3l1.9 5.7L20 10l-5 3.6 1.4 6.4L12 17l-4.4 3 1.4-6.4L4 10l6.1-1.3L12 3z"/>' });
 const FileText = (p) => React.createElement(IconWrap, { ...p, children: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' });
@@ -222,8 +223,12 @@ async function obtainWritePin() {
   // 3. 第一個發問者：建 promise、彈 prompt、其他人都會等這個
   _pinAskingPromise = new Promise((resolve, reject) => {
     const pin = prompt('第一次寫入需要輸入「寫入 PIN」（與 Speaker Tracker 共用）：');
-    if (pin) resolve(pin);
-    else reject(new Error('已取消'));
+    if (pin) resolve(pin.trim());  // trim 避免前後空白
+    else {
+      // 明確告知使用者：你取消了，資料沒存到
+      alert('⚠️ 你取消了 PIN 輸入\n\n你剛剛的修改「沒有」儲存到雲端。\n如果想保留變更，請重新編輯後再次儲存並輸入 PIN（888888）。');
+      reject(new Error('已取消'));
+    }
   });
   // 等所有當前 batch 的等待者都拿到結果後，下次 batch 才能再問
   _pinAskingPromise.finally(() => {
@@ -1166,10 +1171,24 @@ async function loadState(key, fallback, onFresh) {
     return r && r.value ? JSON.parse(r.value) : fallback;
   } catch (e) { console.error("[loadState]", key, e); return fallback; }
 }
+// 寫入錯誤通知：5 秒內同個 key 失敗只跳 1 次，避免短時間多個自動 save 連續失敗刷屏
+const _saveErrorThrottle = {};
 async function saveState(key, value) {
   if (!key) return;
-  try { await apiClient.set(key, JSON.stringify(value)); }
-  catch (e) { console.error("[saveState]", key, e); }
+  try {
+    await apiClient.set(key, JSON.stringify(value));
+  } catch (e) {
+    console.error("[saveState]", key, e);
+    // 「已取消」是使用者主動取消 PIN，已經在 obtainWritePin 內部 alert 過 → 不重複
+    if (String(e.message || "").includes("已取消")) return;
+    // 「PIN 錯誤」apiClient.set 也已 alert 過 → 不重複
+    if (String(e.message || "").includes("PIN 錯誤")) return;
+    // 其他錯誤（網路問題、伺服器 5xx）→ 通知使用者
+    const now = Date.now();
+    if (_saveErrorThrottle[key] && now - _saveErrorThrottle[key] < 5000) return;
+    _saveErrorThrottle[key] = now;
+    alert(`⚠️ 儲存到雲端失敗：${e.message}\n\n你剛才的修改可能尚未存到伺服器。\n建議：\n1. 檢查網路連線\n2. 重新整理頁面確認資料\n3. 必要時重新編輯後再儲存`);
+  }
 }
 
 // ============ 範例初始資料（第一次開啟） ============
@@ -1866,7 +1885,9 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
   const updReferral = (id, k, v) => set("referrals", upd(form.referrals, id, k, v));
   const rmReferral = (id) => set("referrals", rm(form.referrals, id));
 
-  const submit = () => {
+  const [saving, setSaving] = useState(false);  // 儲存中：避免重複提交、顯示 loading
+  const submit = async () => {
+    if (saving) return;
     if (!form.groupId) return alert("請選擇小組或全分會");
     if (!form.date) return alert("請輸入日期");
     // 開啟對話：若有主講人有設 memberId，但所有目標客群皆為空白 → 提醒
@@ -1878,7 +1899,15 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
     if (speakersWithMember.length > 0 && anyOpenerEmpty) {
       if (!confirm("有主講人尚未填寫任何「開啟對話」目標客群，確定要儲存嗎？\n（建議每位主講人至少填 1 個，讓夥伴能把主講人帶出分會）")) return;
     }
-    onSave({ ...form, updatedAt: new Date().toISOString() });
+    setSaving(true);
+    try {
+      // onSave 同步先寫進 React state；底下的 saveState useEffect 會跑非同步寫雲端
+      onSave({ ...form, updatedAt: new Date().toISOString() });
+    } finally {
+      // 簡單延遲 800ms 讓 useEffect 觸發的雲端寫入有機會跑到、PIN prompt 有機會跳出
+      // 期間按鈕保持 disabled，防止連點
+      setTimeout(() => setSaving(false), 800);
+    }
   };
 
   // 誰還沒分享（用於下拉選單）
@@ -2469,8 +2498,10 @@ function MeetingForm({ meeting, groups, members, mentees, setMentees, onSave, on
           )}
         </div>
         <div className="flex gap-2">
-          <Btn variant="outline" onClick={onCancel}>取消</Btn>
-          <Btn variant="primary" onClick={submit}><Save className="w-4 h-4" />儲存</Btn>
+          <Btn variant="outline" onClick={onCancel} disabled={saving}>取消</Btn>
+          <Btn variant="primary" onClick={submit} disabled={saving}>
+            <Save className="w-4 h-4" />{saving ? "儲存中⋯" : "儲存"}
+          </Btn>
         </div>
       </div>
     </div>
@@ -5301,7 +5332,8 @@ function App() {
     });
     saveState(STORAGE_KEYS.GROUP_EXTRAS, extras);
   }, [groups, loaded, hydrationDone]);
-  useEffect(() => { if (loaded && hydrationDone) saveState(STORAGE_KEYS.MEETINGS, meetings); }, [meetings, loaded, hydrationDone]);
+  // （已移除 meetings 的「整包自動儲存」：那會讓多裝置互相覆蓋。
+  //   改由 saveMeeting / deleteMeeting 做「讀伺服器最新 → 只改這一筆 → 寫回」的合併寫入。）
   // members 為唯讀，由 Speaker Tracker 主檔管理
   useEffect(() => { if (loaded && hydrationDone) saveState(STORAGE_KEYS.MENTEES, mentees); }, [mentees, loaded, hydrationDone]);
   useEffect(() => {
@@ -5313,14 +5345,43 @@ function App() {
   }, [currentUserId, loaded]);
 
   // 會議 CRUD
-  const saveMeeting = (m) => {
+  // 防多裝置互相覆蓋：寫入前先讀「伺服器最新的整包」，只改動這一筆再寫回，
+  // 這樣其他人/其他分頁新增或編輯的記錄，不會被本機這包蓋掉。
+  const persistMeetingsChange = async (mutator) => {
+    let serverArr = meetings; // 萬一讀不到伺服器，至少用本機目前的當基底（不會比現況更糟）
+    try {
+      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(STORAGE_KEYS.MEETINGS));
+      if (res.ok) {
+        const j = await res.json();
+        serverArr = j && j.value ? JSON.parse(j.value) : [];
+      } else if (res.status === 404) {
+        serverArr = [];
+      }
+    } catch (e) {
+      console.warn('[persistMeetings] 讀伺服器最新失敗，改用本機基底', e);
+      serverArr = meetings;
+    }
+    if (!Array.isArray(serverArr)) serverArr = [];
+    const merged = mutator(serverArr.slice());
+    setMeetings(merged);                              // 本機畫面同步成合併後結果
+    await saveState(STORAGE_KEYS.MEETINGS, merged);   // 寫回（含 PIN 處理 / 失敗提示）
+    return merged;
+  };
+
+  const saveMeeting = async (m) => {
     const updated = { ...m, updatedAt: new Date().toISOString() };
-    setMeetings(meetings.some(x => x.id === updated.id) ? meetings.map(x => x.id === updated.id ? updated : x) : [updated, ...meetings]);
-    // 讓編輯頁面持續開啟，只刷新 editingMeeting 內容以便繼續編輯
-    setEditingMeeting(updated);
+    setEditingMeeting(updated);  // 讓編輯頁面持續開啟、顯示最新內容
+    await persistMeetingsChange(server => {
+      const idx = server.findIndex(x => x.id === updated.id);
+      if (idx >= 0) { server[idx] = updated; return server; }   // 編輯既有
+      return [updated, ...server];                              // 新增
+    });
     showToast("已儲存");
   };
-  const deleteMeeting = (id) => { setMeetings(meetings.filter(m => m.id !== id)); setEditingMeeting(null); };
+  const deleteMeeting = async (id) => {
+    setEditingMeeting(null);
+    await persistMeetingsChange(server => server.filter(m => m.id !== id));
+  };
 
   // 篩選會議
   const filteredMeetings = useMemo(() => {
@@ -5359,8 +5420,13 @@ function App() {
             </select>
           </div>
         </div>
-        {/* Tab 列 ─ 前 4 個連回主站、後 3 個為運營台內部 */}
+        {/* Tab 列 ─ 第一個首頁、前 4 個連回主站、後 3 個為運營台內部 */}
         <div className="max-w-7xl mx-auto px-4 md:px-6 pb-3 flex items-center gap-1 md:gap-2 flex-wrap">
+          <a href="index.html"
+            className="px-2 md:px-4 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200"
+            title="回首頁">
+            <Home className="w-4 h-4" /><span className="hidden md:inline">首頁</span>
+          </a>
           {[
             { href: "index.html?view=kpi", l: "紅綠燈", i: <Target className="w-4 h-4" />, ext: true },
             { href: "index.html?view=dashboard", l: "演講", i: <Eye className="w-4 h-4" />, ext: true },
