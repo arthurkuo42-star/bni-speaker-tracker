@@ -4362,18 +4362,26 @@ function MentorshipDefaultsModal({ open, onClose, members, defaults, onSave }) {
   );
 }
 
-function MentorshipView({ mentees, setMentees, members, currentUserId, onLogout, isAdmin = true, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt, mentorshipDefaults, onSaveDefaults }) {
+function MentorshipView({ mentees, setMentees, persistMenteesChange, members, currentUserId, onLogout, isAdmin = true, mainCoffeeMeetings = [], onRefreshCoffee, coffeeSyncingAt, mentorshipDefaults, onSaveDefaults }) {
   const [detailId, setDetailId] = useState(null);
   const [editingId, setEditingId] = useState(null); // "new" | mentee.id | null
   const [filter, setFilter] = useState({ mode: "all", search: "" });
   const [defaultsOpen, setDefaultsOpen] = useState(false);
 
-  const saveMentee = (m) => {
+  // 防多裝置互相覆蓋：透過 persistMenteesChange 做「讀伺服器最新 → 只改這一筆 → 寫回」
+  const saveMentee = async (m) => {
     const updated = { ...m, updatedAt: new Date().toISOString() };
-    setMentees(mentees.some(x => x.id === m.id) ? mentees.map(x => x.id === m.id ? updated : x) : [updated, ...mentees]);
     setEditingId(null);
+    await persistMenteesChange(server => {
+      const idx = server.findIndex(x => x.id === updated.id);
+      if (idx >= 0) { server[idx] = updated; return server; }   // 編輯既有
+      return [updated, ...server];                              // 新增
+    });
   };
-  const deleteMentee = (id) => { setMentees(mentees.filter(m => m.id !== id)); setEditingId(null); setDetailId(null); };
+  const deleteMentee = async (id) => {
+    setEditingId(null); setDetailId(null);
+    await persistMenteesChange(server => server.filter(m => m.id !== id));
+  };
 
   const filtered = useMemo(() => {
     let list = mentees;
@@ -5335,7 +5343,8 @@ function App() {
   // （已移除 meetings 的「整包自動儲存」：那會讓多裝置互相覆蓋。
   //   改由 saveMeeting / deleteMeeting 做「讀伺服器最新 → 只改這一筆 → 寫回」的合併寫入。）
   // members 為唯讀，由 Speaker Tracker 主檔管理
-  useEffect(() => { if (loaded && hydrationDone) saveState(STORAGE_KEYS.MENTEES, mentees); }, [mentees, loaded, hydrationDone]);
+  // （已移除 mentees 的「整包自動儲存」：那會讓多裝置互相覆蓋。
+  //   改由 MentorshipView 的 saveMentee / deleteMentee 走 persistMenteesChange 合併寫入。）
   useEffect(() => {
     if (!loaded) return;
     try {
@@ -5381,6 +5390,28 @@ function App() {
   const deleteMeeting = async (id) => {
     setEditingMeeting(null);
     await persistMeetingsChange(server => server.filter(m => m.id !== id));
+  };
+
+  // 導生 mentees 同樣防多裝置互相覆蓋：讀伺服器最新整包 → 只改這一筆 → 寫回
+  const persistMenteesChange = async (mutator) => {
+    let serverArr = mentees;
+    try {
+      const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(STORAGE_KEYS.MENTEES));
+      if (res.ok) {
+        const j = await res.json();
+        serverArr = j && j.value ? JSON.parse(j.value) : [];
+      } else if (res.status === 404) {
+        serverArr = [];
+      }
+    } catch (e) {
+      console.warn('[persistMentees] 讀伺服器最新失敗，改用本機基底', e);
+      serverArr = mentees;
+    }
+    if (!Array.isArray(serverArr)) serverArr = [];
+    const merged = mutator(serverArr.slice());
+    setMentees(merged);                              // 本機畫面同步成合併後結果
+    await saveState(STORAGE_KEYS.MENTEES, merged);   // 寫回（含 PIN 處理 / 失敗提示）
+    return merged;
   };
 
   // 篩選會議
@@ -5513,7 +5544,7 @@ function App() {
 
         {tab === "mentorship" && (
           adminVerified
-            ? <MentorshipView mentees={mentees} setMentees={setMentees} members={members} currentUserId={currentUserId} isAdmin={true}
+            ? <MentorshipView mentees={mentees} setMentees={setMentees} persistMenteesChange={persistMenteesChange} members={members} currentUserId={currentUserId} isAdmin={true}
                 mainCoffeeMeetings={mainCoffeeMeetings} onRefreshCoffee={refreshMainCoffee} coffeeSyncingAt={coffeeSyncingAt}
                 mentorshipDefaults={mentorshipDefaults} onSaveDefaults={saveMentorshipDefaults}
                 onLogout={() => { setAdminVerified(false); try { localStorage.removeItem('bni_admin_key'); } catch {} }} />

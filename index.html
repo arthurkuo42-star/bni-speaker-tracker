@@ -34,7 +34,9 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script><!-- 注意：xlsx (~900KB) 改為按需動態載入（匯入/下載範本時才抓）-->
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<!-- 注意：xlsx (~900KB) 改為按需動態載入（匯入/下載範本時才抓）-->
 <style>
   /* ============================================================
    * BNI 富鼎品牌色票（設計 token）
@@ -5339,8 +5341,8 @@ function _calcKpiUpgrades(member, remainWeeks, targetScore) {
           gain: t.score - (member.transactionScore || 0),
           targetScore: t.score,
           needed,
-          action: `再增加 ${needed.toLocaleString()} 交易金額`,
-          shortAction: `+${(needed / 10000).toFixed(0)}萬交易`
+          action: `再增加 $${needed.toLocaleString()} 交易金額`,
+          shortAction: `+$${(needed / 10000).toFixed(0)}萬交易`
         });
       }
     }
