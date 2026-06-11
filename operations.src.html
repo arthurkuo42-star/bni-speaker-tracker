@@ -266,12 +266,14 @@ const apiClient = {
     }
     return await fetchFresh();
   },
-  async set(key, value) {
+  async set(key, value, opts = {}) {
     const payload = typeof value === 'string' ? value : JSON.stringify(value);
+    // deletedIds：告訴伺服器「這些 id 是明確刪除」。伺服器對組聚/導生做防縮水合併，
+    // 沒帶 deletedIds 的「整包少一筆」會被當成舊快取漏資料而還原回去。
     const tryWrite = async (pin) => fetch(PROXY_URL + '/api/data', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Write-PIN': pin || '' },
-      body: JSON.stringify({ key, value: payload })
+      body: JSON.stringify({ key, value: payload, ...(opts.deletedIds ? { deletedIds: opts.deletedIds } : {}) })
     });
     let pin = localStorage.getItem('bni_write_pin') || '';
     let res = await tryWrite(pin);
@@ -1173,10 +1175,10 @@ async function loadState(key, fallback, onFresh) {
 }
 // 寫入錯誤通知：5 秒內同個 key 失敗只跳 1 次，避免短時間多個自動 save 連續失敗刷屏
 const _saveErrorThrottle = {};
-async function saveState(key, value) {
+async function saveState(key, value, opts = {}) {
   if (!key) return;
   try {
-    await apiClient.set(key, JSON.stringify(value));
+    await apiClient.set(key, JSON.stringify(value), opts);
   } catch (e) {
     console.error("[saveState]", key, e);
     // 「已取消」是使用者主動取消 PIN，已經在 obtainWritePin 內部 alert 過 → 不重複
@@ -4380,7 +4382,8 @@ function MentorshipView({ mentees, setMentees, persistMenteesChange, members, cu
   };
   const deleteMentee = async (id) => {
     setEditingId(null); setDetailId(null);
-    await persistMenteesChange(server => server.filter(m => m.id !== id));
+    // deletedIds 讓伺服器知道這是「明確刪除」而非舊快取漏資料
+    await persistMenteesChange(server => server.filter(m => m.id !== id), { deletedIds: [id] });
   };
 
   const filtered = useMemo(() => {
@@ -5356,7 +5359,7 @@ function App() {
   // 會議 CRUD
   // 防多裝置互相覆蓋：寫入前先讀「伺服器最新的整包」，只改動這一筆再寫回，
   // 這樣其他人/其他分頁新增或編輯的記錄，不會被本機這包蓋掉。
-  const persistMeetingsChange = async (mutator) => {
+  const persistMeetingsChange = async (mutator, opts = {}) => {
     let serverArr = meetings; // 萬一讀不到伺服器，至少用本機目前的當基底（不會比現況更糟）
     try {
       const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(STORAGE_KEYS.MEETINGS));
@@ -5372,8 +5375,8 @@ function App() {
     }
     if (!Array.isArray(serverArr)) serverArr = [];
     const merged = mutator(serverArr.slice());
-    setMeetings(merged);                              // 本機畫面同步成合併後結果
-    await saveState(STORAGE_KEYS.MEETINGS, merged);   // 寫回（含 PIN 處理 / 失敗提示）
+    setMeetings(merged);                                    // 本機畫面同步成合併後結果
+    await saveState(STORAGE_KEYS.MEETINGS, merged, opts);   // 寫回（含 PIN 處理 / 失敗提示）
     return merged;
   };
 
@@ -5389,11 +5392,12 @@ function App() {
   };
   const deleteMeeting = async (id) => {
     setEditingMeeting(null);
-    await persistMeetingsChange(server => server.filter(m => m.id !== id));
+    // deletedIds 讓伺服器知道這是「明確刪除」而非舊快取漏資料（否則防縮水合併會把它救回來）
+    await persistMeetingsChange(server => server.filter(m => m.id !== id), { deletedIds: [id] });
   };
 
   // 導生 mentees 同樣防多裝置互相覆蓋：讀伺服器最新整包 → 只改這一筆 → 寫回
-  const persistMenteesChange = async (mutator) => {
+  const persistMenteesChange = async (mutator, opts = {}) => {
     let serverArr = mentees;
     try {
       const res = await fetch(PROXY_URL + '/api/data?key=' + encodeURIComponent(STORAGE_KEYS.MENTEES));
@@ -5409,8 +5413,8 @@ function App() {
     }
     if (!Array.isArray(serverArr)) serverArr = [];
     const merged = mutator(serverArr.slice());
-    setMentees(merged);                              // 本機畫面同步成合併後結果
-    await saveState(STORAGE_KEYS.MENTEES, merged);   // 寫回（含 PIN 處理 / 失敗提示）
+    setMentees(merged);                                    // 本機畫面同步成合併後結果
+    await saveState(STORAGE_KEYS.MENTEES, merged, opts);   // 寫回（含 PIN 處理 / 失敗提示）
     return merged;
   };
 
