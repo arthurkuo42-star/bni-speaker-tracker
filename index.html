@@ -962,6 +962,39 @@ const daysBetween = (d1, d2) => {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 };
 
+// 算某個任務的截止日：演講日往前推 weekBefore 週（weekBefore=0 即演講當天）
+const taskDeadline = (meetingDate, weekBefore) => {
+  const d = new Date(meetingDate);
+  d.setDate(d.getDate() - (weekBefore || 0) * 7);
+  return d;
+};
+// 短日期：6/19（四）
+const formatShortDate = d => {
+  const date = new Date(d);
+  return `${date.getMonth() + 1}/${date.getDate()}（${weekdayZh(date)}）`;
+};
+// 未完成任務相對今天的緊急狀態（已完成回 null）
+const deadlineStatus = (deadline, done) => {
+  if (done) return null;
+  const diff = daysBetween(new Date(), deadline);
+  if (diff < 0) return {
+    label: `逾期 ${-diff} 天`,
+    color: '#A01E2E',
+    urgent: true
+  };
+  if (diff === 0) return {
+    label: '今天到期',
+    color: '#A01E2E',
+    urgent: true
+  };
+  if (diff <= 7) return {
+    label: `剩 ${diff} 天`,
+    color: '#854F0B',
+    urgent: false
+  };
+  return null;
+};
+
 // 預設 6 週的會議日（週四）
 const generateDefaultMeetings = (count = 12) => {
   const today = new Date();
@@ -2292,6 +2325,13 @@ function SlotDisplay({
       }
     }, "\u5C1A\u672A\u5B89\u6392\u6F14\u8B1B\u4EBA"));
   }
+
+  // 準備進度摘要（演講準備軌）+ 下一個里程碑（截止日自動算）
+  const contentTasks = (taskTemplate || []).filter(t => (t.track || 'content') === 'content');
+  const contentDone = contentTasks.filter(t => slot.tasks?.[t.id]?.done).length;
+  const nextTask = contentTasks.filter(t => !slot.tasks?.[t.id]?.done).sort((a, b) => b.weekBefore - a.weekBefore)[0];
+  const nextDl = nextTask ? taskDeadline(meetingDate, nextTask.weekBefore) : null;
+  const nextStatus = nextTask ? deadlineStatus(nextDl, false) : null;
   return /*#__PURE__*/React.createElement("div", {
     className: `p-5 md:p-7 ${isPersonalButNotMine ? 'opacity-40' : ''}`,
     style: myRole ? {
@@ -2378,7 +2418,47 @@ function SlotDisplay({
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
     }
-  }, "\u5C1A\u672A\u78BA\u8A8D\u4E3B\u984C"))), (slot.targetAudience || slot.generalReferral) && /*#__PURE__*/React.createElement("div", {
+  }, "\u5C1A\u672A\u78BA\u8A8D\u4E3B\u984C"))), contentTasks.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 p-3 rounded-md border border-stone-100",
+    style: {
+      fontFamily: "'Noto Sans TC', sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-1.5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 tracking-wider"
+  }, "\u6E96\u5099\u9032\u5EA6"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold",
+    style: {
+      color: contentDone === contentTasks.length ? '#2D5A27' : '#1A1414'
+    }
+  }, contentDone, " / ", contentTasks.length)), /*#__PURE__*/React.createElement("div", {
+    className: "h-1.5 rounded-full bg-stone-100 overflow-hidden mb-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-full rounded-full",
+    style: {
+      width: `${Math.round(contentDone / contentTasks.length * 100)}%`,
+      background: contentDone === contentTasks.length ? '#639922' : '#A01E2E'
+    }
+  })), nextTask ? /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1.5 text-xs"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400"
+  }, "\u4E0B\u4E00\u6B65"), /*#__PURE__*/React.createElement("span", {
+    className: "font-semibold text-stone-700"
+  }, formatShortDate(nextDl)), /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-600 truncate"
+  }, nextTask.name), nextStatus && /*#__PURE__*/React.createElement("span", {
+    className: "font-semibold whitespace-nowrap",
+    style: {
+      color: nextStatus.color
+    }
+  }, "\xB7 ", nextStatus.label)) : /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold",
+    style: {
+      color: '#2D5A27'
+    }
+  }, "\u2713 \u6E96\u5099\u5168\u90E8\u5B8C\u6210")), (slot.targetAudience || slot.generalReferral) && /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 gap-2 mb-2",
     style: {
       fontFamily: "'Noto Sans TC', sans-serif"
@@ -2487,6 +2567,199 @@ function AdminGate({
   }, mode === 'setup' ? '設定並進入' : '登入'))));
 }
 
+// ============ 演講準備總覽（追蹤人視角：一眼看出誰落後）============
+const OV_META = {
+  done: {
+    label: '已完成',
+    color: '#2D5A27',
+    bg: '#EAF3DE',
+    bar: '#639922',
+    dot: '#639922',
+    rank: 3
+  },
+  green: {
+    label: '進度正常',
+    color: '#2D5A27',
+    bg: '#EAF3DE',
+    bar: '#639922',
+    dot: '#639922',
+    rank: 2
+  },
+  amber: {
+    label: '稍微落後',
+    color: '#854F0B',
+    bg: '#FAEEDA',
+    bar: '#EF9F27',
+    dot: '#EF9F27',
+    rank: 1
+  },
+  red: {
+    label: '明顯落後',
+    color: '#A01E2E',
+    bg: '#FBEAEA',
+    bar: '#E24B4A',
+    dot: '#E24B4A',
+    rank: 0
+  }
+};
+function SpeechOverview({
+  data,
+  onGoProgress
+}) {
+  const HORIZON_WEEKS = 8;
+  const today = new Date();
+  const contentTasks = (data.taskTemplate || []).filter(t => (t.track || 'content') === 'content');
+  const mById = {};
+  (data.members || []).forEach(m => {
+    mById[m.id] = m;
+  });
+  const rows = [];
+  (data.meetings || []).filter(m => {
+    const diff = daysBetween(today, new Date(m.date));
+    return diff >= -1 && diff <= HORIZON_WEEKS * 7;
+  }).forEach(m => {
+    ['slotA', 'slotB'].forEach(sk => {
+      const slot = m[sk];
+      if (!slot || !slot.speakerId) return;
+      const speaker = mById[slot.speakerId];
+      if (!speaker) return;
+      const weeksUntil = Math.max(0, Math.ceil(daysBetween(today, new Date(m.date)) / 7));
+      const isDone = t => !!slot.tasks?.[t.id]?.done;
+      const cDone = contentTasks.filter(isDone).length;
+      const total = contentTasks.length;
+      const shouldDone = contentTasks.filter(t => t.weekBefore >= weeksUntil).length;
+      const behind = Math.max(0, shouldDone - cDone);
+      const overdue = contentTasks.filter(t => !isDone(t) && t.weekBefore > weeksUntil);
+      const nextUp = contentTasks.filter(t => !isDone(t)).sort((a, b) => b.weekBefore - a.weekBefore)[0];
+      let status;
+      if (total > 0 && cDone === total) status = 'done';else if (behind >= 2 || overdue.length >= 2) status = 'red';else if (behind === 1 || overdue.length === 1) status = 'amber';else status = 'green';
+      rows.push({
+        key: m.id + sk,
+        meeting: m,
+        speaker,
+        helper: slot.helperId ? mById[slot.helperId] : null,
+        topic: slot.topic,
+        weeksUntil,
+        cDone,
+        total,
+        status,
+        nextUp,
+        nextDl: nextUp ? taskDeadline(m.date, nextUp.weekBefore) : null
+      });
+    });
+  });
+  rows.sort((a, b) => OV_META[a.status].rank - OV_META[b.status].rank || new Date(a.meeting.date) - new Date(b.meeting.date));
+  const needAttention = rows.filter(r => r.status === 'red' || r.status === 'amber').length;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Noto Sans TC', sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-4 flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "text-xl font-bold",
+    style: {
+      color: '#1A1414'
+    }
+  }, "\u6F14\u8B1B\u6E96\u5099\u7E3D\u89BD"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mt-0.5"
+  }, "\u672A\u4F86 ", HORIZON_WEEKS, " \u9031 \xB7 \u5171 ", rows.length, " \u5834 \xB7 ", needAttention > 0 ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#A01E2E'
+    },
+    className: "font-semibold"
+  }, needAttention, " \u4F4D\u9700\u8981\u95DC\u6CE8") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#2D5A27'
+    }
+  }, "\u5168\u90E8\u8DDF\u4E0A\u9032\u5EA6"))), /*#__PURE__*/React.createElement("button", {
+    onClick: onGoProgress,
+    className: "px-3 py-2 text-sm rounded-md text-white hover:opacity-90",
+    style: {
+      background: '#A01E2E'
+    }
+  }, "\u53BB\u66F4\u65B0\u9032\u5EA6 \u2192")), rows.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-400 py-12 border border-dashed border-stone-200 rounded-lg"
+  }, "\u672A\u4F86 ", HORIZON_WEEKS, " \u9031\u5C1A\u672A\u5B89\u6392\u6F14\u8B1B\u4EBA", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs"
+  }, "\u5230\u300C\u9031\u6B21\u5B89\u6392\u300D\u6307\u6D3E\u6F14\u8B1B\u4EBA\u5F8C\uFF0C\u9019\u88E1\u5C31\u6703\u81EA\u52D5\u5217\u51FA")) : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, rows.map(r => {
+    const meta = OV_META[r.status];
+    const pct = r.total > 0 ? Math.round(r.cDone / r.total * 100) : 0;
+    return /*#__PURE__*/React.createElement("div", {
+      key: r.key,
+      className: "rounded-lg border border-stone-200 overflow-hidden",
+      style: {
+        borderLeft: `4px solid ${meta.dot}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "p-3 md:p-4"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center justify-between gap-3 mb-2 flex-wrap"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-baseline gap-2 min-w-0"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "font-bold text-base",
+      style: {
+        color: '#1A1414'
+      }
+    }, r.speaker.name), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs text-stone-500 truncate"
+    }, r.speaker.industry || ''), r.helper && /*#__PURE__*/React.createElement("span", {
+      className: "text-[11px] text-stone-400"
+    }, "\xB7 \u5C0F\u5E6B\u624B ", r.helper.name)), /*#__PURE__*/React.createElement("div", {
+      className: "inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap",
+      style: {
+        background: meta.bg,
+        color: meta.color
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "w-2 h-2 rounded-full",
+      style: {
+        background: meta.dot
+      }
+    }), meta.label)), /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-3 mb-2"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-sm font-semibold whitespace-nowrap",
+      style: {
+        color: '#1A1414'
+      }
+    }, formatShortDate(r.meeting.date)), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs text-stone-400 whitespace-nowrap"
+    }, r.weeksUntil === 0 ? '本週' : `剩 ${r.weeksUntil} 週`), /*#__PURE__*/React.createElement("div", {
+      className: "flex-1 h-2 rounded-full bg-stone-100 overflow-hidden"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "h-full rounded-full",
+      style: {
+        width: `${pct}%`,
+        background: meta.bar
+      }
+    })), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs font-semibold whitespace-nowrap",
+      style: {
+        color: '#1A1414'
+      }
+    }, r.cDone, "/", r.total)), r.topic && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 mb-1 truncate"
+    }, "\u4E3B\u984C\uFF1A", r.topic), r.nextUp ? /*#__PURE__*/React.createElement("div", {
+      className: "text-xs flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400"
+    }, "\u4E0B\u4E00\u6B65"), /*#__PURE__*/React.createElement("span", {
+      className: "font-semibold text-stone-700"
+    }, formatShortDate(r.nextDl)), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-600 truncate"
+    }, r.nextUp.name)) : /*#__PURE__*/React.createElement("div", {
+      className: "text-xs font-semibold",
+      style: {
+        color: '#2D5A27'
+      }
+    }, "\u2713 \u6E96\u5099\u5168\u90E8\u5B8C\u6210")));
+  })));
+}
+
 // ============ 後台主面板 ============
 function AdminPanel({
   data,
@@ -2496,6 +2769,10 @@ function AdminPanel({
   showToast
 }) {
   const tabs = [{
+    id: 'overview',
+    label: '演講總覽',
+    icon: Megaphone
+  }, {
     id: 'schedule',
     label: '週次安排',
     icon: Calendar
@@ -2534,7 +2811,10 @@ function AdminPanel({
     }, /*#__PURE__*/React.createElement(Icon, {
       className: "w-4 h-4"
     }), t.label);
-  })), adminTab === 'schedule' && /*#__PURE__*/React.createElement(ScheduleManager, {
+  })), adminTab === 'overview' && /*#__PURE__*/React.createElement(SpeechOverview, {
+    data: data,
+    onGoProgress: () => setAdminTab('progress')
+  }), adminTab === 'schedule' && /*#__PURE__*/React.createElement(ScheduleManager, {
     data: data,
     saveData: saveData,
     showToast: showToast
@@ -3118,6 +3398,8 @@ function ProgressManager({
         const doneAt = taskData.doneAt;
         const noteKey = `${selected.id}_${slotKey}_${task.id}`;
         const noteExpanded = expandedNotes.has(noteKey);
+        const dl = taskDeadline(selected.date, task.weekBefore);
+        const dlStatus = deadlineStatus(dl, done);
         return /*#__PURE__*/React.createElement("div", {
           key: task.id,
           className: `p-2.5 rounded-md transition-colors ${done ? 'bg-stone-50' : 'hover:bg-stone-50'}`
@@ -3144,8 +3426,20 @@ function ProgressManager({
         }, /*#__PURE__*/React.createElement(MessageSquare, {
           className: "w-4 h-4"
         })), /*#__PURE__*/React.createElement("div", {
-          className: "text-[10px] text-stone-400 whitespace-nowrap"
-        }, "\u7B2C-", task.weekBefore, "\u9031")), (noteExpanded || note) && /*#__PURE__*/React.createElement("textarea", {
+          className: "text-right whitespace-nowrap",
+          style: {
+            minWidth: '64px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          className: `text-xs font-semibold ${done ? 'text-stone-300' : 'text-stone-600'}`
+        }, formatShortDate(dl)), dlStatus ? /*#__PURE__*/React.createElement("div", {
+          className: "text-[10px] font-semibold",
+          style: {
+            color: dlStatus.color
+          }
+        }, dlStatus.label) : /*#__PURE__*/React.createElement("div", {
+          className: "text-[10px] text-stone-300"
+        }, "\u7B2C-", task.weekBefore, "\u9031"))), (noteExpanded || note) && /*#__PURE__*/React.createElement("textarea", {
           value: note,
           onChange: e => updateNote(selected.id, slotKey, task.id, e.target.value),
           placeholder: trackKey === 'coffee' ? '邀約對象：(例：陳會計師 / 李建築師)' : '加入備註（自動儲存，前台會顯示）',
