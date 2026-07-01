@@ -846,12 +846,13 @@ const PRIMARY_NAVS = [
   { id: 'challenge', label: '競賽',   emoji: '🏆', color: '#A01E2E', href: 'operations.html?tab=challenge' },
   { id: 'coffee',    label: '咖啡',   emoji: '☕', color: 'var(--c-coffee)'     },
 ];
-// 次要功能 4 個：收進桌機右上「⋯ 更多」下拉、手機漢堡選單
+// 次要功能：收進桌機右上「⋯ 更多」下拉、手機漢堡選單
 const SECONDARY_NAVS = [
-  { id: 'mentorship', label: '導生',   emoji: '🎓', href: 'operations.html?tab=mentorship' },
-  { id: 'dashboard',  label: '演講',   emoji: '📣', color: '#1A1414',         type: 'view' },
-  { id: 'chains',     label: '服務鏈', emoji: '📋', color: 'var(--c-chain)',  type: 'view' },
-  { id: 'admin',      label: '後台',   emoji: '⚙️', color: 'var(--c-kpi)',    type: 'view' },
+  { id: 'mentorship', label: '導生',       emoji: '🎓', href: 'operations.html?tab=mentorship' },
+  { id: 'dashboard',  label: '演講',       emoji: '📣', color: '#1A1414',         type: 'view' },
+  { id: 'chains',     label: '服務鏈',     emoji: '📋', color: 'var(--c-chain)',  type: 'view' },
+  { id: 'kpi-admin',  label: '紅綠燈管理', emoji: '🚦', color: '#2D5A27',         type: 'view' },
+  { id: 'admin',      label: '後台',       emoji: '⚙️', color: 'var(--c-kpi)',    type: 'view' },
 ];
 
 // ============ 主元件 ============
@@ -863,10 +864,10 @@ function App() {
     try {
       const p = new URLSearchParams(window.location.search);
       const v = p.get('view');
-      if (['home', 'kpi', 'dashboard', 'coffee', 'chains', 'admin'].includes(v)) return v;
+      if (['home', 'kpi', 'dashboard', 'coffee', 'chains', 'admin', 'kpi-admin'].includes(v)) return v;
     } catch {}
     return 'home';
-  }); // home | kpi | dashboard | coffee | chains | admin
+  }); // home | kpi | dashboard | coffee | chains | admin | kpi-admin
   const [adminAuth, setAdminAuth] = useState(false);
   const [adminTab, setAdminTab] = useState('schedule');
   const [pinSet, setPinSet] = useState(false);
@@ -1065,6 +1066,9 @@ function App() {
         )}
         {view === 'chains' && (
           <ServiceChainView />
+        )}
+        {view === 'kpi-admin' && (
+          <KpiAdminPanel showToast={showToast} />
         )}
         {view === 'admin' && !adminAuth && (
           <AdminGate pinSet={pinSet} setPinSet={setPinSet} onPass={() => setAdminAuth(true)} showToast={showToast} />

@@ -1065,7 +1065,7 @@ const PRIMARY_NAVS = [{
   emoji: '☕',
   color: 'var(--c-coffee)'
 }];
-// 次要功能 4 個：收進桌機右上「⋯ 更多」下拉、手機漢堡選單
+// 次要功能：收進桌機右上「⋯ 更多」下拉、手機漢堡選單
 const SECONDARY_NAVS = [{
   id: 'mentorship',
   label: '導生',
@@ -1084,6 +1084,12 @@ const SECONDARY_NAVS = [{
   color: 'var(--c-chain)',
   type: 'view'
 }, {
+  id: 'kpi-admin',
+  label: '紅綠燈管理',
+  emoji: '🚦',
+  color: '#2D5A27',
+  type: 'view'
+}, {
   id: 'admin',
   label: '後台',
   emoji: '⚙️',
@@ -1100,10 +1106,10 @@ function App() {
     try {
       const p = new URLSearchParams(window.location.search);
       const v = p.get('view');
-      if (['home', 'kpi', 'dashboard', 'coffee', 'chains', 'admin'].includes(v)) return v;
+      if (['home', 'kpi', 'dashboard', 'coffee', 'chains', 'admin', 'kpi-admin'].includes(v)) return v;
     } catch {}
     return 'home';
-  }); // home | kpi | dashboard | coffee | chains | admin
+  }); // home | kpi | dashboard | coffee | chains | admin | kpi-admin
   const [adminAuth, setAdminAuth] = useState(false);
   const [adminTab, setAdminTab] = useState('schedule');
   const [pinSet, setPinSet] = useState(false);
@@ -1328,7 +1334,9 @@ function App() {
     data: data,
     saveData: saveData,
     showToast: showToast
-  }), view === 'chains' && /*#__PURE__*/React.createElement(ServiceChainView, null), view === 'admin' && !adminAuth && /*#__PURE__*/React.createElement(AdminGate, {
+  }), view === 'chains' && /*#__PURE__*/React.createElement(ServiceChainView, null), view === 'kpi-admin' && /*#__PURE__*/React.createElement(KpiAdminPanel, {
+    showToast: showToast
+  }), view === 'admin' && !adminAuth && /*#__PURE__*/React.createElement(AdminGate, {
     pinSet: pinSet,
     setPinSet: setPinSet,
     onPass: () => setAdminAuth(true),
