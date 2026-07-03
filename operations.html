@@ -6432,111 +6432,107 @@ function GroupStatsBar({
   }, "\u5957\u7528"))));
 }
 
-// ============ 小組競賽（5–6 月活動）：3 項統計 + 排行榜 + 培訓手動標記 ============
-function computeChallengeStats({
-  groups,
+// ============ 富鼎 BNI GAME（7–9 月）：個人積分 + 小組達標 ============
+// 正規化 config：補全新欄位、把舊版（5–6 月單場培訓）自動升級成新結構
+function normalizeChallengeConfig(c) {
+  c = c || {};
+  const trainings = Array.isArray(c.trainings) && c.trainings.length ? c.trainings : [{
+    id: "t1",
+    label: "7月 期中領導團隊培訓",
+    date: "2026-07-23",
+    req: "組員 50% 實體熱點上線"
+  }, {
+    id: "t2",
+    label: "8月 MSP",
+    date: "2026-08-03",
+    req: "組員 50% 同場培訓"
+  }, {
+    id: "t3",
+    label: "9月 領導團隊培訓",
+    date: "2026-09-15",
+    req: "組員 50% 實體熱點上線"
+  }];
+  // 舊版 trainingDone 值是 boolean（單場）→ 與新三場不相容，捨棄；新版物件則保留
+  const trainingDone = {};
+  for (const [gid, v] of Object.entries(c.trainingDone || {})) {
+    if (v && typeof v === "object") trainingDone[gid] = v;
+  }
+  return {
+    title: c.title || "富鼎 BNI GAME｜勇敢邀約 7–9 月",
+    purpose: c.purpose || "想到，不如做到！",
+    rangeStart: c.rangeStart && c.rangeStart >= "2026-07-01" ? c.rangeStart : "2026-07-01",
+    rangeEnd: c.rangeEnd && c.rangeEnd >= "2026-07-01" ? c.rangeEnd : "2026-09-11",
+    meetingTarget: c.meetingTarget || 5,
+    trainingPassNeed: c.trainingPassNeed || 2,
+    reward: c.reward || 2000,
+    points: c.points || {
+      coffee: 5,
+      guest: 10,
+      join: 30
+    },
+    trainings,
+    trainingDone,
+    personalScores: c.personalScores || {}
+  };
+}
+
+// 個人積分：每人三項計數 × 點數 → 總分，只回傳有分者，由高到低
+function computePersonalScores({
   members,
-  meetings,
-  coffeeMeetings,
-  rangeStart,
-  rangeEnd,
-  trainingDone
+  config
 }) {
-  // 把日期轉成 YYYY-MM-DD（含當日，包含邊界）
+  const pts = config.points || {
+    coffee: 5,
+    guest: 10,
+    join: 30
+  };
+  const ps = config.personalScores || {};
+  return (members || []).map(m => {
+    const s = ps[m.id] || {};
+    const coffee = Math.max(0, parseInt(s.coffee) || 0);
+    const guest = Math.max(0, parseInt(s.guest) || 0);
+    const join = Math.max(0, parseInt(s.join) || 0);
+    const total = coffee * pts.coffee + guest * pts.guest + join * pts.join;
+    return {
+      member: m,
+      coffee,
+      guest,
+      join,
+      total
+    };
+  }).filter(r => r.total > 0).sort((a, b) => b.total - a.total || b.join - a.join || b.guest - a.guest);
+}
+
+// 小組達標：期間內本組組聚 ≥ meetingTarget 次，且三場培訓達 trainingPassNeed 場
+function computeGroupAchievements({
+  groups,
+  meetings,
+  config
+}) {
   const inRange = dateStr => {
     if (!dateStr) return false;
     const d = String(dateStr).slice(0, 10);
-    return d >= rangeStart && d <= rangeEnd;
+    return d >= config.rangeStart && d <= config.rangeEnd;
   };
-  // 取出期間內的「組聚 + 全分會組聚」（含 attendees）
-  const meetingsInRange = (meetings || []).filter(m => inRange(m.date));
-  // 取出期間內、未取消的咖啡會議
-  const coffeeInRange = (coffeeMeetings || []).filter(c => {
-    if (c.meetingStatus === "cancelled") return false;
-    // meetingTime 可能是 ISO 或舊格式；用 createdAt 當 fallback
-    const dateStr = c.meetingTime || c.createdAt || "";
-    return inRange(dateStr);
-  });
-  return groups.map(g => {
-    const memberIds = new Set(g.memberIds || []);
-    const totalMembers = memberIds.size;
-    if (totalMembers === 0) return null;
-
-    // ── 1. 組聚參加：每位成員的場次（本組組聚 + 全分會組聚）──
-    const memberMeetingCount = {};
-    g.memberIds.forEach(mid => {
-      memberMeetingCount[mid] = 0;
-    });
-    meetingsInRange.forEach(m => {
-      const isOwnGroup = m.groupId === g.id;
-      const isChapterMtg = m.groupId === CHAPTER_GROUP_ID;
-      if (!isOwnGroup && !isChapterMtg) return;
-      (m.attendees || []).forEach(aid => {
-        if (memberIds.has(aid)) memberMeetingCount[aid] = (memberMeetingCount[aid] || 0) + 1;
-      });
-    });
-    const meetingMembersAchieved = g.memberIds.filter(mid => memberMeetingCount[mid] >= 5).length;
-    const meetingPassed = meetingMembersAchieved === totalMembers;
-
-    // ── 2a. 主約咖啡：小組總主約 ≥ 小組人數 ──
-    let groupInviteCount = 0;
-    const memberInviteCount = {};
-    g.memberIds.forEach(mid => {
-      memberInviteCount[mid] = 0;
-    });
-    coffeeInRange.forEach(c => {
-      if (c.inviterId && memberIds.has(c.inviterId)) {
-        groupInviteCount++;
-        memberInviteCount[c.inviterId] = (memberInviteCount[c.inviterId] || 0) + 1;
-      }
-    });
-    const invitePassed = groupInviteCount >= totalMembers;
-
-    // ── 2b. 參加咖啡：每位成員 ≥ 5 場（任一身分）──
-    const memberCoffeeCount = {};
-    g.memberIds.forEach(mid => {
-      memberCoffeeCount[mid] = 0;
-    });
-    coffeeInRange.forEach(c => {
-      const involved = new Set();
-      if (c.inviterId) involved.add(c.inviterId);
-      if (c.presenterId) involved.add(c.presenterId);
-      (c.participantIds || []).forEach(p => involved.add(p));
-      involved.forEach(id => {
-        if (memberIds.has(id)) memberCoffeeCount[id] = (memberCoffeeCount[id] || 0) + 1;
-      });
-    });
-    const coffeeMembersAchieved = g.memberIds.filter(mid => memberCoffeeCount[mid] >= 5).length;
-    const coffeePassed = coffeeMembersAchieved === totalMembers;
-
-    // ── 3. 培訓：手動標記 ──
-    const trainingPassed = !!(trainingDone && trainingDone[g.id]);
-
-    // 達成率：4 項中達成幾項（meeting / invite / coffee / training）
-    const achievedCount = (meetingPassed ? 1 : 0) + (invitePassed ? 1 : 0) + (coffeePassed ? 1 : 0) + (trainingPassed ? 1 : 0);
-    const achievementRate = Math.round(achievedCount / 4 * 100);
+  return (groups || []).map(g => {
+    const totalMembers = (g.memberIds || []).length;
+    // 「有紀錄的組聚」＝ 期間內、groupId 為本組的組聚記錄數（全分會例會不計）
+    const meetingCount = (meetings || []).filter(m => m.groupId === g.id && inRange(m.date)).length;
+    const meetingPassed = meetingCount >= config.meetingTarget;
+    const done = config.trainingDone && config.trainingDone[g.id] || {};
+    const trainingDoneCount = (config.trainings || []).filter(t => done[t.id]).length;
+    const trainingPassed = trainingDoneCount >= config.trainingPassNeed;
+    const achieved = meetingPassed && trainingPassed;
     return {
       group: g,
       totalMembers,
-      // 1. 組聚
-      memberMeetingCount,
-      meetingMembersAchieved,
+      meetingCount,
       meetingPassed,
-      // 2a. 主約
-      groupInviteCount,
-      memberInviteCount,
-      invitePassed,
-      // 2b. 參加咖啡
-      memberCoffeeCount,
-      coffeeMembersAchieved,
-      coffeePassed,
-      // 3. 培訓
+      trainingDoneCount,
       trainingPassed,
-      // 排序用
-      achievedCount,
-      achievementRate
+      achieved
     };
-  }).filter(Boolean).sort((a, b) => b.achievedCount - a.achievedCount || b.achievementRate - a.achievementRate);
+  }).sort((a, b) => b.achieved - a.achieved || b.meetingCount - a.meetingCount || b.trainingDoneCount - a.trainingDoneCount);
 }
 
 // SVG 圓環進度（中間放百分比文字）
@@ -6620,6 +6616,99 @@ function challengeColor(pct) {
   if (pct >= 25) return "#D97706"; // dark amber
   return "#A01E2E"; // red
 }
+
+// 積分登錄 Modal（幹部輸入每人三項計數，系統自動算分）
+function ScoreEntryModal({
+  members,
+  config,
+  onSave,
+  onClose
+}) {
+  const pts = config.points || {
+    coffee: 5,
+    guest: 10,
+    join: 30
+  };
+  const [draft, setDraft] = useState(() => ({
+    ...(config.personalScores || {})
+  }));
+  const [q, setQ] = useState("");
+  const setField = (mid, field, val) => {
+    const n = Math.max(0, parseInt(val) || 0);
+    setDraft(d => ({
+      ...d,
+      [mid]: {
+        ...(d[mid] || {}),
+        [field]: n
+      }
+    }));
+  };
+  const rowTotal = mid => {
+    const s = draft[mid] || {};
+    return (parseInt(s.coffee) || 0) * pts.coffee + (parseInt(s.guest) || 0) * pts.guest + (parseInt(s.join) || 0) * pts.join;
+  };
+  const filtered = (members || []).filter(m => !q.trim() || (m.name || "").includes(q) || (m.industry || "").includes(q));
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: true,
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Noto Sans TC',sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "text-lg font-bold text-stone-800 mb-1"
+  }, "\u767B\u9304\u500B\u4EBA\u7A4D\u5206"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mb-3"
+  }, "\u5496\u5561 \xD7", pts.coffee, "\uFF5C\u4F86\u8CD3 \xD7", pts.guest, "\uFF5C\u5165\u6703 \xD7", pts.join, "\uFF08\u586B\u300C\u6B21\u6578\u300D\u5373\u53EF\uFF0C\u7CFB\u7D71\u81EA\u52D5\u7B97\u7E3D\u5206\uFF09"), /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: "\u641C\u5C0B\u59D3\u540D / \u884C\u696D\u2026",
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md mb-2"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-[1fr_52px_52px_52px_52px] gap-1.5 px-2 pb-1 text-[10px] text-stone-400 font-semibold"
+  }, /*#__PURE__*/React.createElement("div", null, "\u6703\u54E1"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u5496\u5561"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u4F86\u8CD3"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u5165\u6703"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u7E3D\u5206")), /*#__PURE__*/React.createElement("div", {
+    className: "max-h-[52vh] overflow-y-auto"
+  }, filtered.map(m => /*#__PURE__*/React.createElement("div", {
+    key: m.id,
+    className: "grid grid-cols-[1fr_52px_52px_52px_52px] gap-1.5 px-2 py-1 items-center border-t border-stone-100"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-stone-700 truncate"
+  }, m.name, /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-stone-400 ml-1"
+  }, m.industry)), ["coffee", "guest", "join"].map(f => /*#__PURE__*/React.createElement("input", {
+    key: f,
+    type: "number",
+    min: "0",
+    value: (draft[m.id] || {})[f] ?? "",
+    onChange: e => setField(m.id, f, e.target.value),
+    className: "w-full px-1 py-1 text-sm text-center border border-stone-200 rounded",
+    placeholder: "0"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-sm font-bold",
+    style: {
+      color: rowTotal(m.id) > 0 ? "#8B1A1A" : "#D6D3D1"
+    }
+  }, rowTotal(m.id))))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-4"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2 text-sm border border-stone-300 rounded-md text-stone-600"
+  }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onSave(draft),
+    className: "flex-1 py-2 text-sm text-white rounded-md font-semibold",
+    style: {
+      background: "#8B1A1A"
+    }
+  }, "\u5132\u5B58\u7A4D\u5206"))));
+}
 function ChapterChallengeView({
   groups,
   members,
@@ -6628,331 +6717,259 @@ function ChapterChallengeView({
   config,
   onConfigChange
 }) {
-  const [expanded, setExpanded] = useState(null); // 點開哪一組看明細
-  const [editingRange, setEditingRange] = useState(false);
-  const [draftStart, setDraftStart] = useState(config.rangeStart);
-  const [draftEnd, setDraftEnd] = useState(config.rangeEnd);
-  const stats = useMemo(() => computeChallengeStats({
-    groups,
+  const cfg = useMemo(() => normalizeChallengeConfig(config), [config]);
+  const [scoreModal, setScoreModal] = useState(false);
+  const [showAllRank, setShowAllRank] = useState(false);
+  const ranking = useMemo(() => computePersonalScores({
     members,
+    config: cfg
+  }), [members, cfg]);
+  const groupStats = useMemo(() => computeGroupAchievements({
+    groups,
     meetings,
-    coffeeMeetings,
-    rangeStart: config.rangeStart,
-    rangeEnd: config.rangeEnd,
-    trainingDone: config.trainingDone || {}
-  }), [groups, members, meetings, coffeeMeetings, config]);
-  const toggleTraining = groupId => {
-    const newDone = {
-      ...(config.trainingDone || {})
-    };
-    newDone[groupId] = !newDone[groupId];
-    onConfigChange({
-      ...config,
-      trainingDone: newDone
-    });
-  };
-  const saveRange = () => {
-    onConfigChange({
-      ...config,
-      rangeStart: draftStart,
-      rangeEnd: draftEnd
-    });
-    setEditingRange(false);
-  };
-
-  // 牌面圖示
+    config: cfg
+  }), [groups, meetings, cfg]);
+  const achievedGroups = groupStats.filter(s => s.achieved).length;
+  const pts = cfg.points;
+  const top6 = ranking.slice(0, 6);
   const medal = i => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
-
-  // 全會總覽
-  const summary = useMemo(() => {
-    if (stats.length === 0) return null;
-    const fullCompleted = stats.filter(s => s.achievementRate === 100).length;
-    const avgRate = Math.round(stats.reduce((sum, s) => sum + s.achievementRate, 0) / stats.length);
-    const top = stats[0];
-    return {
-      fullCompleted,
-      avgRate,
-      top
-    };
-  }, [stats]);
-  const getMember = id => members.find(m => m.id === id);
-
-  // 計算每個指標的進度百分比（更細緻，激勵用）
-  const metricProgress = s => {
-    // 組聚：總場次 / 目標場次（每人最多計 5 場避免單人爆刷）
-    const meetingDone = s.group.memberIds.reduce((sum, mid) => sum + Math.min(s.memberMeetingCount[mid] || 0, 5), 0);
-    const meetingTarget = s.totalMembers * 5;
-    const meetingPct = meetingTarget > 0 ? Math.round(meetingDone / meetingTarget * 100) : 0;
-    // 主約：總主約 / 人數，capped 100%
-    const invitePct = s.totalMembers > 0 ? Math.min(100, Math.round(s.groupInviteCount / s.totalMembers * 100)) : 0;
-    // 參加咖啡：類似組聚（每人最多計 5 場）
-    const coffeeDone = s.group.memberIds.reduce((sum, mid) => sum + Math.min(s.memberCoffeeCount[mid] || 0, 5), 0);
-    const coffeeTarget = s.totalMembers * 5;
-    const coffeePct = coffeeTarget > 0 ? Math.round(coffeeDone / coffeeTarget * 100) : 0;
-    // 培訓：二元
-    const trainPct = s.trainingPassed ? 100 : 0;
-    return {
-      meetingDone,
-      meetingTarget,
-      meetingPct,
-      invitePct,
-      coffeeDone,
-      coffeeTarget,
-      coffeePct,
-      trainPct
-    };
+  const fmtMD = d => {
+    if (!d) return "";
+    const p = String(d).split("-");
+    return p.length >= 3 ? parseInt(p[1]) + "/" + parseInt(p[2]) : d;
   };
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between gap-2 mb-4 flex-wrap"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-stone-800"
-  }, "\uD83C\uDFC6 \u5C0F\u7D44\u7AF6\u8CFD\u8FFD\u8E64"), /*#__PURE__*/React.createElement("div", {
-    className: "text-sm text-stone-600 mt-1"
-  }, "\u671F\u9593\uFF1A", editingRange ? /*#__PURE__*/React.createElement("span", {
-    className: "inline-flex items-center gap-1.5 ml-1"
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    value: draftStart,
-    onChange: e => setDraftStart(e.target.value),
-    className: "border border-stone-300 rounded px-2 py-0.5 text-sm"
-  }), /*#__PURE__*/React.createElement("span", null, "~"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    value: draftEnd,
-    onChange: e => setDraftEnd(e.target.value),
-    className: "border border-stone-300 rounded px-2 py-0.5 text-sm"
-  }), /*#__PURE__*/React.createElement(Btn, {
-    size: "sm",
-    variant: "primary",
-    onClick: saveRange
-  }, "\u5132\u5B58"), /*#__PURE__*/React.createElement(Btn, {
-    size: "sm",
-    variant: "ghost",
-    onClick: () => {
-      setEditingRange(false);
-      setDraftStart(config.rangeStart);
-      setDraftEnd(config.rangeEnd);
-    }
-  }, "\u53D6\u6D88")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", null, config.rangeStart, " ~ ", config.rangeEnd), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setEditingRange(true),
-    className: "ml-2 text-xs text-[#B8860B] hover:underline"
-  }, "[\u4FEE\u6539\u671F\u9593]"))))), summary && /*#__PURE__*/React.createElement("div", {
-    className: "bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-2 border-amber-300 rounded-xl p-4 mb-4 shadow-sm"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between gap-3 flex-wrap"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-bold text-[#8B1A1A] uppercase tracking-wider"
-  }, "Chapter Challenge"), /*#__PURE__*/React.createElement("div", {
-    className: "text-lg font-bold text-stone-800 mt-0.5"
-  }, "\u5168\u5206\u6703\u7AF6\u8CFD\u9032\u5EA6")), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-4 text-sm flex-wrap"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-center"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold",
-    style: {
-      color: challengeColor(summary.avgRate)
-    }
-  }, summary.avgRate, "%"), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-600 mt-0.5"
-  }, "\u5168\u6703\u5E73\u5747\u9054\u6210")), /*#__PURE__*/React.createElement("div", {
-    className: "text-center"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-emerald-700"
-  }, summary.fullCompleted, /*#__PURE__*/React.createElement("span", {
-    className: "text-sm text-stone-500"
-  }, "/", stats.length)), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-600 mt-0.5"
-  }, "100% \u5B8C\u6210\u7D44\u6578")), /*#__PURE__*/React.createElement("div", {
-    className: "text-center"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-base font-bold text-stone-800"
-  }, "\uD83E\uDD47 ", summary.top.group.name), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-stone-600 mt-0.5"
-  }, "\u9818\u5148\u5C0F\u7D44\uFF08", summary.top.achievementRate, "%\uFF09"))))), /*#__PURE__*/React.createElement("div", {
-    className: "bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-900 leading-relaxed"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "font-bold mb-1"
-  }, "\uD83C\uDFAF \u7AF6\u8CFD\u898F\u5247\uFF084 \u9805\u5168\u9054\u6210 = 100%\uFF09"), /*#__PURE__*/React.createElement("ol", {
-    className: "list-decimal pl-5 space-y-0.5"
-  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u7D44\u805A\u53C3\u52A0"), "\uFF1A\u6BCF\u4EBA\u7E3D\u5171 5 \u5834\uFF08\u542B\u672C\u7D44\u7D44\u805A + \u5168\u5206\u6703\u7D44\u805A\uFF09"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u4E3B\u7D04\u5496\u5561"), "\uFF1A\u5C0F\u7D44\u7E3D\u4E3B\u7D04 \u2265 \u4EBA\u6578\uFF08\u4EBA\u5747 1 \u5834\u4EE5\u4E0A\uFF09"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u53C3\u52A0\u5496\u5561"), "\uFF1A\u6BCF\u4EBA\u7E3D\u5171 5 \u5834\u5496\u5561\u6703\u8B70\uFF08\u4EFB\u4E00\u8EAB\u5206\u5230\u5834\uFF09"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u57F9\u8A13"), "\uFF1A\u5B8C\u6210 1 \u5834\u5206\u6703\u6307\u5B9A\u57F9\u8A13\uFF0C\u4E14\u5C0F\u7D44 \u2265 50% \u51FA\u5E2D\uFF08\u9054\u6210\u8ACB\u624B\u52D5\u52FE\u9078\uFF09"))), stats.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    className: "bg-white border border-dashed border-stone-300 rounded-xl py-10 text-center text-stone-400"
-  }, /*#__PURE__*/React.createElement("p", {
-    className: "text-sm"
-  }, "\u5C1A\u7121\u5C0F\u7D44\u8CC7\u6599")) : /*#__PURE__*/React.createElement("div", {
-    className: "space-y-3"
-  }, stats.map((s, i) => {
-    const isExpanded = expanded === s.group.id;
-    const mp = metricProgress(s);
-    const overallColor = challengeColor(s.achievementRate);
-    // 達成 100% 的卡片加金邊
-    const isChamp = s.achievementRate === 100;
-    const cardBorder = isChamp ? "border-2 border-amber-400 shadow-md" : "border border-stone-200";
-    // 排名前三背景特效
-    const rankBg = i === 0 ? "bg-gradient-to-r from-amber-50 to-yellow-50" : i === 1 ? "bg-gradient-to-r from-stone-50 to-slate-50" : i === 2 ? "bg-gradient-to-r from-orange-50/60 to-amber-50/60" : "bg-white";
-    return /*#__PURE__*/React.createElement("div", {
-      key: s.group.id,
-      className: `rounded-xl overflow-hidden ${cardBorder} bg-white transition-shadow hover:shadow-lg`
-    }, /*#__PURE__*/React.createElement("div", {
-      className: `p-4 cursor-pointer ${rankBg}`,
-      onClick: () => setExpanded(isExpanded ? null : s.group.id)
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-4 flex-wrap"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "text-3xl flex-shrink-0"
-    }, medal(i)), /*#__PURE__*/React.createElement("div", {
-      className: "flex-1 min-w-0"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-2 flex-wrap mb-0.5"
-    }, /*#__PURE__*/React.createElement(Tag, {
-      color: s.group.color || "#999"
-    }, s.group.name), /*#__PURE__*/React.createElement("span", {
-      className: "text-xs text-stone-500"
-    }, s.totalMembers, " \u4EBA"), isChamp && /*#__PURE__*/React.createElement("span", {
-      className: "text-[11px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold"
-    }, "\uD83C\uDF89 \u5168\u9054\u6210")), /*#__PURE__*/React.createElement("div", {
-      className: "text-xs text-stone-600"
-    }, s.achievedCount, "/4 \u9805\u5DF2\u9054\u6210", s.achievedCount < 4 && /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-400 ml-1"
-    }, "\xB7 \u8DDD\u5B8C\u7F8E\u9084\u5DEE ", 4 - s.achievedCount, " \u9805"))), /*#__PURE__*/React.createElement(ProgressRing, {
-      percent: s.achievementRate,
-      color: overallColor,
-      size: 72,
-      stroke: 7
-    }), /*#__PURE__*/React.createElement("div", {
-      className: "flex-shrink-0"
-    }, isExpanded ? /*#__PURE__*/React.createElement(ChevronDown, {
-      className: "w-4 h-4 text-stone-400"
-    }) : /*#__PURE__*/React.createElement(ChevronRight, {
-      className: "w-4 h-4 text-stone-400"
-    }))), /*#__PURE__*/React.createElement("div", {
-      className: "mt-3 space-y-2"
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center justify-between text-xs mb-1"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCC5"), /*#__PURE__*/React.createElement("span", {
-      className: "font-semibold text-stone-700"
-    }, "\u7D44\u805A\u53C3\u52A0"), s.meetingPassed && /*#__PURE__*/React.createElement("span", {
-      className: "text-[10px] text-emerald-600 font-bold"
-    }, "\u2713 \u9054\u6A19")), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-600"
-    }, /*#__PURE__*/React.createElement("b", {
-      style: {
-        color: challengeColor(mp.meetingPct)
-      }
-    }, mp.meetingDone), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-400"
-    }, " / ", mp.meetingTarget, " \u5834"), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-500 ml-2"
-    }, "(", s.meetingMembersAchieved, "/", s.totalMembers, " \u4EBA\u9054\u6A19)"))), /*#__PURE__*/React.createElement(ProgressBar, {
-      percent: mp.meetingPct,
-      color: challengeColor(mp.meetingPct)
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center justify-between text-xs mb-1"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement("span", null, "\u2615"), /*#__PURE__*/React.createElement("span", {
-      className: "font-semibold text-stone-700"
-    }, "\u4E3B\u7D04\u5496\u5561"), s.invitePassed && /*#__PURE__*/React.createElement("span", {
-      className: "text-[10px] text-emerald-600 font-bold"
-    }, "\u2713 \u9054\u6A19")), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-600"
-    }, /*#__PURE__*/React.createElement("b", {
-      style: {
-        color: challengeColor(mp.invitePct)
-      }
-    }, s.groupInviteCount), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-400"
-    }, " / ", s.totalMembers, " \u5834"), !s.invitePassed && /*#__PURE__*/React.createElement("span", {
-      className: "text-amber-700 ml-2"
-    }, "\u5DEE ", s.totalMembers - s.groupInviteCount, " \u5834"))), /*#__PURE__*/React.createElement(ProgressBar, {
-      percent: mp.invitePct,
-      color: challengeColor(mp.invitePct)
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center justify-between text-xs mb-1"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDC65"), /*#__PURE__*/React.createElement("span", {
-      className: "font-semibold text-stone-700"
-    }, "\u53C3\u52A0\u5496\u5561"), s.coffeePassed && /*#__PURE__*/React.createElement("span", {
-      className: "text-[10px] text-emerald-600 font-bold"
-    }, "\u2713 \u9054\u6A19")), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-600"
-    }, /*#__PURE__*/React.createElement("b", {
-      style: {
-        color: challengeColor(mp.coffeePct)
-      }
-    }, mp.coffeeDone), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-400"
-    }, " / ", mp.coffeeTarget, " \u5834"), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-500 ml-2"
-    }, "(", s.coffeeMembersAchieved, "/", s.totalMembers, " \u4EBA\u9054\u6A19)"))), /*#__PURE__*/React.createElement(ProgressBar, {
-      percent: mp.coffeePct,
-      color: challengeColor(mp.coffeePct)
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center justify-between text-xs mb-1"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement("span", null, "\uD83C\uDF93"), /*#__PURE__*/React.createElement("span", {
-      className: "font-semibold text-stone-700"
-    }, "\u57F9\u8A13"), s.trainingPassed && /*#__PURE__*/React.createElement("span", {
-      className: "text-[10px] text-emerald-600 font-bold"
-    }, "\u2713 \u9054\u6A19")), /*#__PURE__*/React.createElement("span", {
-      className: "text-stone-600"
-    }, s.trainingPassed ? /*#__PURE__*/React.createElement("b", {
-      className: "text-emerald-700"
-    }, "\u5DF2\u5B8C\u6210 1 \u5834") : /*#__PURE__*/React.createElement("span", {
-      className: "text-amber-700"
-    }, "\u5F85\u5C0F\u7D44\u7D44\u9577\u624B\u52D5\u52FE\u9078"))), /*#__PURE__*/React.createElement(ProgressBar, {
-      percent: mp.trainPct,
-      color: challengeColor(mp.trainPct)
-    })))), isExpanded && /*#__PURE__*/React.createElement("div", {
-      className: "border-t border-stone-200 p-3 bg-stone-50 space-y-3"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "bg-white rounded-lg p-2.5 flex items-center gap-2 flex-wrap"
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "text-sm font-semibold text-stone-700"
-    }, "\uD83C\uDF93 \u57F9\u8A13\u9054\u6210\u72C0\u614B\uFF1A"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => toggleTraining(s.group.id),
-      className: `px-3 py-1 rounded text-xs font-semibold ${s.trainingPassed ? "bg-emerald-500 text-white" : "bg-stone-200 text-stone-600 hover:bg-stone-300"}`
-    }, s.trainingPassed ? "✅ 已完成 1 場（小組 ≥ 50%）" : "🟡 未達成（點擊切換為已達成）"), /*#__PURE__*/React.createElement("span", {
-      className: "text-[11px] text-stone-400 ml-auto"
-    }, "\u7531\u5C0F\u7D44\u7D44\u9577/\u79D8\u8CA1 \u624B\u52D5\u52FE\u9078")), /*#__PURE__*/React.createElement("div", {
-      className: "bg-white rounded-lg overflow-hidden"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "bg-stone-100 px-3 py-2 grid grid-cols-[1fr_60px_60px_70px] gap-2 text-xs font-semibold text-stone-600"
-    }, /*#__PURE__*/React.createElement("div", null, "\u6210\u54E1"), /*#__PURE__*/React.createElement("div", {
-      className: "text-center"
-    }, "\u7D44\u805A", /*#__PURE__*/React.createElement("br", null), "(\u22655)"), /*#__PURE__*/React.createElement("div", {
-      className: "text-center"
-    }, "\u4E3B\u7D04", /*#__PURE__*/React.createElement("br", null), "(\u22651)"), /*#__PURE__*/React.createElement("div", {
-      className: "text-center"
-    }, "\u53C3\u52A0\u5496\u5561", /*#__PURE__*/React.createElement("br", null), "(\u22655)")), s.group.memberIds.map(mid => {
-      const m = getMember(mid);
-      const meetingC = s.memberMeetingCount[mid] || 0;
-      const inviteC = s.memberInviteCount[mid] || 0;
-      const coffeeC = s.memberCoffeeCount[mid] || 0;
-      const cell = (val, target) => {
-        const passed = val >= target;
-        return /*#__PURE__*/React.createElement("div", {
-          className: `text-center text-xs font-semibold ${passed ? "text-emerald-700" : "text-amber-700"}`
-        }, val, passed && " ✓", !passed && val < target && /*#__PURE__*/React.createElement("div", {
-          className: "text-[9px] text-stone-400 font-normal"
-        }, "\u5DEE ", target - val));
+  const toggleTraining = (gid, tid) => {
+    const done = {
+      ...(cfg.trainingDone || {})
+    };
+    done[gid] = {
+      ...(done[gid] || {}),
+      [tid]: !(done[gid] || {})[tid]
+    };
+    onConfigChange({
+      ...cfg,
+      trainingDone: done
+    });
+  };
+  const saveScores = scores => {
+    const clean = {};
+    for (const [mid, s] of Object.entries(scores)) {
+      const c = parseInt(s.coffee) || 0,
+        gu = parseInt(s.guest) || 0,
+        j = parseInt(s.join) || 0;
+      if (c || gu || j) clean[mid] = {
+        coffee: c,
+        guest: gu,
+        join: j
       };
-      const allPassed = meetingC >= 5 && inviteC >= 1 && coffeeC >= 5;
-      return /*#__PURE__*/React.createElement("div", {
-        key: mid,
-        className: `px-3 py-2 grid grid-cols-[1fr_60px_60px_70px] gap-2 border-t border-stone-100 ${allPassed ? "bg-emerald-50/40" : ""}`
-      }, /*#__PURE__*/React.createElement("div", {
-        className: "text-stone-700 text-xs flex items-center"
-      }, allPassed && /*#__PURE__*/React.createElement("span", {
-        className: "text-emerald-600 mr-1"
-      }, "\u2B50"), m?.name || "?", m?.industry && /*#__PURE__*/React.createElement("span", {
-        className: "text-stone-400 text-[10px] ml-1"
-      }, m.industry)), cell(meetingC, 5), cell(inviteC, 1), cell(coffeeC, 5));
-    }))));
-  })));
+    }
+    onConfigChange({
+      ...cfg,
+      personalScores: clean
+    });
+    setScoreModal(false);
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Noto Sans TC',sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "rounded-xl p-5 mb-5 text-center text-white",
+    style: {
+      background: "linear-gradient(135deg,#6B1414,#8B1A1A 50%,#A82828)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-bold"
+  }, "\uD83C\uDFAE \u5BCC\u9F0E BNI GAME"), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm mt-1",
+    style: {
+      color: "#F0D0A0"
+    }
+  }, "\u52C7\u6562\u9080\u7D04 \xB7 7\u20139 \u6708"), /*#__PURE__*/React.createElement("div", {
+    className: "inline-block mt-2 px-4 py-1 rounded-full text-sm font-semibold",
+    style: {
+      background: "rgba(255,255,255,0.15)",
+      color: "#FFE8C0"
+    }
+  }, "\uD83C\uDFAF ", cfg.purpose), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-2",
+    style: {
+      color: "#E0B080"
+    }
+  }, "\u6BD4\u8CFD\u671F\u9593 ", fmtMD(cfg.rangeStart), " \u2013 ", fmtMD(cfg.rangeEnd))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2 flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "text-lg font-bold text-stone-800"
+  }, "\uD83C\uDFAF \u500B\u4EBA\u7A4D\u5206\u699C"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setScoreModal(true),
+    className: "px-3 py-1.5 text-sm text-white rounded-md font-semibold",
+    style: {
+      background: "#8B1A1A"
+    }
+  }, "\u270F\uFE0F \u767B\u9304\u7A4D\u5206")), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600 mb-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 leading-relaxed"
+  }, "\u5496\u5561\u6703\u8B70 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, "+", pts.coffee), "\uFF5C\u5E36\u4F86\u8CD3\u53C3\u8A2A ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, "+", pts.guest), "\uFF5C\u4F86\u8CD3\u5165\u6703 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, "+", pts.join), "\u3000\xB7\u3000\uD83C\uDFDD\uFE0F \u6392\u540D\u524D\u516D\u540D\u300C\u5CF6\u5DBC\u300D\u6176\u529F"), ranking.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-400 py-8 border border-dashed border-stone-200 rounded-lg mb-6 text-sm"
+  }, "\u5C1A\u672A\u767B\u9304\u7A4D\u5206\u3000\xB7\u3000\u9EDE\u53F3\u4E0A\u300C\u270F\uFE0F \u767B\u9304\u7A4D\u5206\u300D\u958B\u59CB") : /*#__PURE__*/React.createElement("div", {
+    className: "mb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-3 gap-2 mb-3"
+  }, top6.map((r, i) => /*#__PURE__*/React.createElement("div", {
+    key: r.member.id,
+    className: "rounded-lg p-3 border-2",
+    style: {
+      borderColor: i < 3 ? "#D4A017" : "#E8D8B0",
+      background: i < 3 ? "linear-gradient(135deg,#FFF8E8,#FFF3D6)" : "#FFFDF7"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-lg flex-shrink-0"
+  }, medal(i)), /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0 flex-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-bold text-stone-800 truncate"
+  }, r.member.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 truncate"
+  }, r.member.industry)), /*#__PURE__*/React.createElement("div", {
+    className: "text-right flex-shrink-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xl font-bold",
+    style: {
+      color: "#8B1A1A"
+    }
+  }, r.total), /*#__PURE__*/React.createElement("div", {
+    className: "text-[9px] text-stone-400"
+  }, "\u9EDE")))))), ranking.length > 6 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowAllRank(v => !v),
+    className: "text-xs text-stone-500 underline mb-2"
+  }, showAllRank ? "收合完整排名" : `展開完整排名（共 ${ranking.length} 人）`), showAllRank && /*#__PURE__*/React.createElement("div", {
+    className: "border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-[40px_1fr_44px_44px_44px_56px] gap-1 px-3 py-1.5 bg-stone-50 text-[10px] font-semibold text-stone-400"
+  }, /*#__PURE__*/React.createElement("div", null, "\u540D\u6B21"), /*#__PURE__*/React.createElement("div", null, "\u6703\u54E1"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u5496\u5561"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u4F86\u8CD3"), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, "\u5165\u6703"), /*#__PURE__*/React.createElement("div", {
+    className: "text-right"
+  }, "\u7E3D\u5206")), ranking.map((r, i) => /*#__PURE__*/React.createElement("div", {
+    key: r.member.id,
+    className: "grid grid-cols-[40px_1fr_44px_44px_44px_56px] gap-1 px-3 py-1.5 border-t border-stone-100 text-sm items-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-500"
+  }, medal(i)), /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-700 truncate"
+  }, r.member.name, /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-stone-400 ml-1"
+  }, r.member.industry)), /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-500 text-xs"
+  }, r.coffee), /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-500 text-xs"
+  }, r.guest), /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-500 text-xs"
+  }, r.join), /*#__PURE__*/React.createElement("div", {
+    className: "text-right font-bold",
+    style: {
+      color: "#8B1A1A"
+    }
+  }, r.total))))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2 flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "text-lg font-bold text-stone-800"
+  }, "\uD83D\uDC65 \u5C0F\u7D44\u5718\u9AD4\u734E\u52F5"), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500"
+  }, achievedGroups, "/", groupStats.length, " \u7D44\u9054\u6A19")), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600 mb-3 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 leading-relaxed"
+  }, "\u5B8C\u6210 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, cfg.meetingTarget, " \u6B21"), "\u6709\u7D00\u9304\u7684\u7D44\u805A\u3000\uFF0B\u3000", cfg.trainings.length, " \u5834\u91CD\u9EDE\u57F9\u8A13\u9054 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, cfg.trainingPassNeed, " \u5834"), "\u3000\u2192\u3000\uD83C\uDF89 \u6BCF\u7D44 ", /*#__PURE__*/React.createElement("b", {
+    className: "text-stone-800"
+  }, cfg.reward.toLocaleString(), " \u5143"), "\u805A\u9910\u57FA\u91D1"), groupStats.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "text-center text-stone-400 py-8 border border-dashed border-stone-200 rounded-lg text-sm"
+  }, "\u5C1A\u7121\u5C0F\u7D44\u8CC7\u6599") : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, groupStats.map(s => /*#__PURE__*/React.createElement("div", {
+    key: s.group.id,
+    className: "rounded-lg border overflow-hidden bg-white",
+    style: {
+      borderColor: s.achieved ? "#1A6B1A" : "#E7E5E4",
+      borderLeftWidth: "4px",
+      borderLeftColor: s.achieved ? "#22A022" : "#D6D3D1"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2 flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-bold text-stone-800"
+  }, s.group.name, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-400 ml-1"
+  }, s.totalMembers, "\u4EBA")), s.achieved ? /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-bold px-2 py-1 rounded-full text-white",
+    style: {
+      background: "#1A6B1A"
+    }
+  }, "\uD83C\uDF89 \u9054\u6A19 \xB7 ", cfg.reward.toLocaleString(), "\u5143") : /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold px-2 py-1 rounded-full bg-stone-100 text-stone-500"
+  }, "\u672A\u9054\u6A19")), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500 w-12 flex-shrink-0"
+  }, "\u7D44\u805A"), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1"
+  }, /*#__PURE__*/React.createElement(ProgressBar, {
+    percent: Math.min(100, Math.round(s.meetingCount / cfg.meetingTarget * 100)),
+    color: s.meetingPassed ? "#1A6B1A" : "#C08A00"
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold w-16 text-right flex-shrink-0",
+    style: {
+      color: s.meetingPassed ? "#1A6B1A" : "#78716C"
+    }
+  }, s.meetingCount, "/", cfg.meetingTarget, " \u6B21", s.meetingPassed ? " ✓" : "")), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 flex-wrap"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500 w-12 flex-shrink-0"
+  }, "\u57F9\u8A13"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap flex-1"
+  }, cfg.trainings.map(t => {
+    const on = !!(cfg.trainingDone[s.group.id] || {})[t.id];
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => toggleTraining(s.group.id, t.id),
+      title: t.label + "｜" + t.req,
+      className: "px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors",
+      style: on ? {
+        background: "#1A6B1A",
+        color: "#fff",
+        borderColor: "#1A6B1A"
+      } : {
+        background: "#fff",
+        color: "#A8A29E",
+        borderColor: "#E7E5E4"
+      }
+    }, on ? "✓ " : "", fmtMD(t.date));
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold w-16 text-right flex-shrink-0",
+    style: {
+      color: s.trainingPassed ? "#1A6B1A" : "#78716C"
+    }
+  }, s.trainingDoneCount, "/", cfg.trainingPassNeed, " \u5834", s.trainingPassed ? " ✓" : "")))))), scoreModal && /*#__PURE__*/React.createElement(ScoreEntryModal, {
+    members: members,
+    config: cfg,
+    onSave: saveScores,
+    onClose: () => setScoreModal(false)
+  }));
 }
 
 // ============ 導生管理員驗證 ============
@@ -7127,9 +7144,37 @@ function App() {
   }); // 組聚表板時間範圍
   // 小組競賽：期間 + 各組培訓達成手動標記（trainingDone[groupId] = true/false）
   const [challengeConfig, setChallengeConfig] = useState({
-    rangeStart: "2026-05-01",
-    rangeEnd: "2026-06-30",
-    trainingDone: {}
+    title: "富鼎 BNI GAME｜勇敢邀約 7–9 月",
+    purpose: "想到，不如做到！",
+    rangeStart: "2026-07-01",
+    rangeEnd: "2026-09-11",
+    meetingTarget: 5,
+    trainingPassNeed: 2,
+    reward: 2000,
+    points: {
+      coffee: 5,
+      guest: 10,
+      join: 30
+    },
+    trainings: [{
+      id: "t1",
+      label: "7月 期中領導團隊培訓",
+      date: "2026-07-23",
+      req: "組員 50% 實體熱點上線"
+    }, {
+      id: "t2",
+      label: "8月 MSP",
+      date: "2026-08-03",
+      req: "組員 50% 同場培訓"
+    }, {
+      id: "t3",
+      label: "9月 領導團隊培訓",
+      date: "2026-09-15",
+      req: "組員 50% 實體熱點上線"
+    }],
+    trainingDone: {},
+    // { groupId: { t1:bool, t2:bool, t3:bool } }
+    personalScores: {} // { memberId: { coffee:n, guest:n, join:n } }
   });
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [viewingMeetingId, setViewingMeetingId] = useState(null); // 即時檢視中的會議 id

@@ -4633,99 +4633,68 @@ function GroupStatsBar({ meetings, groups, config, onConfigChange }) {
 }
 
 
-// ============ 小組競賽（5–6 月活動）：3 項統計 + 排行榜 + 培訓手動標記 ============
-function computeChallengeStats({ groups, members, meetings, coffeeMeetings, rangeStart, rangeEnd, trainingDone }) {
-  // 把日期轉成 YYYY-MM-DD（含當日，包含邊界）
+// ============ 富鼎 BNI GAME（7–9 月）：個人積分 + 小組達標 ============
+// 正規化 config：補全新欄位、把舊版（5–6 月單場培訓）自動升級成新結構
+function normalizeChallengeConfig(c) {
+  c = c || {};
+  const trainings = (Array.isArray(c.trainings) && c.trainings.length) ? c.trainings : [
+    { id: "t1", label: "7月 期中領導團隊培訓", date: "2026-07-23", req: "組員 50% 實體熱點上線" },
+    { id: "t2", label: "8月 MSP", date: "2026-08-03", req: "組員 50% 同場培訓" },
+    { id: "t3", label: "9月 領導團隊培訓", date: "2026-09-15", req: "組員 50% 實體熱點上線" },
+  ];
+  // 舊版 trainingDone 值是 boolean（單場）→ 與新三場不相容，捨棄；新版物件則保留
+  const trainingDone = {};
+  for (const [gid, v] of Object.entries(c.trainingDone || {})) {
+    if (v && typeof v === "object") trainingDone[gid] = v;
+  }
+  return {
+    title: c.title || "富鼎 BNI GAME｜勇敢邀約 7–9 月",
+    purpose: c.purpose || "想到，不如做到！",
+    rangeStart: (c.rangeStart && c.rangeStart >= "2026-07-01") ? c.rangeStart : "2026-07-01",
+    rangeEnd: (c.rangeEnd && c.rangeEnd >= "2026-07-01") ? c.rangeEnd : "2026-09-11",
+    meetingTarget: c.meetingTarget || 5,
+    trainingPassNeed: c.trainingPassNeed || 2,
+    reward: c.reward || 2000,
+    points: c.points || { coffee: 5, guest: 10, join: 30 },
+    trainings,
+    trainingDone,
+    personalScores: c.personalScores || {},
+  };
+}
+
+// 個人積分：每人三項計數 × 點數 → 總分，只回傳有分者，由高到低
+function computePersonalScores({ members, config }) {
+  const pts = config.points || { coffee: 5, guest: 10, join: 30 };
+  const ps = config.personalScores || {};
+  return (members || []).map(m => {
+    const s = ps[m.id] || {};
+    const coffee = Math.max(0, parseInt(s.coffee) || 0);
+    const guest  = Math.max(0, parseInt(s.guest)  || 0);
+    const join   = Math.max(0, parseInt(s.join)   || 0);
+    const total = coffee * pts.coffee + guest * pts.guest + join * pts.join;
+    return { member: m, coffee, guest, join, total };
+  }).filter(r => r.total > 0)
+    .sort((a, b) => b.total - a.total || b.join - a.join || b.guest - a.guest);
+}
+
+// 小組達標：期間內本組組聚 ≥ meetingTarget 次，且三場培訓達 trainingPassNeed 場
+function computeGroupAchievements({ groups, meetings, config }) {
   const inRange = (dateStr) => {
     if (!dateStr) return false;
     const d = String(dateStr).slice(0, 10);
-    return d >= rangeStart && d <= rangeEnd;
+    return d >= config.rangeStart && d <= config.rangeEnd;
   };
-  // 取出期間內的「組聚 + 全分會組聚」（含 attendees）
-  const meetingsInRange = (meetings || []).filter(m => inRange(m.date));
-  // 取出期間內、未取消的咖啡會議
-  const coffeeInRange = (coffeeMeetings || []).filter(c => {
-    if (c.meetingStatus === "cancelled") return false;
-    // meetingTime 可能是 ISO 或舊格式；用 createdAt 當 fallback
-    const dateStr = c.meetingTime || c.createdAt || "";
-    return inRange(dateStr);
-  });
-
-  return groups.map(g => {
-    const memberIds = new Set(g.memberIds || []);
-    const totalMembers = memberIds.size;
-    if (totalMembers === 0) return null;
-
-    // ── 1. 組聚參加：每位成員的場次（本組組聚 + 全分會組聚）──
-    const memberMeetingCount = {};
-    g.memberIds.forEach(mid => { memberMeetingCount[mid] = 0; });
-    meetingsInRange.forEach(m => {
-      const isOwnGroup = m.groupId === g.id;
-      const isChapterMtg = m.groupId === CHAPTER_GROUP_ID;
-      if (!isOwnGroup && !isChapterMtg) return;
-      (m.attendees || []).forEach(aid => {
-        if (memberIds.has(aid)) memberMeetingCount[aid] = (memberMeetingCount[aid] || 0) + 1;
-      });
-    });
-    const meetingMembersAchieved = g.memberIds.filter(mid => memberMeetingCount[mid] >= 5).length;
-    const meetingPassed = meetingMembersAchieved === totalMembers;
-
-    // ── 2a. 主約咖啡：小組總主約 ≥ 小組人數 ──
-    let groupInviteCount = 0;
-    const memberInviteCount = {};
-    g.memberIds.forEach(mid => { memberInviteCount[mid] = 0; });
-    coffeeInRange.forEach(c => {
-      if (c.inviterId && memberIds.has(c.inviterId)) {
-        groupInviteCount++;
-        memberInviteCount[c.inviterId] = (memberInviteCount[c.inviterId] || 0) + 1;
-      }
-    });
-    const invitePassed = groupInviteCount >= totalMembers;
-
-    // ── 2b. 參加咖啡：每位成員 ≥ 5 場（任一身分）──
-    const memberCoffeeCount = {};
-    g.memberIds.forEach(mid => { memberCoffeeCount[mid] = 0; });
-    coffeeInRange.forEach(c => {
-      const involved = new Set();
-      if (c.inviterId) involved.add(c.inviterId);
-      if (c.presenterId) involved.add(c.presenterId);
-      (c.participantIds || []).forEach(p => involved.add(p));
-      involved.forEach(id => {
-        if (memberIds.has(id)) memberCoffeeCount[id] = (memberCoffeeCount[id] || 0) + 1;
-      });
-    });
-    const coffeeMembersAchieved = g.memberIds.filter(mid => memberCoffeeCount[mid] >= 5).length;
-    const coffeePassed = coffeeMembersAchieved === totalMembers;
-
-    // ── 3. 培訓：手動標記 ──
-    const trainingPassed = !!(trainingDone && trainingDone[g.id]);
-
-    // 達成率：4 項中達成幾項（meeting / invite / coffee / training）
-    const achievedCount = (meetingPassed ? 1 : 0) + (invitePassed ? 1 : 0) + (coffeePassed ? 1 : 0) + (trainingPassed ? 1 : 0);
-    const achievementRate = Math.round((achievedCount / 4) * 100);
-
-    return {
-      group: g,
-      totalMembers,
-      // 1. 組聚
-      memberMeetingCount,
-      meetingMembersAchieved,
-      meetingPassed,
-      // 2a. 主約
-      groupInviteCount,
-      memberInviteCount,
-      invitePassed,
-      // 2b. 參加咖啡
-      memberCoffeeCount,
-      coffeeMembersAchieved,
-      coffeePassed,
-      // 3. 培訓
-      trainingPassed,
-      // 排序用
-      achievedCount,
-      achievementRate,
-    };
-  }).filter(Boolean).sort((a, b) => b.achievedCount - a.achievedCount || b.achievementRate - a.achievementRate);
+  return (groups || []).map(g => {
+    const totalMembers = (g.memberIds || []).length;
+    // 「有紀錄的組聚」＝ 期間內、groupId 為本組的組聚記錄數（全分會例會不計）
+    const meetingCount = (meetings || []).filter(m => m.groupId === g.id && inRange(m.date)).length;
+    const meetingPassed = meetingCount >= config.meetingTarget;
+    const done = (config.trainingDone && config.trainingDone[g.id]) || {};
+    const trainingDoneCount = (config.trainings || []).filter(t => done[t.id]).length;
+    const trainingPassed = trainingDoneCount >= config.trainingPassNeed;
+    const achieved = meetingPassed && trainingPassed;
+    return { group: g, totalMembers, meetingCount, meetingPassed, trainingDoneCount, trainingPassed, achieved };
+  }).sort((a, b) => (b.achieved - a.achieved) || (b.meetingCount - a.meetingCount) || (b.trainingDoneCount - a.trainingDoneCount));
 }
 
 // SVG 圓環進度（中間放百分比文字）
@@ -4774,298 +4743,190 @@ function challengeColor(pct) {
   return "#A01E2E";                  // red
 }
 
+// 積分登錄 Modal（幹部輸入每人三項計數，系統自動算分）
+function ScoreEntryModal({ members, config, onSave, onClose }) {
+  const pts = config.points || { coffee: 5, guest: 10, join: 30 };
+  const [draft, setDraft] = useState(() => ({ ...(config.personalScores || {}) }));
+  const [q, setQ] = useState("");
+  const setField = (mid, field, val) => {
+    const n = Math.max(0, parseInt(val) || 0);
+    setDraft(d => ({ ...d, [mid]: { ...(d[mid] || {}), [field]: n } }));
+  };
+  const rowTotal = (mid) => {
+    const s = draft[mid] || {};
+    return (parseInt(s.coffee) || 0) * pts.coffee + (parseInt(s.guest) || 0) * pts.guest + (parseInt(s.join) || 0) * pts.join;
+  };
+  const filtered = (members || []).filter(m => !q.trim() || (m.name || "").includes(q) || (m.industry || "").includes(q));
+  return (
+    <Modal open={true} onClose={onClose}>
+      <div style={{ fontFamily: "'Noto Sans TC',sans-serif" }}>
+        <h3 className="text-lg font-bold text-stone-800 mb-1">登錄個人積分</h3>
+        <div className="text-xs text-stone-500 mb-3">咖啡 ×{pts.coffee}｜來賓 ×{pts.guest}｜入會 ×{pts.join}（填「次數」即可，系統自動算總分）</div>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="搜尋姓名 / 行業…"
+          className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md mb-2" />
+        <div className="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1.5 px-2 pb-1 text-[10px] text-stone-400 font-semibold">
+          <div>會員</div><div className="text-center">咖啡</div><div className="text-center">來賓</div><div className="text-center">入會</div><div className="text-center">總分</div>
+        </div>
+        <div className="max-h-[52vh] overflow-y-auto">
+          {filtered.map(m => (
+            <div key={m.id} className="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1.5 px-2 py-1 items-center border-t border-stone-100">
+              <div className="text-sm text-stone-700 truncate">{m.name}<span className="text-[10px] text-stone-400 ml-1">{m.industry}</span></div>
+              {["coffee", "guest", "join"].map(f => (
+                <input key={f} type="number" min="0" value={(draft[m.id] || {})[f] ?? ""} onChange={e => setField(m.id, f, e.target.value)}
+                  className="w-full px-1 py-1 text-sm text-center border border-stone-200 rounded" placeholder="0" />
+              ))}
+              <div className="text-center text-sm font-bold" style={{ color: rowTotal(m.id) > 0 ? "#8B1A1A" : "#D6D3D1" }}>{rowTotal(m.id)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2 text-sm border border-stone-300 rounded-md text-stone-600">取消</button>
+          <button onClick={() => onSave(draft)} className="flex-1 py-2 text-sm text-white rounded-md font-semibold" style={{ background: "#8B1A1A" }}>儲存積分</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function ChapterChallengeView({ groups, members, meetings, coffeeMeetings, config, onConfigChange }) {
-  const [expanded, setExpanded] = useState(null); // 點開哪一組看明細
-  const [editingRange, setEditingRange] = useState(false);
-  const [draftStart, setDraftStart] = useState(config.rangeStart);
-  const [draftEnd, setDraftEnd] = useState(config.rangeEnd);
-
-  const stats = useMemo(() => computeChallengeStats({
-    groups, members, meetings, coffeeMeetings,
-    rangeStart: config.rangeStart, rangeEnd: config.rangeEnd,
-    trainingDone: config.trainingDone || {},
-  }), [groups, members, meetings, coffeeMeetings, config]);
-
-  const toggleTraining = (groupId) => {
-    const newDone = { ...(config.trainingDone || {}) };
-    newDone[groupId] = !newDone[groupId];
-    onConfigChange({ ...config, trainingDone: newDone });
-  };
-
-  const saveRange = () => {
-    onConfigChange({ ...config, rangeStart: draftStart, rangeEnd: draftEnd });
-    setEditingRange(false);
-  };
-
-  // 牌面圖示
+  const cfg = useMemo(() => normalizeChallengeConfig(config), [config]);
+  const [scoreModal, setScoreModal] = useState(false);
+  const [showAllRank, setShowAllRank] = useState(false);
+  const ranking = useMemo(() => computePersonalScores({ members, config: cfg }), [members, cfg]);
+  const groupStats = useMemo(() => computeGroupAchievements({ groups, meetings, config: cfg }), [groups, meetings, cfg]);
+  const achievedGroups = groupStats.filter(s => s.achieved).length;
+  const pts = cfg.points;
+  const top6 = ranking.slice(0, 6);
   const medal = (i) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
+  const fmtMD = (d) => { if (!d) return ""; const p = String(d).split("-"); return p.length >= 3 ? (parseInt(p[1]) + "/" + parseInt(p[2])) : d; };
 
-  // 全會總覽
-  const summary = useMemo(() => {
-    if (stats.length === 0) return null;
-    const fullCompleted = stats.filter(s => s.achievementRate === 100).length;
-    const avgRate = Math.round(stats.reduce((sum, s) => sum + s.achievementRate, 0) / stats.length);
-    const top = stats[0];
-    return { fullCompleted, avgRate, top };
-  }, [stats]);
-
-  const getMember = (id) => members.find(m => m.id === id);
-
-  // 計算每個指標的進度百分比（更細緻，激勵用）
-  const metricProgress = (s) => {
-    // 組聚：總場次 / 目標場次（每人最多計 5 場避免單人爆刷）
-    const meetingDone = s.group.memberIds.reduce((sum, mid) => sum + Math.min(s.memberMeetingCount[mid] || 0, 5), 0);
-    const meetingTarget = s.totalMembers * 5;
-    const meetingPct = meetingTarget > 0 ? Math.round((meetingDone / meetingTarget) * 100) : 0;
-    // 主約：總主約 / 人數，capped 100%
-    const invitePct = s.totalMembers > 0 ? Math.min(100, Math.round((s.groupInviteCount / s.totalMembers) * 100)) : 0;
-    // 參加咖啡：類似組聚（每人最多計 5 場）
-    const coffeeDone = s.group.memberIds.reduce((sum, mid) => sum + Math.min(s.memberCoffeeCount[mid] || 0, 5), 0);
-    const coffeeTarget = s.totalMembers * 5;
-    const coffeePct = coffeeTarget > 0 ? Math.round((coffeeDone / coffeeTarget) * 100) : 0;
-    // 培訓：二元
-    const trainPct = s.trainingPassed ? 100 : 0;
-    return { meetingDone, meetingTarget, meetingPct, invitePct, coffeeDone, coffeeTarget, coffeePct, trainPct };
+  const toggleTraining = (gid, tid) => {
+    const done = { ...(cfg.trainingDone || {}) };
+    done[gid] = { ...(done[gid] || {}), [tid]: !((done[gid] || {})[tid]) };
+    onConfigChange({ ...cfg, trainingDone: done });
+  };
+  const saveScores = (scores) => {
+    const clean = {};
+    for (const [mid, s] of Object.entries(scores)) {
+      const c = parseInt(s.coffee) || 0, gu = parseInt(s.guest) || 0, j = parseInt(s.join) || 0;
+      if (c || gu || j) clean[mid] = { coffee: c, guest: gu, join: j };
+    }
+    onConfigChange({ ...cfg, personalScores: clean });
+    setScoreModal(false);
   };
 
   return (
-    <div>
-      {/* 標題 + 期間 */}
-      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-        <div>
-          <h2 className="text-2xl font-bold text-stone-800">🏆 小組競賽追蹤</h2>
-          <div className="text-sm text-stone-600 mt-1">
-            期間：
-            {editingRange ? (
-              <span className="inline-flex items-center gap-1.5 ml-1">
-                <input type="date" value={draftStart} onChange={e => setDraftStart(e.target.value)}
-                  className="border border-stone-300 rounded px-2 py-0.5 text-sm" />
-                <span>~</span>
-                <input type="date" value={draftEnd} onChange={e => setDraftEnd(e.target.value)}
-                  className="border border-stone-300 rounded px-2 py-0.5 text-sm" />
-                <Btn size="sm" variant="primary" onClick={saveRange}>儲存</Btn>
-                <Btn size="sm" variant="ghost" onClick={() => { setEditingRange(false); setDraftStart(config.rangeStart); setDraftEnd(config.rangeEnd); }}>取消</Btn>
-              </span>
-            ) : (
-              <>
-                <b>{config.rangeStart} ~ {config.rangeEnd}</b>
-                <button onClick={() => setEditingRange(true)} className="ml-2 text-xs text-[#B8860B] hover:underline">[修改期間]</button>
-              </>
-            )}
-          </div>
-        </div>
+    <div style={{ fontFamily: "'Noto Sans TC',sans-serif" }}>
+      {/* 頭部橫幅 */}
+      <div className="rounded-xl p-5 mb-5 text-center text-white" style={{ background: "linear-gradient(135deg,#6B1414,#8B1A1A 50%,#A82828)" }}>
+        <div className="text-2xl font-bold">🎮 富鼎 BNI GAME</div>
+        <div className="text-sm mt-1" style={{ color: "#F0D0A0" }}>勇敢邀約 · 7–9 月</div>
+        <div className="inline-block mt-2 px-4 py-1 rounded-full text-sm font-semibold" style={{ background: "rgba(255,255,255,0.15)", color: "#FFE8C0" }}>🎯 {cfg.purpose}</div>
+        <div className="text-xs mt-2" style={{ color: "#E0B080" }}>比賽期間 {fmtMD(cfg.rangeStart)} – {fmtMD(cfg.rangeEnd)}</div>
       </div>
 
-      {/* 全會總覽 banner */}
-      {summary && (
-        <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-2 border-amber-300 rounded-xl p-4 mb-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-xs font-bold text-[#8B1A1A] uppercase tracking-wider">Chapter Challenge</div>
-              <div className="text-lg font-bold text-stone-800 mt-0.5">全分會競賽進度</div>
-            </div>
-            <div className="flex gap-4 text-sm flex-wrap">
-              <div className="text-center">
-                <div className="text-2xl font-bold" style={{ color: challengeColor(summary.avgRate) }}>{summary.avgRate}%</div>
-                <div className="text-[10px] text-stone-600 mt-0.5">全會平均達成</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-emerald-700">{summary.fullCompleted}<span className="text-sm text-stone-500">/{stats.length}</span></div>
-                <div className="text-[10px] text-stone-600 mt-0.5">100% 完成組數</div>
-              </div>
-              <div className="text-center">
-                <div className="text-base font-bold text-stone-800">🥇 {summary.top.group.name}</div>
-                <div className="text-[10px] text-stone-600 mt-0.5">領先小組（{summary.top.achievementRate}%）</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 規則說明 */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-900 leading-relaxed">
-        <div className="font-bold mb-1">🎯 競賽規則（4 項全達成 = 100%）</div>
-        <ol className="list-decimal pl-5 space-y-0.5">
-          <li><b>組聚參加</b>：每人總共 5 場（含本組組聚 + 全分會組聚）</li>
-          <li><b>主約咖啡</b>：小組總主約 ≥ 人數（人均 1 場以上）</li>
-          <li><b>參加咖啡</b>：每人總共 5 場咖啡會議（任一身分到場）</li>
-          <li><b>培訓</b>：完成 1 場分會指定培訓，且小組 ≥ 50% 出席（達成請手動勾選）</li>
-        </ol>
+      {/* 🎯 個人積分 */}
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h3 className="text-lg font-bold text-stone-800">🎯 個人積分榜</h3>
+        <button onClick={() => setScoreModal(true)} className="px-3 py-1.5 text-sm text-white rounded-md font-semibold" style={{ background: "#8B1A1A" }}>✏️ 登錄積分</button>
+      </div>
+      <div className="text-xs text-stone-600 mb-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 leading-relaxed">
+        咖啡會議 <b className="text-stone-800">+{pts.coffee}</b>｜帶來賓參訪 <b className="text-stone-800">+{pts.guest}</b>｜來賓入會 <b className="text-stone-800">+{pts.join}</b>　·　🏝️ 排名前六名「島嶼」慶功
       </div>
 
-      {/* 排行榜 */}
-      {stats.length === 0 ? (
-        <div className="bg-white border border-dashed border-stone-300 rounded-xl py-10 text-center text-stone-400">
-          <p className="text-sm">尚無小組資料</p>
+      {ranking.length === 0 ? (
+        <div className="text-center text-stone-400 py-8 border border-dashed border-stone-200 rounded-lg mb-6 text-sm">
+          尚未登錄積分　·　點右上「✏️ 登錄積分」開始
         </div>
       ) : (
-        <div className="space-y-3">
-          {stats.map((s, i) => {
-            const isExpanded = expanded === s.group.id;
-            const mp = metricProgress(s);
-            const overallColor = challengeColor(s.achievementRate);
-            // 達成 100% 的卡片加金邊
-            const isChamp = s.achievementRate === 100;
-            const cardBorder = isChamp ? "border-2 border-amber-400 shadow-md" : "border border-stone-200";
-            // 排名前三背景特效
-            const rankBg = i === 0 ? "bg-gradient-to-r from-amber-50 to-yellow-50"
-                         : i === 1 ? "bg-gradient-to-r from-stone-50 to-slate-50"
-                         : i === 2 ? "bg-gradient-to-r from-orange-50/60 to-amber-50/60"
-                         : "bg-white";
-            return (
-              <div key={s.group.id} className={`rounded-xl overflow-hidden ${cardBorder} bg-white transition-shadow hover:shadow-lg`}>
-                {/* 排行卡頭 */}
-                <div className={`p-4 cursor-pointer ${rankBg}`}
-                  onClick={() => setExpanded(isExpanded ? null : s.group.id)}>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div className="text-3xl flex-shrink-0">{medal(i)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <Tag color={s.group.color || "#999"}>{s.group.name}</Tag>
-                        <span className="text-xs text-stone-500">{s.totalMembers} 人</span>
-                        {isChamp && <span className="text-[11px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold">🎉 全達成</span>}
-                      </div>
-                      <div className="text-xs text-stone-600">
-                        {s.achievedCount}/4 項已達成
-                        {s.achievedCount < 4 && (
-                          <span className="text-stone-400 ml-1">
-                            · 距完美還差 {4 - s.achievedCount} 項
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <ProgressRing percent={s.achievementRate} color={overallColor} size={72} stroke={7} />
-                    <div className="flex-shrink-0">
-                      {isExpanded ? <ChevronDown className="w-4 h-4 text-stone-400" /> : <ChevronRight className="w-4 h-4 text-stone-400" />}
-                    </div>
+        <div className="mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+            {top6.map((r, i) => (
+              <div key={r.member.id} className="rounded-lg p-3 border-2" style={{ borderColor: i < 3 ? "#D4A017" : "#E8D8B0", background: i < 3 ? "linear-gradient(135deg,#FFF8E8,#FFF3D6)" : "#FFFDF7" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg flex-shrink-0">{medal(i)}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-stone-800 truncate">{r.member.name}</div>
+                    <div className="text-[10px] text-stone-400 truncate">{r.member.industry}</div>
                   </div>
-
-                  {/* 4 項進度條 */}
-                  <div className="mt-3 space-y-2">
-                    {/* 1. 組聚 */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span>📅</span>
-                          <span className="font-semibold text-stone-700">組聚參加</span>
-                          {s.meetingPassed && <span className="text-[10px] text-emerald-600 font-bold">✓ 達標</span>}
-                        </div>
-                        <span className="text-stone-600">
-                          <b style={{ color: challengeColor(mp.meetingPct) }}>{mp.meetingDone}</b>
-                          <span className="text-stone-400"> / {mp.meetingTarget} 場</span>
-                          <span className="text-stone-500 ml-2">({s.meetingMembersAchieved}/{s.totalMembers} 人達標)</span>
-                        </span>
-                      </div>
-                      <ProgressBar percent={mp.meetingPct} color={challengeColor(mp.meetingPct)} />
-                    </div>
-                    {/* 2. 主約 */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span>☕</span>
-                          <span className="font-semibold text-stone-700">主約咖啡</span>
-                          {s.invitePassed && <span className="text-[10px] text-emerald-600 font-bold">✓ 達標</span>}
-                        </div>
-                        <span className="text-stone-600">
-                          <b style={{ color: challengeColor(mp.invitePct) }}>{s.groupInviteCount}</b>
-                          <span className="text-stone-400"> / {s.totalMembers} 場</span>
-                          {!s.invitePassed && <span className="text-amber-700 ml-2">差 {s.totalMembers - s.groupInviteCount} 場</span>}
-                        </span>
-                      </div>
-                      <ProgressBar percent={mp.invitePct} color={challengeColor(mp.invitePct)} />
-                    </div>
-                    {/* 3. 參加咖啡 */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span>👥</span>
-                          <span className="font-semibold text-stone-700">參加咖啡</span>
-                          {s.coffeePassed && <span className="text-[10px] text-emerald-600 font-bold">✓ 達標</span>}
-                        </div>
-                        <span className="text-stone-600">
-                          <b style={{ color: challengeColor(mp.coffeePct) }}>{mp.coffeeDone}</b>
-                          <span className="text-stone-400"> / {mp.coffeeTarget} 場</span>
-                          <span className="text-stone-500 ml-2">({s.coffeeMembersAchieved}/{s.totalMembers} 人達標)</span>
-                        </span>
-                      </div>
-                      <ProgressBar percent={mp.coffeePct} color={challengeColor(mp.coffeePct)} />
-                    </div>
-                    {/* 4. 培訓（二元）*/}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span>🎓</span>
-                          <span className="font-semibold text-stone-700">培訓</span>
-                          {s.trainingPassed && <span className="text-[10px] text-emerald-600 font-bold">✓ 達標</span>}
-                        </div>
-                        <span className="text-stone-600">
-                          {s.trainingPassed ? <b className="text-emerald-700">已完成 1 場</b> : <span className="text-amber-700">待小組組長手動勾選</span>}
-                        </span>
-                      </div>
-                      <ProgressBar percent={mp.trainPct} color={challengeColor(mp.trainPct)} />
-                    </div>
-                  </div>
+                  <div className="text-right flex-shrink-0"><div className="text-xl font-bold" style={{ color: "#8B1A1A" }}>{r.total}</div><div className="text-[9px] text-stone-400">點</div></div>
                 </div>
-
-                {/* 展開：成員明細 */}
-                {isExpanded && (
-                  <div className="border-t border-stone-200 p-3 bg-stone-50 space-y-3">
-                    {/* 培訓達成切換 */}
-                    <div className="bg-white rounded-lg p-2.5 flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-stone-700">🎓 培訓達成狀態：</span>
-                      <button onClick={() => toggleTraining(s.group.id)}
-                        className={`px-3 py-1 rounded text-xs font-semibold ${s.trainingPassed ? "bg-emerald-500 text-white" : "bg-stone-200 text-stone-600 hover:bg-stone-300"}`}>
-                        {s.trainingPassed ? "✅ 已完成 1 場（小組 ≥ 50%）" : "🟡 未達成（點擊切換為已達成）"}
-                      </button>
-                      <span className="text-[11px] text-stone-400 ml-auto">由小組組長/秘財 手動勾選</span>
-                    </div>
-
-                    {/* 成員逐人明細 */}
-                    <div className="bg-white rounded-lg overflow-hidden">
-                      <div className="bg-stone-100 px-3 py-2 grid grid-cols-[1fr_60px_60px_70px] gap-2 text-xs font-semibold text-stone-600">
-                        <div>成員</div>
-                        <div className="text-center">組聚<br/>(≥5)</div>
-                        <div className="text-center">主約<br/>(≥1)</div>
-                        <div className="text-center">參加咖啡<br/>(≥5)</div>
-                      </div>
-                      {s.group.memberIds.map(mid => {
-                        const m = getMember(mid);
-                        const meetingC = s.memberMeetingCount[mid] || 0;
-                        const inviteC = s.memberInviteCount[mid] || 0;
-                        const coffeeC = s.memberCoffeeCount[mid] || 0;
-                        const cell = (val, target) => {
-                          const passed = val >= target;
-                          return (
-                            <div className={`text-center text-xs font-semibold ${passed ? "text-emerald-700" : "text-amber-700"}`}>
-                              {val}{passed && " ✓"}
-                              {!passed && val < target && (
-                                <div className="text-[9px] text-stone-400 font-normal">差 {target - val}</div>
-                              )}
-                            </div>
-                          );
-                        };
-                        const allPassed = meetingC >= 5 && inviteC >= 1 && coffeeC >= 5;
-                        return (
-                          <div key={mid} className={`px-3 py-2 grid grid-cols-[1fr_60px_60px_70px] gap-2 border-t border-stone-100 ${allPassed ? "bg-emerald-50/40" : ""}`}>
-                            <div className="text-stone-700 text-xs flex items-center">
-                              {allPassed && <span className="text-emerald-600 mr-1">⭐</span>}
-                              {m?.name || "?"}
-                              {m?.industry && <span className="text-stone-400 text-[10px] ml-1">{m.industry}</span>}
-                            </div>
-                            {cell(meetingC, 5)}
-                            {cell(inviteC, 1)}
-                            {cell(coffeeC, 5)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
-            );
-          })}
+            ))}
+          </div>
+          {ranking.length > 6 && (
+            <button onClick={() => setShowAllRank(v => !v)} className="text-xs text-stone-500 underline mb-2">{showAllRank ? "收合完整排名" : `展開完整排名（共 ${ranking.length} 人）`}</button>
+          )}
+          {showAllRank && (
+            <div className="border border-stone-200 rounded-lg overflow-hidden">
+              <div className="grid grid-cols-[40px_1fr_44px_44px_44px_56px] gap-1 px-3 py-1.5 bg-stone-50 text-[10px] font-semibold text-stone-400">
+                <div>名次</div><div>會員</div><div className="text-center">咖啡</div><div className="text-center">來賓</div><div className="text-center">入會</div><div className="text-right">總分</div>
+              </div>
+              {ranking.map((r, i) => (
+                <div key={r.member.id} className="grid grid-cols-[40px_1fr_44px_44px_44px_56px] gap-1 px-3 py-1.5 border-t border-stone-100 text-sm items-center">
+                  <div className="text-stone-500">{medal(i)}</div>
+                  <div className="text-stone-700 truncate">{r.member.name}<span className="text-[10px] text-stone-400 ml-1">{r.member.industry}</span></div>
+                  <div className="text-center text-stone-500 text-xs">{r.coffee}</div>
+                  <div className="text-center text-stone-500 text-xs">{r.guest}</div>
+                  <div className="text-center text-stone-500 text-xs">{r.join}</div>
+                  <div className="text-right font-bold" style={{ color: "#8B1A1A" }}>{r.total}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* 👥 小組達標 */}
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h3 className="text-lg font-bold text-stone-800">👥 小組團體獎勵</h3>
+        <span className="text-xs text-stone-500">{achievedGroups}/{groupStats.length} 組達標</span>
+      </div>
+      <div className="text-xs text-stone-600 mb-3 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 leading-relaxed">
+        完成 <b className="text-stone-800">{cfg.meetingTarget} 次</b>有紀錄的組聚　＋　{cfg.trainings.length} 場重點培訓達 <b className="text-stone-800">{cfg.trainingPassNeed} 場</b>　→　🎉 每組 <b className="text-stone-800">{cfg.reward.toLocaleString()} 元</b>聚餐基金
+      </div>
+
+      {groupStats.length === 0 ? (
+        <div className="text-center text-stone-400 py-8 border border-dashed border-stone-200 rounded-lg text-sm">尚無小組資料</div>
+      ) : (
+        <div className="space-y-2">
+          {groupStats.map(s => (
+            <div key={s.group.id} className="rounded-lg border overflow-hidden bg-white" style={{ borderColor: s.achieved ? "#1A6B1A" : "#E7E5E4", borderLeftWidth: "4px", borderLeftColor: s.achieved ? "#22A022" : "#D6D3D1" }}>
+              <div className="p-3">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <span className="font-bold text-stone-800">{s.group.name}<span className="text-xs text-stone-400 ml-1">{s.totalMembers}人</span></span>
+                  {s.achieved
+                    ? <span className="text-xs font-bold px-2 py-1 rounded-full text-white" style={{ background: "#1A6B1A" }}>🎉 達標 · {cfg.reward.toLocaleString()}元</span>
+                    : <span className="text-xs font-semibold px-2 py-1 rounded-full bg-stone-100 text-stone-500">未達標</span>}
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-stone-500 w-12 flex-shrink-0">組聚</span>
+                  <div className="flex-1"><ProgressBar percent={Math.min(100, Math.round(s.meetingCount / cfg.meetingTarget * 100))} color={s.meetingPassed ? "#1A6B1A" : "#C08A00"} /></div>
+                  <span className="text-xs font-semibold w-16 text-right flex-shrink-0" style={{ color: s.meetingPassed ? "#1A6B1A" : "#78716C" }}>{s.meetingCount}/{cfg.meetingTarget} 次{s.meetingPassed ? " ✓" : ""}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-stone-500 w-12 flex-shrink-0">培訓</span>
+                  <div className="flex gap-1.5 flex-wrap flex-1">
+                    {cfg.trainings.map(t => {
+                      const on = !!((cfg.trainingDone[s.group.id] || {})[t.id]);
+                      return (
+                        <button key={t.id} onClick={() => toggleTraining(s.group.id, t.id)} title={t.label + "｜" + t.req}
+                          className="px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors"
+                          style={on ? { background: "#1A6B1A", color: "#fff", borderColor: "#1A6B1A" } : { background: "#fff", color: "#A8A29E", borderColor: "#E7E5E4" }}>
+                          {on ? "✓ " : ""}{fmtMD(t.date)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className="text-xs font-semibold w-16 text-right flex-shrink-0" style={{ color: s.trainingPassed ? "#1A6B1A" : "#78716C" }}>{s.trainingDoneCount}/{cfg.trainingPassNeed} 場{s.trainingPassed ? " ✓" : ""}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {scoreModal && <ScoreEntryModal members={members} config={cfg} onSave={saveScores} onClose={() => setScoreModal(false)} />}
     </div>
   );
 }
@@ -5196,9 +5057,21 @@ function App() {
   const [dashboardConfig, setDashboardConfig] = useState({ rangeMode: "thisMonth" });  // 組聚表板時間範圍
   // 小組競賽：期間 + 各組培訓達成手動標記（trainingDone[groupId] = true/false）
   const [challengeConfig, setChallengeConfig] = useState({
-    rangeStart: "2026-05-01",
-    rangeEnd: "2026-06-30",
-    trainingDone: {},
+    title: "富鼎 BNI GAME｜勇敢邀約 7–9 月",
+    purpose: "想到，不如做到！",
+    rangeStart: "2026-07-01",
+    rangeEnd: "2026-09-11",
+    meetingTarget: 5,
+    trainingPassNeed: 2,
+    reward: 2000,
+    points: { coffee: 5, guest: 10, join: 30 },
+    trainings: [
+      { id: "t1", label: "7月 期中領導團隊培訓", date: "2026-07-23", req: "組員 50% 實體熱點上線" },
+      { id: "t2", label: "8月 MSP", date: "2026-08-03", req: "組員 50% 同場培訓" },
+      { id: "t3", label: "9月 領導團隊培訓", date: "2026-09-15", req: "組員 50% 實體熱點上線" },
+    ],
+    trainingDone: {},        // { groupId: { t1:bool, t2:bool, t3:bool } }
+    personalScores: {},      // { memberId: { coffee:n, guest:n, join:n } }
   });
 
   const [editingMeeting, setEditingMeeting] = useState(null);
