@@ -4748,11 +4748,62 @@ function challengeColor(pct) {
   return "#A01E2E";                  // red
 }
 
+// 把競賽期間（西元）換成民國月份清單：2026-07-01~2026-09-11 → ["115-07","115-08","115-09"]
+function rocMonthsInRange(startISO, endISO) {
+  const out = [];
+  const d = new Date(String(startISO).slice(0, 7) + "-01T00:00:00");
+  const end = new Date(String(endISO).slice(0, 7) + "-01T00:00:00");
+  while (d <= end) {
+    out.push((d.getFullYear() - 1911) + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+
 // 積分登錄 Modal（幹部輸入每人三項計數，系統自動算分）
 function ScoreEntryModal({ members, config, onSave, onClose }) {
   const pts = config.points || { coffee: 5, guest: 10, join: 30 };
   const [draft, setDraft] = useState(() => ({ ...(config.personalScores || {}) }));
   const [q, setQ] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  // 一鍵帶入紅綠燈報表的來賓數（competition 期間各月加總；報表為權威值，帶入後仍可手動微調）
+  const importGuests = async () => {
+    setImporting(true); setImportMsg("");
+    try {
+      const months = rocMonthsInRange(config.rangeStart, config.rangeEnd);
+      const r = await fetch(PROXY_URL + '/api/challenge-visitors?months=' + months.join(','));
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const byName = {};
+      (members || []).forEach(m => { if (m.name) byName[m.name.trim()] = m.id; });
+      let matched = 0;
+      const unmatched = [];
+      const updates = {};
+      for (const [name, cnt] of Object.entries(j.visitors || {})) {
+        const mid = byName[name.trim()];
+        if (!mid) { if (cnt > 0) unmatched.push(name); continue; }
+        matched++;
+        updates[mid] = cnt;
+      }
+      setDraft(d => {
+        const nd = { ...d };
+        for (const [mid, cnt] of Object.entries(updates)) {
+          nd[mid] = { ...(nd[mid] || {}), guest: cnt };
+        }
+        return nd;
+      });
+      let msg = `✅ 已帶入 ${matched} 人的來賓數（${(j.monthsFound || []).join('、')}）`;
+      if (j.monthsMissing && j.monthsMissing.length) msg += `｜尚未上傳：${j.monthsMissing.join('、')}`;
+      if (unmatched.length) msg += `｜⚠️ 報表姓名對不上會員名單（請手動補）：${unmatched.join('、')}`;
+      setImportMsg(msg);
+    } catch (e) {
+      setImportMsg('❌ 帶入失敗：' + e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
   const setField = (mid, field, val) => {
     const n = Math.max(0, parseInt(val) || 0);
     setDraft(d => ({ ...d, [mid]: { ...(d[mid] || {}), [field]: n } }));
@@ -4766,7 +4817,21 @@ function ScoreEntryModal({ members, config, onSave, onClose }) {
     <Modal open={true} onClose={onClose}>
       <div style={{ fontFamily: "'Noto Sans TC',sans-serif" }}>
         <h3 className="text-lg font-bold text-stone-800 mb-1">登錄個人積分</h3>
-        <div className="text-xs text-stone-500 mb-3">咖啡 ×{pts.coffee}｜來賓 ×{pts.guest}｜入會 ×{pts.join}（填「次數」即可，系統自動算總分）</div>
+        <div className="text-xs text-stone-500 mb-2">咖啡 ×{pts.coffee}｜來賓 ×{pts.guest}｜入會 ×{pts.join}（填「次數」即可，系統自動算總分）</div>
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <button onClick={importGuests} disabled={importing}
+            className="px-2.5 py-1.5 text-xs rounded-md font-semibold text-white disabled:opacity-50"
+            style={{ background: "#2D5A27" }}
+            title="從紅綠燈月報表讀取競賽期間各月來賓數加總，自動填入「來賓」欄位（可再手動微調）">
+            {importing ? "帶入中…" : "📥 帶入紅綠燈來賓數"}
+          </button>
+          <span className="text-[10px] text-stone-400">讀取競賽期間的月報表，帶入後可手動微調，按「儲存積分」才生效</span>
+        </div>
+        {importMsg && (
+          <div className="text-[11px] leading-relaxed mb-2 px-2.5 py-1.5 rounded-md" style={{ background: importMsg.startsWith("❌") ? "#FBEAEA" : "#EAF3DE", color: importMsg.startsWith("❌") ? "#A32D2D" : "#3B6D11" }}>
+            {importMsg}
+          </div>
+        )}
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="搜尋姓名 / 行業…"
           className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md mb-2" />
         <div className="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1.5 px-2 pb-1 text-[10px] text-stone-400 font-semibold">

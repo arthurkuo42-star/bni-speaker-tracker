@@ -6621,6 +6621,18 @@ function challengeColor(pct) {
   return "#A01E2E"; // red
 }
 
+// 把競賽期間（西元）換成民國月份清單：2026-07-01~2026-09-11 → ["115-07","115-08","115-09"]
+function rocMonthsInRange(startISO, endISO) {
+  const out = [];
+  const d = new Date(String(startISO).slice(0, 7) + "-01T00:00:00");
+  const end = new Date(String(endISO).slice(0, 7) + "-01T00:00:00");
+  while (d <= end) {
+    out.push(d.getFullYear() - 1911 + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+
 // 積分登錄 Modal（幹部輸入每人三項計數，系統自動算分）
 function ScoreEntryModal({
   members,
@@ -6637,6 +6649,56 @@ function ScoreEntryModal({
     ...(config.personalScores || {})
   }));
   const [q, setQ] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  // 一鍵帶入紅綠燈報表的來賓數（competition 期間各月加總；報表為權威值，帶入後仍可手動微調）
+  const importGuests = async () => {
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const months = rocMonthsInRange(config.rangeStart, config.rangeEnd);
+      const r = await fetch(PROXY_URL + '/api/challenge-visitors?months=' + months.join(','));
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const byName = {};
+      (members || []).forEach(m => {
+        if (m.name) byName[m.name.trim()] = m.id;
+      });
+      let matched = 0;
+      const unmatched = [];
+      const updates = {};
+      for (const [name, cnt] of Object.entries(j.visitors || {})) {
+        const mid = byName[name.trim()];
+        if (!mid) {
+          if (cnt > 0) unmatched.push(name);
+          continue;
+        }
+        matched++;
+        updates[mid] = cnt;
+      }
+      setDraft(d => {
+        const nd = {
+          ...d
+        };
+        for (const [mid, cnt] of Object.entries(updates)) {
+          nd[mid] = {
+            ...(nd[mid] || {}),
+            guest: cnt
+          };
+        }
+        return nd;
+      });
+      let msg = `✅ 已帶入 ${matched} 人的來賓數（${(j.monthsFound || []).join('、')}）`;
+      if (j.monthsMissing && j.monthsMissing.length) msg += `｜尚未上傳：${j.monthsMissing.join('、')}`;
+      if (unmatched.length) msg += `｜⚠️ 報表姓名對不上會員名單（請手動補）：${unmatched.join('、')}`;
+      setImportMsg(msg);
+    } catch (e) {
+      setImportMsg('❌ 帶入失敗：' + e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
   const setField = (mid, field, val) => {
     const n = Math.max(0, parseInt(val) || 0);
     setDraft(d => ({
@@ -6662,8 +6724,26 @@ function ScoreEntryModal({
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-lg font-bold text-stone-800 mb-1"
   }, "\u767B\u9304\u500B\u4EBA\u7A4D\u5206"), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-stone-500 mb-3"
-  }, "\u5496\u5561 \xD7", pts.coffee, "\uFF5C\u4F86\u8CD3 \xD7", pts.guest, "\uFF5C\u5165\u6703 \xD7", pts.join, "\uFF08\u586B\u300C\u6B21\u6578\u300D\u5373\u53EF\uFF0C\u7CFB\u7D71\u81EA\u52D5\u7B97\u7E3D\u5206\uFF09"), /*#__PURE__*/React.createElement("input", {
+    className: "text-xs text-stone-500 mb-2"
+  }, "\u5496\u5561 \xD7", pts.coffee, "\uFF5C\u4F86\u8CD3 \xD7", pts.guest, "\uFF5C\u5165\u6703 \xD7", pts.join, "\uFF08\u586B\u300C\u6B21\u6578\u300D\u5373\u53EF\uFF0C\u7CFB\u7D71\u81EA\u52D5\u7B97\u7E3D\u5206\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-2 flex-wrap"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: importGuests,
+    disabled: importing,
+    className: "px-2.5 py-1.5 text-xs rounded-md font-semibold text-white disabled:opacity-50",
+    style: {
+      background: "#2D5A27"
+    },
+    title: "\u5F9E\u7D05\u7DA0\u71C8\u6708\u5831\u8868\u8B80\u53D6\u7AF6\u8CFD\u671F\u9593\u5404\u6708\u4F86\u8CD3\u6578\u52A0\u7E3D\uFF0C\u81EA\u52D5\u586B\u5165\u300C\u4F86\u8CD3\u300D\u6B04\u4F4D\uFF08\u53EF\u518D\u624B\u52D5\u5FAE\u8ABF\uFF09"
+  }, importing ? "帶入中…" : "📥 帶入紅綠燈來賓數"), /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-stone-400"
+  }, "\u8B80\u53D6\u7AF6\u8CFD\u671F\u9593\u7684\u6708\u5831\u8868\uFF0C\u5E36\u5165\u5F8C\u53EF\u624B\u52D5\u5FAE\u8ABF\uFF0C\u6309\u300C\u5132\u5B58\u7A4D\u5206\u300D\u624D\u751F\u6548")), importMsg && /*#__PURE__*/React.createElement("div", {
+    className: "text-[11px] leading-relaxed mb-2 px-2.5 py-1.5 rounded-md",
+    style: {
+      background: importMsg.startsWith("❌") ? "#FBEAEA" : "#EAF3DE",
+      color: importMsg.startsWith("❌") ? "#A32D2D" : "#3B6D11"
+    }
+  }, importMsg), /*#__PURE__*/React.createElement("input", {
     value: q,
     onChange: e => setQ(e.target.value),
     placeholder: "\u641C\u5C0B\u59D3\u540D / \u884C\u696D\u2026",
