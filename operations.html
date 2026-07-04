@@ -443,7 +443,11 @@ const apiClient = {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Write-PIN': pin || ''
+        'X-Write-PIN': pin || '',
+        // 競賽資料等「僅限管理員」的 key，伺服器端會額外驗證這把密鑰
+        ...(opts.adminKey ? {
+          'X-Admin-Key': opts.adminKey
+        } : {})
       },
       body: JSON.stringify({
         key,
@@ -6709,6 +6713,38 @@ function ScoreEntryModal({
     }
   }, "\u5132\u5B58\u7A4D\u5206"))));
 }
+
+// 島嶼圖上六個席位名牌的位置（百分比座標，對應圖中六張椅子的上方）
+const ISLAND_SEAT_POS = [{
+  x: "52%",
+  y: "34%"
+},
+// 🥇 後方正中
+{
+  x: "30%",
+  y: "38%"
+},
+// 🥈 後左
+{
+  x: "71%",
+  y: "38%"
+},
+// 🥉 後右
+{
+  x: "8%",
+  y: "46%"
+},
+// #4 左側
+{
+  x: "90%",
+  y: "44%"
+},
+// #5 右側
+{
+  x: "13%",
+  y: "70%"
+} // #6 前左
+];
 function ChapterChallengeView({
   groups,
   members,
@@ -6720,6 +6756,55 @@ function ChapterChallengeView({
   const cfg = useMemo(() => normalizeChallengeConfig(config), [config]);
   const [scoreModal, setScoreModal] = useState(false);
   const [showAllRank, setShowAllRank] = useState(false);
+  const [islandOk, setIslandOk] = useState(true); // island.jpg 不存在時自動隱藏席位圖
+  // ── 幹部模式：登分/勾培訓需要管理員密鑰（伺服器端也會驗證）──
+  const [adminMode, setAdminMode] = useState(false);
+  const [keyPrompt, setKeyPrompt] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  useEffect(() => {
+    // 靜默驗證裝置上已存的密鑰（與紅綠燈管理共用同一把）
+    let saved = null;
+    try {
+      saved = localStorage.getItem('bni_admin_key');
+    } catch {}
+    if (!saved) return;
+    (async () => {
+      try {
+        const r = await fetch(PROXY_URL + '/api/members', {
+          headers: {
+            'X-Admin-Key': saved
+          }
+        });
+        if (r.ok) setAdminMode(true);
+      } catch {}
+    })();
+  }, []);
+  const unlockAdmin = async () => {
+    if (!keyDraft.trim()) return;
+    setVerifying(true);
+    try {
+      const r = await fetch(PROXY_URL + '/api/members', {
+        headers: {
+          'X-Admin-Key': keyDraft.trim()
+        }
+      });
+      if (r.ok) {
+        try {
+          localStorage.setItem('bni_admin_key', keyDraft.trim());
+        } catch {}
+        setAdminMode(true);
+        setKeyPrompt(false);
+        setKeyDraft("");
+      } else {
+        alert('密鑰錯誤');
+      }
+    } catch {
+      alert('連線失敗，請重試');
+    } finally {
+      setVerifying(false);
+    }
+  };
   const ranking = useMemo(() => computePersonalScores({
     members,
     config: cfg
@@ -6796,17 +6881,94 @@ function ChapterChallengeView({
     style: {
       color: "#E0B080"
     }
-  }, "\u6BD4\u8CFD\u671F\u9593 ", fmtMD(cfg.rangeStart), " \u2013 ", fmtMD(cfg.rangeEnd))), /*#__PURE__*/React.createElement("div", {
+  }, "\u6BD4\u8CFD\u671F\u9593 ", fmtMD(cfg.rangeStart), " \u2013 ", fmtMD(cfg.rangeEnd))), islandOk && /*#__PURE__*/React.createElement("div", {
+    className: "relative rounded-xl overflow-hidden mb-5 border-2 shadow-md",
+    style: {
+      borderColor: "#D4A017"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "island.jpg",
+    alt: "\u5CF6\u5DBC\u6176\u529F\u5E2D\u4F4D",
+    className: "w-full block",
+    onError: () => setIslandOk(false)
+  }), ISLAND_SEAT_POS.map((pos, i) => {
+    const r = top6[i];
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      className: "absolute text-center",
+      style: {
+        left: pos.x,
+        top: pos.y,
+        transform: "translateX(-50%)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "px-2 py-1 rounded-full font-bold whitespace-nowrap shadow-lg",
+      style: r ? {
+        background: "linear-gradient(135deg,#8B1A1A,#B8321F)",
+        color: "#FFF",
+        border: "1.5px solid #F0C060",
+        fontSize: "clamp(9px,1.7vw,14px)"
+      } : {
+        background: "rgba(50,40,25,0.55)",
+        color: "rgba(255,240,200,0.9)",
+        border: "1.5px dashed rgba(240,200,110,0.6)",
+        fontSize: "clamp(8px,1.5vw,12px)"
+      }
+    }, r ? `${medal(i)} ${r.member.name} ${r.total}點` : `${medal(i)} 虛位以待`), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 0,
+        height: 0,
+        margin: "0 auto",
+        borderLeft: "5px solid transparent",
+        borderRight: "5px solid transparent",
+        borderTop: "7px solid " + (r ? "#A82828" : "rgba(50,40,25,0.55)")
+      }
+    }));
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute bottom-0 left-0 right-0 text-center py-1.5 font-semibold",
+    style: {
+      background: "linear-gradient(transparent, rgba(20,10,5,0.8))",
+      color: "#FFE8C0",
+      fontSize: "clamp(10px,1.8vw,14px)"
+    }
+  }, "\uD83C\uDFDD\uFE0F \u500B\u4EBA\u7A4D\u5206\u524D\u516D\u540D \xB7 \u5CF6\u5DBC\u6176\u529F\u5E2D\u4F4D")), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between mb-2 flex-wrap gap-2"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-lg font-bold text-stone-800"
-  }, "\uD83C\uDFAF \u500B\u4EBA\u7A4D\u5206\u699C"), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83C\uDFAF \u500B\u4EBA\u7A4D\u5206\u699C"), adminMode ? /*#__PURE__*/React.createElement("button", {
     onClick: () => setScoreModal(true),
     className: "px-3 py-1.5 text-sm text-white rounded-md font-semibold",
     style: {
       background: "#8B1A1A"
     }
-  }, "\u270F\uFE0F \u767B\u9304\u7A4D\u5206")), /*#__PURE__*/React.createElement("div", {
+  }, "\u270F\uFE0F \u767B\u9304\u7A4D\u5206") : keyPrompt ? /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: keyDraft,
+    onChange: e => setKeyDraft(e.target.value),
+    onKeyDown: e => e.key === 'Enter' && unlockAdmin(),
+    placeholder: "\u7BA1\u7406\u54E1\u5BC6\u9470",
+    autoFocus: true,
+    className: "px-2 py-1.5 text-sm border border-stone-300 rounded-md w-36"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: unlockAdmin,
+    disabled: verifying,
+    className: "px-2.5 py-1.5 text-sm text-white rounded-md font-semibold disabled:opacity-50",
+    style: {
+      background: "#8B1A1A"
+    }
+  }, verifying ? "驗證中…" : "解鎖"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setKeyPrompt(false);
+      setKeyDraft("");
+    },
+    className: "text-xs text-stone-400"
+  }, "\u53D6\u6D88")) : /*#__PURE__*/React.createElement("button", {
+    onClick: () => setKeyPrompt(true),
+    title: "\u767B\u5206/\u52FE\u57F9\u8A13\u9700\u8981\u7BA1\u7406\u54E1\u5BC6\u9470\uFF08\u8207\u7D05\u7DA0\u71C8\u7BA1\u7406\u540C\u4E00\u628A\uFF09",
+    className: "px-2.5 py-1.5 text-xs rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 hover:border-stone-300"
+  }, "\uD83D\uDD10 \u5E79\u90E8\u7BA1\u7406")), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-600 mb-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 leading-relaxed"
   }, "\u5496\u5561\u6703\u8B70 ", /*#__PURE__*/React.createElement("b", {
     className: "text-stone-800"
@@ -6816,7 +6978,7 @@ function ChapterChallengeView({
     className: "text-stone-800"
   }, "+", pts.join), "\u3000\xB7\u3000\uD83C\uDFDD\uFE0F \u6392\u540D\u524D\u516D\u540D\u300C\u5CF6\u5DBC\u300D\u6176\u529F"), ranking.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "text-center text-stone-400 py-8 border border-dashed border-stone-200 rounded-lg mb-6 text-sm"
-  }, "\u5C1A\u672A\u767B\u9304\u7A4D\u5206\u3000\xB7\u3000\u9EDE\u53F3\u4E0A\u300C\u270F\uFE0F \u767B\u9304\u7A4D\u5206\u300D\u958B\u59CB") : /*#__PURE__*/React.createElement("div", {
+  }, adminMode ? "尚未登錄積分　·　點右上「✏️ 登錄積分」開始" : "積分累計中，敬請期待 🏝️") : /*#__PURE__*/React.createElement("div", {
     className: "mb-6"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-3 gap-2 mb-3"
@@ -6946,17 +7108,20 @@ function ChapterChallengeView({
     const on = !!(cfg.trainingDone[s.group.id] || {})[t.id];
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
-      onClick: () => toggleTraining(s.group.id, t.id),
-      title: t.label + "｜" + t.req,
+      onClick: adminMode ? () => toggleTraining(s.group.id, t.id) : undefined,
+      title: t.label + "｜" + t.req + (adminMode ? "" : "（勾選需幹部管理權限）"),
       className: "px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors",
-      style: on ? {
-        background: "#1A6B1A",
-        color: "#fff",
-        borderColor: "#1A6B1A"
-      } : {
-        background: "#fff",
-        color: "#A8A29E",
-        borderColor: "#E7E5E4"
+      style: {
+        ...(on ? {
+          background: "#1A6B1A",
+          color: "#fff",
+          borderColor: "#1A6B1A"
+        } : {
+          background: "#fff",
+          color: "#A8A29E",
+          borderColor: "#E7E5E4"
+        }),
+        cursor: adminMode ? "pointer" : "default"
       }
     }, on ? "✓ " : "", fmtMD(t.date));
   })), /*#__PURE__*/React.createElement("span", {
@@ -7308,9 +7473,19 @@ function App() {
 
   // 儲存小組競賽設定（期間 + 培訓手動標記）
   const saveChallengeConfig = async cfg => {
+    // 競賽資料伺服器端僅限管理員寫入 → 自動帶上已驗證的管理員密鑰
+    const adminKey = (() => {
+      try {
+        return localStorage.getItem('bni_admin_key') || '';
+      } catch {
+        return '';
+      }
+    })();
     setChallengeConfig(cfg);
     try {
-      await saveState(STORAGE_KEYS.CHAPTER_CHALLENGE, cfg);
+      await saveState(STORAGE_KEYS.CHAPTER_CHALLENGE, cfg, {
+        adminKey
+      });
     } catch (e) {
       console.error(e);
     }
