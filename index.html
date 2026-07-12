@@ -5875,7 +5875,38 @@ function KpiDashboard() {
     }
   }, "\u7D05\u7DA0\u71C8")), kpiData && kpiData.config && /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-stone-500"
-  }, "\u8A08\u7B97\u57FA\u6E96\uFF1A", kpiData.totalWeeks - (kpiData.config.remainWeeks || 0), " \u9031\u5DF2\u904E + ", kpiData.config.remainWeeks || 0, " \u9031\u5269\u9918")), /*#__PURE__*/React.createElement("div", {
+  }, "\u8A08\u7B97\u57FA\u6E96\uFF1A", kpiData.totalWeeks - (kpiData.config.remainWeeks || 0), " \u9031\u5DF2\u904E + ", kpiData.config.remainWeeks || 0, " \u9031\u5269\u9918")), (() => {
+    const perfect = allMembers.filter(m => Math.round(m.totalScore) >= 100);
+    if (perfect.length === 0) return null;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "rounded-xl p-4 mb-5 border-2",
+      style: {
+        borderColor: '#D4A017',
+        background: 'linear-gradient(135deg,#FFF8E8,#FFF3D6)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 flex-wrap"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-2xl"
+    }, "\uD83D\uDCAF"), /*#__PURE__*/React.createElement("span", {
+      className: "text-sm font-bold",
+      style: {
+        color: '#8A6200'
+      }
+    }, "\u672C\u671F\u6EFF\u5206\u738B"), /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-stone-400"
+    }, "\u516D\u5927\u6307\u6A19\u5168\u6578\u9054\u6A19")), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap gap-2 mt-2"
+    }, perfect.map(m => /*#__PURE__*/React.createElement("span", {
+      key: m.name,
+      className: "px-3 py-1 rounded-full text-sm font-bold text-white shadow-sm",
+      style: {
+        background: 'linear-gradient(135deg,#B8860B,#D4A017)'
+      }
+    }, "\uD83C\uDFC6 ", m.name, /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] font-normal ml-1 opacity-80"
+    }, m.groupName)))));
+  })(), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-4 gap-2 md:gap-3 mb-5"
   }, ['green', 'yellow', 'red', 'grey'].map(key => /*#__PURE__*/React.createElement("div", {
     key: key,

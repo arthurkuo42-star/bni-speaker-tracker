@@ -4684,6 +4684,28 @@ function KpiDashboard() {
         )}
       </div>
 
+      {/* 💯 滿分王榮譽榜（有人滿分才顯示） */}
+      {(() => {
+        const perfect = allMembers.filter(m => Math.round(m.totalScore) >= 100);
+        if (perfect.length === 0) return null;
+        return (
+          <div className="rounded-xl p-4 mb-5 border-2" style={{ borderColor: '#D4A017', background: 'linear-gradient(135deg,#FFF8E8,#FFF3D6)' }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-2xl">💯</span>
+              <span className="text-sm font-bold" style={{ color: '#8A6200' }}>本期滿分王</span>
+              <span className="text-[10px] text-stone-400">六大指標全數達標</span>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {perfect.map(m => (
+                <span key={m.name} className="px-3 py-1 rounded-full text-sm font-bold text-white shadow-sm" style={{ background: 'linear-gradient(135deg,#B8860B,#D4A017)' }}>
+                  🏆 {m.name}<span className="text-[10px] font-normal ml-1 opacity-80">{m.groupName}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 統計卡 */}
       <div className="grid grid-cols-4 gap-2 md:gap-3 mb-5">
         {['green', 'yellow', 'red', 'grey'].map(key => (

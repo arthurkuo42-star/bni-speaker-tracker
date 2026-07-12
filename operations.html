@@ -6934,7 +6934,37 @@ function ChapterChallengeView({
     });
     setScoreModal(false);
   };
+
+  // 📸 戰報圖：把整個競賽頁（島嶼圖+排行+小組達標）輸出成一張圖，幹部直接發 LINE 群組
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    try {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      const el = document.getElementById('challenge-report');
+      const canvas = await window.html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#F5F0E8',
+        logging: false,
+        onclone: doc => {
+          doc.querySelectorAll('[data-noexport]').forEach(n => n.remove());
+        }
+      });
+      const now = new Date();
+      const ts = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+      const link = document.createElement('a');
+      link.download = '富鼎BNI_GAME戰報_' + ts + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      alert('匯出失敗：' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
   return /*#__PURE__*/React.createElement("div", {
+    id: "challenge-report",
     style: {
       fontFamily: "'Noto Sans TC',sans-serif"
     }
@@ -6967,7 +6997,7 @@ function ChapterChallengeView({
       borderColor: "#D4A017"
     }
   }, /*#__PURE__*/React.createElement("img", {
-    src: "island.png",
+    src: "island.jpg",
     alt: "\u5CF6\u5DBC\u6176\u529F\u5E2D\u4F4D",
     className: "w-full block",
     onError: () => setIslandOk(false)
@@ -7019,13 +7049,26 @@ function ChapterChallengeView({
     className: "flex items-center justify-between mb-2 flex-wrap gap-2"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-lg font-bold text-stone-800"
-  }, "\uD83C\uDFAF \u500B\u4EBA\u7A4D\u5206\u699C"), adminMode ? /*#__PURE__*/React.createElement("button", {
+  }, "\uD83C\uDFAF \u500B\u4EBA\u7A4D\u5206\u699C"), adminMode ? /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex gap-1.5",
+    "data-noexport": "1"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: exportReport,
+    disabled: exporting,
+    className: "px-3 py-1.5 text-sm rounded-md font-semibold border disabled:opacity-50",
+    style: {
+      borderColor: "#B8860B",
+      color: "#8A6200",
+      background: "#FFF8E8"
+    },
+    title: "\u628A\u7AF6\u8CFD\u9801\u8F38\u51FA\u6210\u4E00\u5F35\u5716\uFF0C\u76F4\u63A5\u767C LINE \u7FA4\u7D44"
+  }, exporting ? "產生中…" : "📸 匯出戰報圖"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setScoreModal(true),
     className: "px-3 py-1.5 text-sm text-white rounded-md font-semibold",
     style: {
       background: "#8B1A1A"
     }
-  }, "\u270F\uFE0F \u767B\u9304\u7A4D\u5206") : keyPrompt ? /*#__PURE__*/React.createElement("span", {
+  }, "\u270F\uFE0F \u767B\u9304\u7A4D\u5206")) : keyPrompt ? /*#__PURE__*/React.createElement("span", {
     className: "inline-flex items-center gap-1.5"
   }, /*#__PURE__*/React.createElement("input", {
     type: "password",
@@ -7094,6 +7137,7 @@ function ChapterChallengeView({
     className: "text-[9px] text-stone-400"
   }, "\u9EDE")))))), ranking.length > 6 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowAllRank(v => !v),
+    "data-noexport": "1",
     className: "text-xs text-stone-500 underline mb-2"
   }, showAllRank ? "收合完整排名" : `展開完整排名（共 ${ranking.length} 人）`), showAllRank && /*#__PURE__*/React.createElement("div", {
     className: "border border-stone-200 rounded-lg overflow-hidden"

@@ -4927,8 +4927,32 @@ function ChapterChallengeView({ groups, members, meetings, coffeeMeetings, confi
     setScoreModal(false);
   };
 
+  // 📸 戰報圖：把整個競賽頁（島嶼圖+排行+小組達標）輸出成一張圖，幹部直接發 LINE 群組
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    try {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      const el = document.getElementById('challenge-report');
+      const canvas = await window.html2canvas(el, {
+        scale: 2, useCORS: true, backgroundColor: '#F5F0E8', logging: false,
+        onclone: (doc) => { doc.querySelectorAll('[data-noexport]').forEach(n => n.remove()); },
+      });
+      const now = new Date();
+      const ts = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+      const link = document.createElement('a');
+      link.download = '富鼎BNI_GAME戰報_' + ts + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      alert('匯出失敗：' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div style={{ fontFamily: "'Noto Sans TC',sans-serif" }}>
+    <div id="challenge-report" style={{ fontFamily: "'Noto Sans TC',sans-serif" }}>
       {/* 頭部橫幅 */}
       <div className="rounded-xl p-5 mb-5 text-center text-white" style={{ background: "linear-gradient(135deg,#6B1414,#8B1A1A 50%,#A82828)" }}>
         <div className="text-2xl font-bold">🎮 富鼎 BNI GAME</div>
@@ -4940,7 +4964,7 @@ function ChapterChallengeView({ groups, members, meetings, coffeeMeetings, confi
       {/* 🏝️ 島嶼前六名席位圖（island.jpg 不存在時自動隱藏）*/}
       {islandOk && (
         <div className="relative rounded-xl overflow-hidden mb-5 border-2 shadow-md" style={{ borderColor: "#D4A017" }}>
-          <img src="island.png" alt="島嶼慶功席位" className="w-full block" onError={() => setIslandOk(false)} />
+          <img src="island.jpg" alt="島嶼慶功席位" className="w-full block" onError={() => setIslandOk(false)} />
           {ISLAND_SEAT_POS.map((pos, i) => {
             const r = top6[i];
             const xNum = parseFloat(pos.x);
@@ -4969,7 +4993,15 @@ function ChapterChallengeView({ groups, members, meetings, coffeeMeetings, confi
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <h3 className="text-lg font-bold text-stone-800">🎯 個人積分榜</h3>
         {adminMode ? (
-          <button onClick={() => setScoreModal(true)} className="px-3 py-1.5 text-sm text-white rounded-md font-semibold" style={{ background: "#8B1A1A" }}>✏️ 登錄積分</button>
+          <span className="inline-flex gap-1.5" data-noexport="1">
+            <button onClick={exportReport} disabled={exporting}
+              className="px-3 py-1.5 text-sm rounded-md font-semibold border disabled:opacity-50"
+              style={{ borderColor: "#B8860B", color: "#8A6200", background: "#FFF8E8" }}
+              title="把競賽頁輸出成一張圖，直接發 LINE 群組">
+              {exporting ? "產生中…" : "📸 匯出戰報圖"}
+            </button>
+            <button onClick={() => setScoreModal(true)} className="px-3 py-1.5 text-sm text-white rounded-md font-semibold" style={{ background: "#8B1A1A" }}>✏️ 登錄積分</button>
+          </span>
         ) : keyPrompt ? (
           <span className="inline-flex items-center gap-1.5">
             <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
@@ -5013,7 +5045,7 @@ function ChapterChallengeView({ groups, members, meetings, coffeeMeetings, confi
             ))}
           </div>
           {ranking.length > 6 && (
-            <button onClick={() => setShowAllRank(v => !v)} className="text-xs text-stone-500 underline mb-2">{showAllRank ? "收合完整排名" : `展開完整排名（共 ${ranking.length} 人）`}</button>
+            <button onClick={() => setShowAllRank(v => !v)} data-noexport="1" className="text-xs text-stone-500 underline mb-2">{showAllRank ? "收合完整排名" : `展開完整排名（共 ${ranking.length} 人）`}</button>
           )}
           {showAllRank && (
             <div className="border border-stone-200 rounded-lg overflow-hidden">
