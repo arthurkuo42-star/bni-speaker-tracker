@@ -6795,34 +6795,35 @@ function ScoreEntryModal({
 }
 
 // 島嶼圖上六個席位名牌的位置（百分比座標，對應圖中六張綠皮椅上方）
+// 座標對準圖中綠皮椅；字放大後名牌變大，垂直錯開避免右側三牌相碰
 const ISLAND_SEAT_POS = [{
-  x: "51%",
-  y: "45%"
+  x: "50%",
+  y: "33%"
 },
-// 🥇 後方正中（最尊榮，香檳杯之間後方）
+// 🥇 後方正中（最尊榮，拉高到後方 buffet 區，與左右錯開）
 {
-  x: "14%",
-  y: "54%"
+  x: "13%",
+  y: "56%"
 },
 // 🥈 左後
 {
-  x: "74%",
-  y: "50%"
+  x: "76%",
+  y: "48%"
 },
 // 🥉 右後
 {
-  x: "7%",
-  y: "70%"
+  x: "6%",
+  y: "72%"
 },
 // #4 左前
 {
-  x: "91%",
-  y: "62%"
+  x: "92%",
+  y: "68%"
 },
-// #5 右前
+// #5 右前（下移，與 🥉 錯開）
 {
   x: "43%",
-  y: "83%"
+  y: "84%"
 } // #6 前方正中
 ];
 function ChapterChallengeView({
@@ -7016,26 +7017,48 @@ function ChapterChallengeView({
         transform: `translateX(${tx})`
       }
     }, /*#__PURE__*/React.createElement("div", {
-      className: "px-2 py-1 rounded-full font-bold whitespace-nowrap shadow-lg",
-      style: r ? {
-        background: "linear-gradient(135deg,#8B1A1A,#B8321F)",
-        color: "#FFF",
-        border: "1.5px solid #F0C060",
-        fontSize: "clamp(9px,1.6vw,14px)"
-      } : {
-        background: "rgba(45,35,22,0.6)",
-        color: "rgba(255,240,200,0.92)",
-        border: "1.5px dashed rgba(240,200,110,0.65)",
-        fontSize: "clamp(8px,1.4vw,12px)"
+      className: "whitespace-nowrap shadow-lg text-center",
+      style: {
+        padding: "5px 15px",
+        borderRadius: "14px",
+        ...(r ? {
+          background: "linear-gradient(135deg,#8B1A1A,#B8321F)",
+          color: "#FFF",
+          border: "2px solid #F0C060"
+        } : {
+          background: "rgba(45,35,22,0.62)",
+          color: "rgba(255,240,200,0.92)",
+          border: "2px dashed rgba(240,200,110,0.65)"
+        })
       }
-    }, r ? `${medal(i)} ${r.member.name}　${r.total}點` : `${medal(i)} 虛位以待`), /*#__PURE__*/React.createElement("div", {
+    }, r ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "clamp(22px,4vw,42px)",
+        fontWeight: 800,
+        lineHeight: 1.1,
+        textShadow: "0 1px 3px rgba(0,0,0,0.35)"
+      }
+    }, medal(i), " ", r.member.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "clamp(16px,2.8vw,28px)",
+        fontWeight: 700,
+        opacity: 0.95,
+        marginTop: "1px",
+        textShadow: "0 1px 2px rgba(0,0,0,0.3)"
+      }
+    }, r.total, " \u9EDE")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "clamp(20px,3.4vw,34px)",
+        fontWeight: 700
+      }
+    }, medal(i), " \u865B\u4F4D\u4EE5\u5F85")), /*#__PURE__*/React.createElement("div", {
       style: {
         width: 0,
         height: 0,
         margin: arrowMargin,
-        borderLeft: "5px solid transparent",
-        borderRight: "5px solid transparent",
-        borderTop: "7px solid " + (r ? "#A82828" : "rgba(45,35,22,0.6)")
+        borderLeft: "8px solid transparent",
+        borderRight: "8px solid transparent",
+        borderTop: "11px solid " + (r ? "#A82828" : "rgba(45,35,22,0.62)")
       }
     }));
   }), /*#__PURE__*/React.createElement("div", {
