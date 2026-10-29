@@ -6668,7 +6668,8 @@ function KpiConfigEditor({
         },
         body: JSON.stringify({
           remainWeeks: config.remainWeeks,
-          nextMonthWeeks: config.nextMonthWeeks
+          nextMonthWeeks: config.nextMonthWeeks,
+          dataCutoff: config.dataCutoff || ''
         })
       });
       if (res.ok) showToast('✅ 設定已儲存');else showToast('儲存失敗', 'error');
@@ -6715,7 +6716,19 @@ function KpiConfigEditor({
     className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
   }), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-400 mt-1"
-  }, "\u7528\u65BC Washout \u9810\u6E2C\u8A08\u7B97"))), config.updatedAt && /*#__PURE__*/React.createElement("div", {
+  }, "\u7528\u65BC Washout \u9810\u6E2C\u8A08\u7B97")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mb-1"
+  }, "\u6210\u7E3E\u8A08\u7B97\u622A\u6B62\u65E5"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: config.dataCutoff || '',
+    onChange: e => setConfig({
+      ...config,
+      dataCutoff: e.target.value
+    }),
+    className: "w-full px-3 py-2 text-sm border border-stone-300 rounded-md"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-400 mt-1"
+  }, "\u63A8\u64AD / \u67E5\u6210\u7E3E\u6703\u986F\u793A\u300C\u672C\u6B21\u63D0\u9192\u6578\u64DA\u8A08\u7B97\u81F3 X\u6708X\u65E5\u300D\uFF1B\u7559\u7A7A\u5247\u4E0D\u986F\u793A"))), config.updatedAt && /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-400 mb-3"
   }, "\u4E0A\u6B21\u66F4\u65B0\uFF1A", new Date(config.updatedAt).toLocaleString('zh-TW')), /*#__PURE__*/React.createElement("button", {
     onClick: save,

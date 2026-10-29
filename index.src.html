@@ -5224,7 +5224,7 @@ function KpiConfigEditor({ proxyUrl, headers, showToast }) {
     try {
       const res = await fetch(proxyUrl + '/api/config', {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks }),
+        body: JSON.stringify({ remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks, dataCutoff: config.dataCutoff || '' }),
       });
       if (res.ok) showToast('✅ 設定已儲存');
       else showToast('儲存失敗', 'error');
@@ -5251,6 +5251,13 @@ function KpiConfigEditor({ proxyUrl, headers, showToast }) {
             onChange={e => setConfig({ ...config, nextMonthWeeks: parseInt(e.target.value) || 4 })}
             className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
           <div className="text-xs text-stone-400 mt-1">用於 Washout 預測計算</div>
+        </div>
+        <div>
+          <div className="text-xs text-stone-500 mb-1">成績計算截止日</div>
+          <input type="date" value={config.dataCutoff || ''}
+            onChange={e => setConfig({ ...config, dataCutoff: e.target.value })}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+          <div className="text-xs text-stone-400 mt-1">推播 / 查成績會顯示「本次提醒數據計算至 X月X日」；留空則不顯示</div>
         </div>
       </div>
       {config.updatedAt && (
