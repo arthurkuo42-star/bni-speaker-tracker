@@ -1394,7 +1394,6 @@ function CardPlaceholder({ text }) {
 function MyKpiCard({ me, onMore }) {
   const [loading, setLoading] = useState(true);
   const [myKpi, setMyKpi] = useState(null);  // { totalScore, groupName, ...raw fields }
-  const [remainWeeks, setRemainWeeks] = useState(0);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
@@ -1415,7 +1414,6 @@ function MyKpiCard({ me, onMore }) {
           if (m) { hit = { ...m, groupName: gName }; break; }
         }
         setMyKpi(hit);
-        setRemainWeeks((json.config && json.config.remainWeeks) || 0);
       } catch (e) {
         if (!cancelled) setErr('資料載入失敗');
       } finally {
@@ -1434,9 +1432,18 @@ function MyKpiCard({ me, onMore }) {
       {me && !loading && !err && myKpi && (() => {
         const lk = getKpiLightKey(myKpi.totalScore);
         const c = LIGHT_COLORS[lk];
-        const recs = getKpiRecommendations(myKpi, remainWeeks);
-        // 最多顯示 2 條建議避免卡片爆滿，再多的話會員可以點「更多」進完整 KPI 頁
-        const shownPrimary = recs && recs.primary ? recs.primary.slice(0, 2) : [];
+        // 攻略由後端 scoring.js 算好（recommendations.blocks），這裡只負責畫
+        const status = kpiRecStatus(myKpi);
+        const blocks = (myKpi.recommendations && myKpi.recommendations.blocks) || [];
+        const first = blocks[0] || null;
+        const second = blocks[1] || null;
+        const items = kpiBlockItems(first);
+        // 卡片空間有限，最多 3 條；完整攻略點「更多」
+        const shown = items.slice(0, 3);
+        const isPace = !!first && first.mode !== 'actions';
+        const headline = status === 'perfect' ? '🏆 滿分！完美表現'
+          : status === 'green' ? '✅ 已達綠燈，保持！'
+          : first ? `${first.label}（差 ${first.gap} 分）` : '';
         return (
           <div>
             <div className="flex items-center gap-3 mb-3">
@@ -1446,28 +1453,43 @@ function MyKpiCard({ me, onMore }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs tracking-widest text-stone-400">{myKpi.groupName || ''}</div>
-                <div className="text-sm font-medium mt-1" style={{ color: 'var(--c-text)' }}>
-                  {recs ? recs.headline : ''}
-                </div>
+                <div className="text-sm font-medium mt-1" style={{ color: 'var(--c-text)' }}>{headline}</div>
               </div>
             </div>
-            {recs && recs.status === 'perfect' && (
+            {status === 'perfect' && (
               <div className="text-sm text-stone-600 text-center py-2">繼續保持，年底拿榮譽會員 💪</div>
             )}
-            {recs && shownPrimary.length > 0 && (
-              <ul className="space-y-1.5 text-sm text-stone-700 border-t border-stone-100 pt-3">
-                {shownPrimary.map((u, i) => (
-                  <li key={i} className="flex gap-1.5">
-                    <span className="text-stone-400 flex-shrink-0">▸</span>
-                    <span>{u.action}<span className="text-stone-400 ml-1">+{u.gain} 分</span></span>
-                  </li>
-                ))}
-                {recs.primary.length > 2 && (
-                  <li className="text-xs text-stone-400 pl-3">還有 {recs.primary.length - 2} 項建議，可點「更多」查看</li>
+            {status !== 'perfect' && shown.length > 0 && (
+              <div className="border-t border-stone-100 pt-3">
+                {status === 'green' && (
+                  <div className="text-xs text-stone-500 mb-1.5">想衝滿分（差 {first.gap} 分）{isPace ? '，長期配速：' : '可以做：'}</div>
                 )}
-              </ul>
+                {status !== 'green' && isPace && (
+                  <div className="text-xs text-stone-500 mb-1.5">這個月補不到，改走配速：</div>
+                )}
+                <ul className="space-y-1.5 text-sm text-stone-700">
+                  {shown.map((it, i) => (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="text-stone-400 flex-shrink-0">▸</span>
+                      <span>{it.text}{it.gain != null && <span className="text-stone-400 ml-1">+{it.gain} 分</span>}</span>
+                    </li>
+                  ))}
+                </ul>
+                {items.length > shown.length && (
+                  <div className="text-xs text-stone-400 pl-3 mt-1">還有 {items.length - shown.length} 項，可點「更多」查看</div>
+                )}
+                {second && (
+                  <div className="text-xs text-stone-500 mt-2.5 pt-2 border-t border-dashed border-stone-200">
+                    {second.label}（差 {second.gap} 分）：
+                    {second.mode === 'actions'
+                      ? (second.actions || []).map(a => a.short).join(' + ')
+                      : (second.paceMonths && second.paceMonths <= 6 ? `走配速約 ${second.paceMonths} 個月` : '要走長期配速')}
+                    <span className="text-stone-400"> · 點「更多」看完整攻略</span>
+                  </div>
+                )}
+              </div>
             )}
-            {recs && recs.status !== 'perfect' && shownPrimary.length === 0 && (
+            {status !== 'perfect' && status !== 'green' && shown.length === 0 && (
               <div className="text-sm text-stone-500 text-center py-2">尚未起跑，先約一場咖啡 ☕</div>
             )}
           </div>
@@ -4474,125 +4496,72 @@ function groupOrdinal(name) {
   return typeof v === 'number' ? v : 999;
 }
 
-// ============ 紅綠燈：具體建議（port 自後端 scoring.js getRecommendations）============
-// 後端 /api/groups-overview 只對 < 70 分的會員回傳 recommendations，
-// 為了讓綠燈會員也看到「衝上滿分」建議，整個邏輯前端再算一次。
-// 邏輯保持與 scoring.js 同步 —— 若後端規則改了，這裡也要跟著改。
-function _calcKpiUpgrades(member, remainWeeks, targetScore) {
-  const tw = member.totalWeeks || ((member.pastWeeks || 0) + (remainWeeks || 0));
-  const gap = targetScore - member.totalScore;
-  if (gap <= 0) return { primary: [], backup: [], warnings: [], gap: 0, canReach: true };
+// ============ 紅綠燈：綠燈攻略（只負責畫）============
+// 攻略演算法只有一份：後端 bni-kpi/scoring.js（v3）。
+// /api/groups-overview 每位會員都附 recommendations（blocks）與 details（有感明細），
+// 這裡只把它們畫出來，不要再在前端另算建議——改規則請改 scoring.js。
 
-  const warnings = [];
-  const upgrades = [];
-  const raw = member.raw || {};
-
-  if ((member.absenceScore || 0) < 20) {
-    warnings.push(`⚠️ 缺席 ${raw.absences || 0} 次（得 ${member.absenceScore || 0}/20）→ 不要再缺席`);
-  }
-
-  // 引薦（priority 1）
-  const currentRefTotal = (raw.internalRef || 0) + (raw.externalRef || 0);
-  for (const t of [{ rate: 1.5, score: 20 }, { rate: 1.2, score: 15 }, { rate: 1.0, score: 10 }, { rate: 0.75, score: 5 }]) {
-    if (t.score > (member.referralScore || 0)) {
-      const needed = Math.ceil(t.rate * tw) - currentRefTotal;
-      if (needed > 0) {
-        const perWeek = remainWeeks > 0 ? Math.ceil(needed / remainWeeks) : needed;
-        upgrades.push({ category: "引薦", priority: 1, gain: t.score - (member.referralScore || 0), targetScore: t.score, needed, action: `再提供 ${needed} 個引薦（每週 ${perWeek} 個）`, shortAction: `+${needed} 引薦` });
-      }
-    }
-  }
-  // 1-2-1（priority 1）
-  for (const t of [{ rate: 2.001, score: 15 }, { rate: 1.0, score: 10 }, { rate: 0.5, score: 5 }]) {
-    if (t.score > (member.meetingScore || 0)) {
-      const needed = Math.ceil(t.rate * tw) - (raw.oneToOne || 0);
-      if (needed > 0) {
-        const perWeek = remainWeeks > 0 ? Math.ceil(needed / remainWeeks) : needed;
-        upgrades.push({ category: "1-2-1", priority: 1, gain: t.score - (member.meetingScore || 0), targetScore: t.score, needed, action: `再約 ${needed} 次 1-2-1（每週 ${perWeek} 次）`, shortAction: `+${needed} 次 1-2-1` });
-      }
-    }
-  }
-  // 教育積分（priority 2）
-  for (const t of [{ units: 6, score: 15 }, { units: 4, score: 10 }, { units: 2, score: 5 }]) {
-    if (t.score > (member.trainingScore || 0)) {
-      const needed = t.units - (raw.training || 0);
-      if (needed > 0) {
-        upgrades.push({ category: "教育積分", priority: 2, gain: t.score - (member.trainingScore || 0), targetScore: t.score, needed, action: `再完成 ${needed} 個教育積分`, shortAction: `+${needed} 教育積分` });
-      }
-    }
-  }
-  // 來賓（priority 3）
-  for (const t of [{ per4: 2, score: 15 }, { per4: 1, score: 10 }]) {
-    if (t.score > (member.visitorScore || 0)) {
-      const needed = Math.ceil(t.per4 * (tw / 4)) - (raw.visitors || 0);
-      if (needed > 0) {
-        upgrades.push({ category: "來賓", priority: 3, gain: t.score - (member.visitorScore || 0), targetScore: t.score, needed, action: `再帶 ${needed} 位來賓`, shortAction: `+${needed} 位來賓` });
-      }
-    }
-  }
-  // 交易（priority 3）
-  for (const t of [{ val: 2000000, score: 15 }, { val: 800000, score: 10 }, { val: 400000, score: 5 }]) {
-    if (t.score > (member.transactionScore || 0)) {
-      const needed = t.val - (raw.transactionValue || 0);
-      if (needed > 0) {
-        upgrades.push({ category: "交易價值", priority: 3, gain: t.score - (member.transactionScore || 0), targetScore: t.score, needed, action: `再增加 $${needed.toLocaleString()} 交易金額`, shortAction: `+$${(needed / 10000).toFixed(0)}萬交易` });
-      }
-    }
-  }
-
-  upgrades.sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.gain - a.gain);
-
-  const primary = [], backup = [];
-  let remaining = gap;
-  const used = new Set();
-  for (const u of upgrades) {
-    if (u.priority <= 2 && remaining > 0 && !used.has(u.category)) {
-      primary.push(u); remaining -= u.gain; used.add(u.category);
-    }
-  }
-  for (const u of upgrades) {
-    if (u.priority === 3 && remaining > 0 && !used.has(u.category)) {
-      primary.push(u); remaining -= u.gain; used.add(u.category);
-    }
-  }
-  for (const u of upgrades) {
-    if (u.priority === 3 && !used.has(u.category)) {
-      backup.push(u); used.add(u.category);
-    }
-  }
-  const primaryGain = primary.reduce((s, u) => s + u.gain, 0);
-  return { primary, backup, warnings, gap, canReach: primaryGain >= gap };
+// 引薦與 1-2-1 都是每週的事，配速時併成一行（與 LINE 訊息同寫法）
+function kpiMergeWeeklyPace(pace) {
+  const list = pace || [];
+  const ref = list.find(p => p.category === '引薦');
+  const o2o = list.find(p => p.category === '1-2-1');
+  const rest = list.filter(p => p !== ref && p !== o2o).map(p => p.text);
+  if (ref && o2o) return [`${ref.text} ＋ ${o2o.text}`, ...rest];
+  return [...(ref ? [ref.text] : []), ...(o2o ? [o2o.text] : []), ...rest];
 }
 
-function getKpiRecommendations(member, remainWeeks) {
-  if (!member) return null;
-  const score = member.totalScore;
-  if (score >= 100) {
-    return { status: 'perfect', gap: 0, primary: [], warnings: [], headline: '🏆 滿分！完美表現' };
+// 一段攻略的條列：本月做得到 → 動作（含 +分）；補不到 → 配速
+function kpiBlockItems(block) {
+  if (!block || block.mode === 'reached') return [];
+  if (block.mode === 'actions') return (block.actions || []).map(a => ({ text: a.text, gain: a.gain }));
+  return kpiMergeWeeklyPace(block.pace).map(t => ({ text: t }));
+}
+
+function kpiBlockClosing(block) {
+  if (!block) return '';
+  if (block.mode === 'actions') {
+    const n = (block.actions || []).length;
+    return n === 1 ? `做這一件就到${block.targetLabel}。` : `做到這 ${n} 件就到${block.targetLabel}。`;
   }
-  if (score >= 70) {
-    const perfect = _calcKpiUpgrades(member, remainWeeks, 100);
-    return {
-      status: 'green',
-      gap: 100 - score,
-      primary: perfect.primary,
-      backup: perfect.backup,
-      warnings: perfect.warnings,
-      headline: `✅ 已達綠燈，再 ${100 - score} 分到滿分`,
-      tierLabel: '🏆 衝上滿分',
-    };
+  if (block.mode === 'pace') {
+    const go = block.kind === 'perfect' ? '拿' : '上'; // 上綠燈、拿滿分
+    if (!block.paceMonths) return `照這樣走就會${go}${block.targetLabel}。`;
+    return block.paceMonths <= 6 ? `照這樣走約 ${block.paceMonths} 個月後${go}${block.targetLabel}。` : '照這樣走，半年內會看到明顯進步。';
   }
-  // 黃 / 紅 / 灰：先給「衝綠燈」
-  const green = _calcKpiUpgrades(member, remainWeeks, 70);
-  return {
-    status: green.canReach ? 'reachable' : 'stretch',
-    gap: green.gap,
-    primary: green.primary,
-    backup: green.backup,
-    warnings: green.warnings,
-    headline: `🎯 距離綠燈差 ${green.gap} 分`,
-    tierLabel: '🟢 衝上綠燈',
-  };
+  if (block.mode === 'stuck') return '先把這些做起來，分數會一路往上。';
+  return '';
+}
+
+// 後端還沒附 recommendations 時（例如舊版後端），用分數判斷狀態
+function kpiRecStatus(member) {
+  const recs = member && member.recommendations;
+  if (recs && recs.status) return recs.status;
+  const s = member ? member.totalScore : 0;
+  return s >= 100 ? 'perfect' : s >= 70 ? 'green' : null;
+}
+
+function KpiPlanBlock({ block }) {
+  if (!block || block.mode === 'reached') return null;
+  const items = kpiBlockItems(block);
+  const isPace = block.mode !== 'actions';
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-3">
+      <div className="text-sm font-semibold" style={{ color: '#1A1414' }}>
+        {block.label}<span className="text-xs font-normal text-stone-500 ml-1">（差 {block.gap} 分）</span>
+      </div>
+      {isPace && <div className="text-xs text-stone-500 mt-1">這個月補不到，改走配速：</div>}
+      <ul className="mt-1.5 space-y-1 text-sm text-stone-700">
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-1.5">
+            <span className="text-stone-400 flex-shrink-0">{isPace ? '・' : `${i + 1}.`}</span>
+            <span>{it.text}{it.gain != null && <span className="text-stone-400 ml-1">+{it.gain}</span>}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="text-xs text-stone-500 mt-1.5">{kpiBlockClosing(block)}</div>
+    </div>
+  );
 }
 
 function KpiDashboard() {
@@ -4843,7 +4812,11 @@ function KpiMemberRow({ member, expanded, onToggle }) {
             <ScoreBar label="教育" score={m.trainingScore} max={15} />
             <ScoreBar label="交易" score={m.transactionScore} max={15} />
           </div>
-          {m.raw && (
+          {Array.isArray(m.details) && m.details.length > 0 ? (
+            <ul className="text-xs text-stone-500 space-y-0.5 mb-2">
+              {m.details.map((d, i) => <li key={i}>・{d}</li>)}
+            </ul>
+          ) : m.raw && (
             <div className="text-[10px] text-stone-400 grid grid-cols-3 gap-x-3 gap-y-0.5 mb-2">
               <span>缺席 {m.raw.absences} 次</span>
               <span>引薦 {(m.raw.internalRef||0)+(m.raw.externalRef||0)} 次</span>
@@ -4853,16 +4826,22 @@ function KpiMemberRow({ member, expanded, onToggle }) {
               <span>交易 ${(m.raw.transactionValue||0).toLocaleString()}</span>
             </div>
           )}
-          {m.recommendations && m.recommendations.summary && (
-            <div className="text-xs p-2 rounded" style={{ background: lk === 'yellow' ? '#FFF8E1' : '#FCEFE3', color: lk === 'yellow' ? '#8B6F00' : '#A01E2E' }}>
-              {m.recommendations.summary}
-            </div>
-          )}
-          {!m.recommendations && m.totalScore >= 70 && (
-            <div className="text-xs p-2 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>
-              ✅ 已達綠燈標準！繼續保持💪
-            </div>
-          )}
+          {(() => {
+            // 攻略由後端 scoring.js 算好，這裡只畫：紅／灰燈兩段、黃燈一段、綠燈附「衝滿分」
+            const status = kpiRecStatus(m);
+            const blocks = (m.recommendations && m.recommendations.blocks) || [];
+            return (
+              <div className="space-y-2">
+                {status === 'perfect' && (
+                  <div className="text-xs p-2 rounded" style={{ background: '#FFF8E8', color: '#8A6200' }}>🏆 滿分！完美表現</div>
+                )}
+                {status === 'green' && (
+                  <div className="text-xs p-2 rounded" style={{ background: '#EDF3E8', color: '#2D5A27' }}>✅ 已達綠燈標準！繼續保持💪</div>
+                )}
+                {blocks.map((b, i) => <KpiPlanBlock key={i} block={b} />)}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -5224,7 +5203,11 @@ function KpiConfigEditor({ proxyUrl, headers, showToast }) {
     try {
       const res = await fetch(proxyUrl + '/api/config', {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks, dataCutoff: config.dataCutoff || '' }),
+        body: JSON.stringify({
+          remainWeeks: config.remainWeeks, nextMonthWeeks: config.nextMonthWeeks, dataCutoff: config.dataCutoff || '',
+          // 綠燈攻略可行性門檻；空白或 0 會被後端換回預設值
+          feasibility: config.feasibility ? Object.fromEntries(Object.entries(config.feasibility).map(([k, v]) => [k, Number(v)])) : undefined,
+        }),
       });
       if (res.ok) showToast('✅ 設定已儲存');
       else showToast('儲存失敗', 'error');
@@ -5260,6 +5243,34 @@ function KpiConfigEditor({ proxyUrl, headers, showToast }) {
           <div className="text-xs text-stone-400 mt-1">推播 / 查成績會顯示「本次提醒數據計算至 X月X日」；留空則不顯示</div>
         </div>
       </div>
+      {(() => {
+        // 綠燈攻略可行性門檻：本月要做的量超過它，攻略就不叫會員硬衝，改講長期配速
+        const f = config.feasibility || {};
+        const setF = (k, v) => setConfig({ ...config, feasibility: { ...f, [k]: v } });
+        const fields = [
+          { k: 'referralPerWeek', label: '引薦：每週最多幾個', def: 3 },
+          { k: 'oneToOnePerWeek', label: '1-2-1：每週最多幾次', def: 3 },
+          { k: 'visitorsPerMonth', label: '來賓：每月最多幾位', def: 2 },
+          { k: 'trainingPerMonth', label: '教育積分：每月最多幾個', def: 3 },
+        ];
+        return (
+          <div className="border-t border-stone-100 pt-4 mb-4">
+            <div className="text-sm font-semibold mb-1">綠燈攻略：本月做得到的上限</div>
+            <div className="text-xs text-stone-400 mb-3">攻略只會建議不超過這些數字的量；超過就改建議長期配速。數字調大，攻略會更敢叫會員衝。</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {fields.map(x => (
+                <div key={x.k}>
+                  <div className="text-xs text-stone-500 mb-1">{x.label}</div>
+                  <input type="number" min="0.5" max="20" step="0.5"
+                    value={f[x.k] != null ? f[x.k] : x.def}
+                    onChange={e => setF(x.k, e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-stone-300 rounded-md" />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {config.updatedAt && (
         <div className="text-xs text-stone-400 mb-3">上次更新：{new Date(config.updatedAt).toLocaleString('zh-TW')}</div>
       )}
