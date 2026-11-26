@@ -1847,7 +1847,33 @@ function MyKpiCard({
       }
     }, c.label)))), card ? /*#__PURE__*/React.createElement("div", {
       className: "border-t border-stone-100 pt-3 text-sm"
-    }, card.lead && /*#__PURE__*/React.createElement("div", {
+    }, card.choice ?
+    /*#__PURE__*/
+    // 擇一：標題「本週擇一做到，就是綠燈」，選項間用「或」，兩件以上加「需同時」
+    React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "font-semibold mb-1.5",
+      style: {
+        color: card.resultColor || 'var(--c-text)'
+      }
+    }, card.lead, "\uFF0C", card.result), /*#__PURE__*/React.createElement("ul", {
+      className: "text-stone-800"
+    }, card.options.map((o, i) => /*#__PURE__*/React.createElement("li", {
+      key: i
+    }, i > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-400 pl-6 my-0.5"
+    }, "\u6216"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-2 items-center"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-400 flex-shrink-0"
+    }, "\u2610"), /*#__PURE__*/React.createElement("span", {
+      className: "font-semibold flex-1"
+    }, o.items.join(' ＋ ')), o.together && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0",
+      style: {
+        background: '#FAEEDA',
+        color: '#854F0B'
+      }
+    }, "\u9700\u540C\u6642")))))) : /*#__PURE__*/React.createElement("div", null, card.lead && /*#__PURE__*/React.createElement("div", {
       className: "text-xs text-stone-500 mb-1.5"
     }, card.lead), card.items.length > 0 && /*#__PURE__*/React.createElement("ul", {
       className: "space-y-1.5 text-stone-800"
@@ -1863,7 +1889,7 @@ function MyKpiCard({
       style: {
         color: card.resultColor || 'var(--c-text)'
       }
-    }, card.items.length ? '→ ' : '', card.result), card.warn && /*#__PURE__*/React.createElement("div", {
+    }, card.items.length ? '→ ' : '', card.result)), card.warn && /*#__PURE__*/React.createElement("div", {
       className: "text-xs mt-2",
       style: {
         color: '#A32D2D'
