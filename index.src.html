@@ -1432,18 +1432,9 @@ function MyKpiCard({ me, onMore }) {
       {me && !loading && !err && myKpi && (() => {
         const lk = getKpiLightKey(myKpi.totalScore);
         const c = LIGHT_COLORS[lk];
-        // 攻略由後端 scoring.js 算好（recommendations.blocks），這裡只負責畫
+        // 卡片內容由後端 scoring.js 產生（recommendations.card），與 LINE「我的成績」卡片同一份
+        const card = myKpi.recommendations && myKpi.recommendations.card;
         const status = kpiRecStatus(myKpi);
-        const blocks = (myKpi.recommendations && myKpi.recommendations.blocks) || [];
-        const first = blocks[0] || null;
-        const second = blocks[1] || null;
-        const items = kpiBlockItems(first);
-        // 卡片空間有限，最多 3 條；完整攻略點「更多」
-        const shown = items.slice(0, 3);
-        const isPace = !!first && first.mode !== 'actions';
-        const headline = status === 'perfect' ? '🏆 滿分！完美表現'
-          : status === 'green' ? '✅ 已達綠燈，保持！'
-          : first ? `${first.label}（差 ${first.gap} 分）` : '';
         return (
           <div>
             <div className="flex items-center gap-3 mb-3">
@@ -1453,44 +1444,36 @@ function MyKpiCard({ me, onMore }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs tracking-widest text-stone-400">{myKpi.groupName || ''}</div>
-                <div className="text-sm font-medium mt-1" style={{ color: 'var(--c-text)' }}>{headline}</div>
+                <div className="text-sm mt-1" style={{ color: 'var(--c-text)' }}>
+                  {card ? card.caption : '本期成績'}：<span className="font-semibold" style={{ color: c.color }}>{c.label}</span>
+                </div>
               </div>
             </div>
-            {status === 'perfect' && (
-              <div className="text-sm text-stone-600 text-center py-2">繼續保持，年底拿榮譽會員 💪</div>
-            )}
-            {status !== 'perfect' && shown.length > 0 && (
-              <div className="border-t border-stone-100 pt-3">
-                {status === 'green' && (
-                  <div className="text-xs text-stone-500 mb-1.5">想衝滿分（差 {first.gap} 分）{isPace ? '，長期配速：' : '可以做：'}</div>
+            {card ? (
+              <div className="border-t border-stone-100 pt-3 text-sm">
+                {card.lead && <div className="text-xs text-stone-500 mb-1.5">{card.lead}</div>}
+                {card.items.length > 0 && (
+                  <ul className="space-y-1.5 text-stone-800">
+                    {card.items.map((t, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="text-stone-400 flex-shrink-0">{card.itemStyle === 'check' ? '☐' : '・'}</span>
+                        <span className={card.itemStyle === 'check' ? 'font-semibold' : ''}>{t}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                {status !== 'green' && isPace && (
-                  <div className="text-xs text-stone-500 mb-1.5">這個月補不到，改走配速：</div>
-                )}
-                <ul className="space-y-1.5 text-sm text-stone-700">
-                  {shown.map((it, i) => (
-                    <li key={i} className="flex gap-1.5">
-                      <span className="text-stone-400 flex-shrink-0">▸</span>
-                      <span>{it.text}{it.gain != null && <span className="text-stone-400 ml-1">+{it.gain} 分</span>}</span>
-                    </li>
-                  ))}
-                </ul>
-                {items.length > shown.length && (
-                  <div className="text-xs text-stone-400 pl-3 mt-1">還有 {items.length - shown.length} 項，可點「更多」查看</div>
-                )}
-                {second && (
-                  <div className="text-xs text-stone-500 mt-2.5 pt-2 border-t border-dashed border-stone-200">
-                    {second.label}（差 {second.gap} 分）：
-                    {second.mode === 'actions'
-                      ? (second.actions || []).map(a => a.short).join(' + ')
-                      : (second.paceMonths && second.paceMonths <= 6 ? `走配速約 ${second.paceMonths} 個月` : '要走長期配速')}
-                    <span className="text-stone-400"> · 點「更多」看完整攻略</span>
+                {card.result && (
+                  <div className={'font-semibold' + (card.items.length ? ' mt-2' : '')} style={{ color: card.resultColor || 'var(--c-text)' }}>
+                    {card.items.length ? '→ ' : ''}{card.result}
                   </div>
                 )}
+                {card.warn && <div className="text-xs mt-2" style={{ color: '#A32D2D' }}>⚠️ {card.warn}</div>}
+                {card.sub && <div className="text-xs text-stone-500 mt-2.5 pt-2 border-t border-dashed border-stone-200">{card.sub}</div>}
               </div>
-            )}
-            {status !== 'perfect' && status !== 'green' && shown.length === 0 && (
-              <div className="text-sm text-stone-500 text-center py-2">尚未起跑，先約一場咖啡 ☕</div>
+            ) : (
+              <div className="text-sm text-stone-500 text-center border-t border-stone-100 pt-3">
+                {status === 'perfect' ? '🏆 滿分！保持這個強度 💪' : status === 'green' ? '✅ 已達綠燈，保持！' : '點「更多」看攻略'}
+              </div>
             )}
           </div>
         );
@@ -4501,11 +4484,11 @@ function groupOrdinal(name) {
 // /api/groups-overview 每位會員都附 recommendations（blocks）與 details（有感明細），
 // 這裡只把它們畫出來，不要再在前端另算建議——改規則請改 scoring.js。
 
-// 引薦與 1-2-1 都是每週的事，配速時併成一行（與 LINE 訊息同寫法）
+// 引薦與一對一都是每週的事，配速時併成一行（與 LINE 訊息同寫法）
 function kpiMergeWeeklyPace(pace) {
   const list = pace || [];
   const ref = list.find(p => p.category === '引薦');
-  const o2o = list.find(p => p.category === '1-2-1');
+  const o2o = list.find(p => p.category === '一對一' || p.category === '1-2-1');
   const rest = list.filter(p => p !== ref && p !== o2o).map(p => p.text);
   if (ref && o2o) return [`${ref.text} ＋ ${o2o.text}`, ...rest];
   return [...(ref ? [ref.text] : []), ...(o2o ? [o2o.text] : []), ...rest];
@@ -4808,7 +4791,7 @@ function KpiMemberRow({ member, expanded, onToggle }) {
             <ScoreBar label="缺席" score={m.absenceScore} max={20} />
             <ScoreBar label="引薦" score={m.referralScore} max={20} />
             <ScoreBar label="來賓" score={m.visitorScore} max={15} />
-            <ScoreBar label="1-2-1" score={m.meetingScore} max={15} />
+            <ScoreBar label="一對一" score={m.meetingScore} max={15} />
             <ScoreBar label="教育" score={m.trainingScore} max={15} />
             <ScoreBar label="交易" score={m.transactionScore} max={15} />
           </div>
@@ -4821,7 +4804,7 @@ function KpiMemberRow({ member, expanded, onToggle }) {
               <span>缺席 {m.raw.absences} 次</span>
               <span>引薦 {(m.raw.internalRef||0)+(m.raw.externalRef||0)} 次</span>
               <span>來賓 {m.raw.visitors} 位</span>
-              <span>1-2-1 {m.raw.oneToOne} 次</span>
+              <span>一對一 {m.raw.oneToOne} 次</span>
               <span>教育 {m.raw.training} 積分</span>
               <span>交易 ${(m.raw.transactionValue||0).toLocaleString()}</span>
             </div>
@@ -5249,7 +5232,7 @@ function KpiConfigEditor({ proxyUrl, headers, showToast }) {
         const setF = (k, v) => setConfig({ ...config, feasibility: { ...f, [k]: v } });
         const fields = [
           { k: 'referralPerWeek', label: '引薦：每週最多幾個', def: 3 },
-          { k: 'oneToOnePerWeek', label: '1-2-1：每週最多幾次', def: 3 },
+          { k: 'oneToOnePerWeek', label: '一對一：每週最多幾次', def: 3 },
           { k: 'visitorsPerMonth', label: '來賓：每月最多幾位', def: 2 },
           { k: 'trainingPerMonth', label: '教育積分：每月最多幾個', def: 3 },
         ];
